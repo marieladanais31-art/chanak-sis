@@ -1,0 +1,13 @@
+## Pages
+- [Enrollment Wizard - CHANAK International Academy](/enrollmentwizard): Enroll students in academic programs
+- [Forgot Password - CHANAK International Academy](/forgotpassword): No description available
+- [Hub Management - CHANAK International Academy](/hubmanagement): Manage hub tutors and student assignments
+- [Hub Settings - CHANAK Academy](/hubsettings): No description available
+- [Hub Staff - CHANAK Academy](/hubstaffmanagement): No description available
+- [Language Settings - CHANAK International Academy](/languagesettings): Manage language and internationalization settings
+- [Login - Chanak Academy](/login): No description available
+- [Security Settings - CHANAK International Academy](/securitysettings): Manage security and credentials
+- [Student Assignments - CHANAK Academy](/studentassignmentmanagement): No description available
+- [Student Progress Report - CHANAK Academy](/progressreport): No description available
+- [System Configuration - CHANAK International Academy](/systemconfiguration): System settings and configuration
+- [User Management - CHANAK International Academy](/usermanagement): Manage users, students, tutors, and parents
