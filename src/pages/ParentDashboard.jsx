@@ -24,7 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import LegalDocuments from '@/pages/LegalDocuments';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
-import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, normalizeBlock } from '@/lib/academicUtils';
+import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 
 export default function ParentDashboard() {
   const { profile, logout } = useAuth();
@@ -616,7 +616,8 @@ export default function ParentDashboard() {
       {/* Bulletin Modal */}
       {isBulletinModalOpen && (() => {
         const child = getChildById(selectedChildId);
-        const sortedSubjects = getChildSubjects(selectedChildId, 'Q1');
+        const bulletinQuarter = selectedAcademicQuarter;
+        const sortedSubjects = getChildSubjects(selectedChildId, bulletinQuarter);
 
         const grouped = {};
         BLOCK_ORDER.forEach((block) => {
@@ -666,7 +667,7 @@ export default function ParentDashboard() {
 
             <div id="printable-bulletin" className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col relative print:bg-white print:max-h-none print:w-full">
               <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print-hide">
-                <h3 className="font-black text-lg text-[#193D6D]">Vista Previa del Boletín (Q1)</h3>
+                <h3 className="font-black text-lg text-[#193D6D]">Vista Previa del Boletín ({bulletinQuarter})</h3>
                 <button onClick={() => setIsBulletinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-6 h-6" />
                 </button>
@@ -678,7 +679,7 @@ export default function ParentDashboard() {
                     <div className="text-center mb-8">
                       <img src={localLogo || defaultLogo} alt="Logo" className="h-20 mx-auto mb-4 object-contain" />
                       <h1 className="text-2xl font-black uppercase tracking-wider" style={{ color: '#193D6D' }}>
-                        BOLETÍN ACADÉMICO - Q1
+                        BOLETÍN ACADÉMICO - {bulletinQuarter}
                       </h1>
                       <p className="text-slate-600 font-bold mt-1">Chanak International Academy</p>
                     </div>
@@ -703,7 +704,7 @@ export default function ParentDashboard() {
                         <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                         <p className="text-slate-500 font-bold text-lg">No academic records yet</p>
                         <p className="text-sm text-slate-400 mt-1">
-                          No hay materias registradas para Q1 del periodo {ACTIVE_SCHOOL_YEAR}.
+                          No hay materias registradas para {bulletinQuarter} del periodo {ACTIVE_SCHOOL_YEAR}.
                         </p>
                       </div>
                     ) : (
@@ -739,11 +740,12 @@ export default function ParentDashboard() {
                                       <tr key={idx} className="hover:bg-slate-50">
                                         <td className="p-3 font-bold text-slate-800">{sub.subject_name}</td>
                                         <td className="p-3 text-center font-bold text-[#193D6D]">
-                                          {sub.grade !== null && sub.grade !== undefined
-                                            ? `${sub.grade}${blockName === 'Core A.C.E.' || blockName === 'Core Credits' ? '%' : ''}`
-                                            : blockName === 'Life Skills' || blockName === 'Life Skills & Leadership'
-                                            ? 'In Progress'
-                                            : '-'}
+                                          {(() => {
+                                            const formattedGrade = formatSubjectGrade(sub);
+                                            if (formattedGrade === 'In Progress' || formattedGrade === '—') return formattedGrade;
+
+                                            return `${formattedGrade}${blockName === 'Core A.C.E.' || blockName === 'Core Credits' ? '%' : ''}`;
+                                          })()}
                                         </td>
                                         <td className="p-3 text-right">
                                           {isLocalExt ? (

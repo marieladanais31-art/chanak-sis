@@ -3,7 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
-import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, normalizeBlock } from '@/lib/academicUtils';
+import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 
 export default function AdminAcademico() {
   const [students, setStudents] = useState([]);
@@ -248,7 +248,7 @@ export default function AdminAcademico() {
 
                                 <td className="p-4 text-center">
                                   <div className="inline-flex min-w-24 justify-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-bold text-slate-800">
-                                    {subject.grade ?? '—'}
+                                    {formatSubjectGrade(subject)}
                                   </div>
                                   <p className="mt-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                                     Automático
@@ -324,7 +324,7 @@ export default function AdminAcademico() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
               <h3 className="font-black text-lg text-slate-800">
-                Notas Parciales: {selectedStudentSubject.subject_name}
+                Notas Parciales: {selectedStudentSubject.subject_name} · {selectedStudentSubject.quarter}
               </h3>
               <button
                 onClick={() => setIsGradeEntriesModalOpen(false)}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { calculateAverageGrade, getRecommendedMinimum } from '@/lib/academicUtils';
+import { calculateAverageGrade, getRecommendedMinimum, normalizeNumericGrade } from '@/lib/academicUtils';
 
 export default function GradeEntriesManager({ studentSubject, canEdit = false, onEntriesChanged }) {
   const [entries, setEntries] = useState([]);
@@ -19,11 +19,27 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
 
   const meetsMinimum = entries.length >= minEntries;
 
-  const notifyEntriesChanged = async (nextEntries) => {
+  const persistAverageGrade = async (nextEntries) => {
+    if (!studentSubject?.id) return;
+
+    const nextGrade = calculateAverageGrade(nextEntries);
+    const { error } = await supabase
+      .from('student_subjects')
+      .update({
+        grade: nextGrade,
+        submitted_at: new Date().toISOString(),
+      })
+      .eq('id', studentSubject.id)
+      .eq('student_id', studentSubject.student_id)
+      .eq('quarter', studentSubject.quarter)
+      .eq('school_year', studentSubject.school_year);
+
+    if (error) throw error;
+
     if (typeof onEntriesChanged === 'function') {
       await onEntriesChanged({
         ...studentSubject,
-        grade: calculateAverageGrade(nextEntries),
+        grade: nextGrade,
       });
     }
   };
@@ -91,7 +107,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
 
       const nextEntries = [...entries, data];
       setEntries(nextEntries);
-      await notifyEntriesChanged(nextEntries);
+      await persistAverageGrade(nextEntries);
       toast({ title: 'Éxito', description: 'Nota agregada correctamente.' });
     } catch (err) {
       console.error('Error adding entry:', err);
@@ -107,7 +123,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
     const previousEntries = [...entries];
     const nextEntries = entries.map((entry) =>
       entry.id === id
-        ? { ...entry, [field]: field === 'score' ? (value === '' ? null : Number(value)) : value }
+        ? { ...entry, [field]: field === 'score' ? normalizeNumericGrade(value) : value }
         : entry
     );
 
@@ -117,7 +133,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
       const updateData = { [field]: value };
 
       if (field === 'score') {
-        updateData.score = value === '' ? null : parseFloat(value);
+        updateData.score = normalizeNumericGrade(value);
       }
 
       const { error } = await supabase
@@ -127,7 +143,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
 
       if (error) throw error;
 
-      await notifyEntriesChanged(nextEntries);
+      await persistAverageGrade(nextEntries);
     } catch (err) {
       console.error('Error updating entry:', err);
       setEntries(previousEntries);
@@ -152,7 +168,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
 
       if (error) throw error;
 
-      await notifyEntriesChanged(nextEntries);
+      await persistAverageGrade(nextEntries);
       toast({ title: 'Éxito', description: 'Nota eliminada correctamente.' });
     } catch (err) {
       console.error('Error deleting entry:', err);

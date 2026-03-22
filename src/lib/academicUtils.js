@@ -79,17 +79,38 @@ export function dedupeAcademicSubjects(subjects) {
   return unique;
 }
 
+export function normalizeNumericGrade(value) {
+  const grade = Number(value);
+  if (!Number.isFinite(grade)) return null;
+
+  return Math.min(100, Math.max(0, grade));
+}
+
 export function calculateAverageGrade(entries) {
   if (!Array.isArray(entries) || entries.length === 0) return null;
 
   const validScores = entries
-    .map((entry) => Number(entry?.score))
-    .filter((score) => Number.isFinite(score));
+    .map((entry) => normalizeNumericGrade(entry?.score))
+    .filter((score) => score !== null);
 
   if (validScores.length === 0) return null;
 
   const sum = validScores.reduce((total, score) => total + score, 0);
   return Number((sum / validScores.length).toFixed(2));
+}
+
+export function formatSubjectGrade(subject) {
+  const grade = normalizeNumericGrade(subject?.grade);
+  if (grade === null) {
+    const normalizedBlock = normalizeBlock(subject?.academic_block);
+    if (normalizedBlock === 'Life Skills' || normalizedBlock === 'Life Skills & Leadership') {
+      return 'In Progress';
+    }
+
+    return '—';
+  }
+
+  return grade.toFixed(2);
 }
 
 export function getRecommendedMinimum(blockName) {
