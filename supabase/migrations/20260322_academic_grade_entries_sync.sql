@@ -77,3 +77,22 @@ create trigger trg_sync_student_subject_average_from_entries
 after insert or update or delete on public.student_grade_entries
 for each row
 execute function public.sync_student_subject_average_from_entries();
+
+
+update public.student_subjects as ss
+   set grade = aggregated.average_grade,
+       submitted_at = now()
+  from (
+    select student_subject_id,
+           student_id,
+           quarter,
+           school_year,
+           round(avg(score)::numeric, 2) as average_grade
+      from public.student_grade_entries
+     where score is not null
+     group by student_subject_id, student_id, quarter, school_year
+  ) as aggregated
+ where ss.id = aggregated.student_subject_id
+   and ss.student_id = aggregated.student_id
+   and ss.quarter = aggregated.quarter
+   and ss.school_year = aggregated.school_year;
