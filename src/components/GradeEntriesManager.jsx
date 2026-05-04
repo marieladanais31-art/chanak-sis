@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Trash2, CheckCircle2, AlertCircle, Send, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { calculateAverageGrade, getRecommendedMinimum, normalizeNumericGrade } from '@/lib/academicUtils';
+
+const SUBMISSION_STATUS_CONFIG = {
+  draft:     { label: 'Borrador',   className: 'bg-slate-100 text-slate-600 border-slate-200' },
+  submitted: { label: 'En revisión', className: 'bg-amber-100 text-amber-700 border-amber-200' },
+  approved:  { label: 'Aprobado',   className: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  rejected:  { label: 'Rechazado',  className: 'bg-red-100 text-red-700 border-red-200' },
+};
 
 export default function GradeEntriesManager({ studentSubject, canEdit = false, onEntriesChanged }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submissionStatus, setSubmissionStatus] = useState(studentSubject?.grade_submission_status || 'draft');
   const { toast } = useToast();
 
   const minEntries = getRecommendedMinimum(studentSubject?.academic_block);
@@ -76,11 +85,38 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
   };
 
   useEffect(() => {
+    setSubmissionStatus(studentSubject?.grade_submission_status || 'draft');
     loadEntries();
-  }, [studentSubject?.id, studentSubject?.student_id, studentSubject?.quarter, studentSubject?.school_year]);
+  }, [studentSubject?.id, studentSubject?.student_id, studentSubject?.quarter, studentSubject?.school_year, studentSubject?.grade_submission_status]);
+
+  const isLocked = submissionStatus === 'submitted' || submissionStatus === 'approved';
+  const effectiveCanEdit = canEdit && !isLocked;
+
+  const handleSubmitForReview = async () => {
+    if (!studentSubject?.id || entries.length === 0) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc('submit_subject_grades', {
+        p_student_subject_id: studentSubject.id,
+      });
+      if (error) throw error;
+
+      setSubmissionStatus('submitted');
+      toast({ title: 'Enviado', description: 'Las notas fueron enviadas para revisión.' });
+
+      if (typeof onEntriesChanged === 'function') {
+        await onEntriesChanged({ ...studentSubject, grade_submission_status: 'submitted' });
+      }
+    } catch (err) {
+      console.error('Error submitting grades:', err);
+      toast({ title: 'Error', description: err.message || 'No se pudo enviar para revisión.', variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const addEntry = async () => {
-    if (!canEdit || !studentSubject) return;
+    if (!effectiveCanEdit || !studentSubject) return;
     setAdding(true);
 
     try {
@@ -118,7 +154,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
   };
 
   const updateEntry = async (id, field, value) => {
-    if (!canEdit) return;
+    if (!effectiveCanEdit) return;
 
     const previousEntries = [...entries];
     const nextEntries = entries.map((entry) =>
@@ -152,7 +188,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
   };
 
   const deleteEntry = async (id) => {
-    if (!canEdit) return;
+    if (!effectiveCanEdit) return;
 
     if (!window.confirm('¿Está seguro de eliminar esta nota parcial?')) return;
 
@@ -214,6 +250,15 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
             {meetsMinimum ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
             {entries.length} / {minEntries} Notas
           </div>
+          {(() => {
+            const cfg = SUBMISSION_STATUS_CONFIG[submissionStatus] || SUBMISSION_STATUS_CONFIG.draft;
+            return (
+              <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${cfg.className}`}>
+                {isLocked && <Lock className="w-3 h-3" />}
+                {cfg.label}
+              </span>
+            );
+          })()}
         </div>
       </div>
 
@@ -242,7 +287,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
                 <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-12 gap-3">
                   <div className="sm:col-span-6">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 sm:hidden">Actividad</label>
-                    {canEdit ? (
+                    {effectiveCanEdit ? (
                       <input
                         type="text"
                         value={entry.assessment_name || ''}
@@ -257,7 +302,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
 
                   <div className="sm:col-span-3">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 sm:hidden">Calificación</label>
-                    {canEdit ? (
+                    {effectiveCanEdit ? (
                       <input
                         type="number"
                         min="0"
@@ -275,7 +320,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
 
                   <div className="sm:col-span-3">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 sm:hidden">Fecha</label>
-                    {canEdit ? (
+                    {effectiveCanEdit ? (
                       <input
                         type="date"
                         value={entry.date_recorded || ''}
@@ -290,7 +335,7 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
                   </div>
                 </div>
 
-                {canEdit && (
+                {effectiveCanEdit && (
                   <button
                     onClick={() => deleteEntry(entry.id)}
                     className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors shrink-0 sm:ml-auto"
@@ -305,16 +350,34 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
         )}
       </div>
 
-      {canEdit && (
-        <div className="p-4 border-t border-slate-200 bg-slate-50 shrink-0">
-          <button
-            onClick={addEntry}
-            disabled={adding}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-dashed border-slate-300 text-slate-600 hover:border-[#193D6D] hover:text-[#193D6D] rounded-lg font-bold text-sm transition-colors disabled:opacity-50"
-          >
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Agregar Nueva Nota Parcial
-          </button>
+      {(effectiveCanEdit || (canEdit && submissionStatus === 'draft' && entries.length > 0)) && (
+        <div className="p-4 border-t border-slate-200 bg-slate-50 shrink-0 flex flex-col sm:flex-row gap-3">
+          {effectiveCanEdit && (
+            <button
+              onClick={addEntry}
+              disabled={adding}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border-2 border-dashed border-slate-300 text-slate-600 hover:border-[#193D6D] hover:text-[#193D6D] rounded-lg font-bold text-sm transition-colors disabled:opacity-50"
+            >
+              {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Agregar Nueva Nota Parcial
+            </button>
+          )}
+          {canEdit && submissionStatus === 'draft' && entries.length > 0 && (
+            <button
+              onClick={handleSubmitForReview}
+              disabled={submitting}
+              className="flex items-center justify-center gap-2 px-5 py-2 bg-[#193D6D] hover:bg-[#122e54] text-white rounded-lg font-bold text-sm transition-colors disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Enviar para Revisión
+            </button>
+          )}
+          {isLocked && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-sm font-bold">
+              <Lock className="w-4 h-4" />
+              {submissionStatus === 'submitted' ? 'Notas enviadas — pendiente de revisión.' : 'Notas aprobadas — solo lectura.'}
+            </div>
+          )}
         </div>
       )}
     </div>

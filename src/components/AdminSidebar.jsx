@@ -1,19 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Building2, 
-  CreditCard, 
-  Settings, 
-  LogOut, 
-  ChevronRight, 
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  CreditCard,
+  Settings,
+  LogOut,
+  ChevronRight,
   FileText,
   GraduationCap,
   BookOpen,
   FileSignature,
-  Shield
+  Shield,
+  ClipboardList
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -101,6 +102,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="pei" icon={FileText} label="PEI" />
             <NavItem section="contratos" icon={FileSignature} label="Contratos" />
             <NavItem section="users" icon={Users} label="Usuarios" />
+            <NavItem section="revision-notas" icon={ClipboardList} label="Revisión de Notas" />
             <NavItem section="seguridad" icon={Shield} label="Seguridad" />
             <NavItem section="settings" icon={Settings} label="Configuración" />
           </>

@@ -451,7 +451,7 @@ export default function ParentDashboard() {
                           className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
                         >
                           <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform text-[#20B2AA]" />
-                          <span className="text-xs font-bold text-slate-700">Registrar Evaluaciones</span>
+                          <span className="text-xs font-bold text-slate-700">Ver Evaluaciones</span>
                         </button>
 
                         <button
@@ -1147,7 +1147,7 @@ export default function ParentDashboard() {
               <div className="p-6 overflow-y-auto flex-1">
                 <GradeEntriesManager
                   studentSubject={selectedStudentSubjectForEntries}
-                  canEdit={true}
+                  canEdit={false}
                   onEntriesChanged={handleEntriesChanged}
                 />
               </div>
