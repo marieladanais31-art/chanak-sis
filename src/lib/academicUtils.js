@@ -1,6 +1,30 @@
 
 export const ACTIVE_SCHOOL_YEAR = '2025-2026';
 
+export const ACADEMIC_YEARS = [
+  '2023-2024',
+  '2024-2025',
+  '2025-2026',
+  '2026-2027',
+  '2027-2028',
+];
+
+/**
+ * Returns 'Q1' | 'Q2' | 'Q3' | null given a date and a calendar row.
+ * @param {string|Date} date
+ * @param {object} calendar - academic_calendars row with q1/q2/q3 start+end dates
+ */
+export function getQuarterFromDate(date, calendar) {
+  if (!date || !calendar) return null;
+  const d = new Date(date);
+  const inRange = (start, end) =>
+    start && end && d >= new Date(start) && d <= new Date(end);
+  if (inRange(calendar.q1_start_date, calendar.q1_end_date)) return 'Q1';
+  if (inRange(calendar.q2_start_date, calendar.q2_end_date)) return 'Q2';
+  if (inRange(calendar.q3_start_date, calendar.q3_end_date)) return 'Q3';
+  return null;
+}
+
 export const QUARTERS = [
   { id: 'Q1', name: 'Quarter 1' },
   { id: 'Q2', name: 'Quarter 2' },

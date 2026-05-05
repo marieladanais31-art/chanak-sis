@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Loader2, X, User, Users, BookOpen, Heart } from 'lucide-react';
+import { ACADEMIC_YEARS } from '@/lib/academicUtils';
 
 const INPUT = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 text-sm bg-white';
 const LABEL = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider';
@@ -25,6 +26,7 @@ const EMPTY = {
   enrollment_date: '', start_date: '', estimated_end_date: '',
   last_school_name: '', last_grade_completed: '',
   grade_level: '', us_grade_level: '', school_stage: 'elementary',
+  academic_year: '2025-2026',
   modality: 'Off-Campus', curriculum_base: 'ACE',
   diag_math: '', diag_english: '', diag_word_building: '', diag_science: '', diag_social_studies: '',
   diagnostic_notes: '', vocational_interest: '', graduation_pathway_notes: '',
@@ -87,6 +89,7 @@ export default function StudentFicha({ studentId, onClose }) {
         grade_level: s.grade_level || '',
         us_grade_level: s.us_grade_level || '',
         school_stage: s.school_stage || 'elementary',
+        academic_year: s.academic_year || '2025-2026',
         modality: s.modality || 'Off-Campus',
         curriculum_base: s.curriculum_base || 'ACE',
         diag_math: s.diag_math || '',
@@ -166,6 +169,7 @@ export default function StudentFicha({ studentId, onClose }) {
         grade_level: form.grade_level,
         us_grade_level: form.us_grade_level,
         school_stage: form.school_stage || null,
+        academic_year: form.academic_year || '2025-2026',
         modality: form.modality,
         curriculum_base: form.curriculum_base,
         diag_math: form.diag_math,
@@ -411,6 +415,12 @@ export default function StudentFicha({ studentId, onClose }) {
                     <option value="Off-Campus">Off-Campus</option>
                     <option value="Dual Diploma">Dual Diploma</option>
                     <option value="On-Campus">On-Campus</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL}>Año académico</label>
+                  <select className={INPUT} value={form.academic_year} onChange={set('academic_year')}>
+                    {ACADEMIC_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
                 <div>
