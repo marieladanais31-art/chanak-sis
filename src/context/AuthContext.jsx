@@ -28,6 +28,9 @@ export const AuthProvider = ({ children }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Indica que la sesión activa es una sesión de recuperación de contraseña.
+  // En este estado NO se hace redirect automático basado en rol.
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const fetchProfile = async (userId, userEmail) => {
     try {
@@ -122,12 +125,23 @@ export const AuthProvider = ({ children }) => {
       if (!isMounted) return;
       
       setSession(newSession);
-      
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+
+      if (event === 'PASSWORD_RECOVERY') {
+        // Sesión temporal para restablecer contraseña.
+        // Solo actualizamos el usuario; NO cargamos perfil ni redirigimos.
+        console.log('🔑 AuthContext: PASSWORD_RECOVERY — esperando nueva contraseña.');
+        setIsPasswordRecovery(true);
+        setUser(newSession?.user || null);
+        setProfile(null);
+        setIsInitialized(true);
+        setLoading(false);
+      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setIsPasswordRecovery(false);
         if (newSession?.user) {
           await initializeAuth(newSession);
         }
       } else if (event === 'SIGNED_OUT') {
+        setIsPasswordRecovery(false);
         setUser(null);
         setProfile(null);
         setSession(null);
@@ -195,11 +209,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      session, user, profile, 
-      isInitialized, loading, error, 
-      login, logout, 
-      ROLES 
+    <AuthContext.Provider value={{
+      session, user, profile,
+      isInitialized, loading, error,
+      isPasswordRecovery,
+      login, logout,
+      ROLES
     }}>
       {children}
     </AuthContext.Provider>

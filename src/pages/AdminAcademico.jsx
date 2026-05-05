@@ -232,6 +232,7 @@ export default function AdminAcademico() {
                               <th className="p-4">Materia</th>
                               <th className="p-4 text-center">Promedio</th>
                               <th className="p-4 text-center">Estado</th>
+                              <th className="p-4 text-center">Envío Notas</th>
                               <th className="p-4 text-center">Convalidación</th>
                               <th className="p-4 text-center">Créditos</th>
                               <th className="p-4 text-center">Notas Parciales</th>
@@ -265,6 +266,23 @@ export default function AdminAcademico() {
                                     <option value="submitted">Enviado</option>
                                     <option value="approved">Aprobado</option>
                                   </select>
+                                </td>
+
+                                <td className="p-4 text-center">
+                                  {(() => {
+                                    const s = subject.grade_submission_status || 'draft';
+                                    const cfg = {
+                                      draft:     { label: 'Borrador',    cls: 'bg-slate-100 text-slate-600' },
+                                      submitted: { label: 'En revisión', cls: 'bg-amber-100 text-amber-700' },
+                                      approved:  { label: 'Aprobado',   cls: 'bg-emerald-100 text-emerald-700' },
+                                      rejected:  { label: 'Rechazado',  cls: 'bg-red-100 text-red-700' },
+                                    }[s];
+                                    return (
+                                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${cfg.cls}`}>
+                                        {cfg.label}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
 
                                 <td className="p-4 text-center">

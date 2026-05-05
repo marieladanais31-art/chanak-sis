@@ -2,13 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
-import { Loader2, Upload, Save, Info, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, Save, Info, Image as ImageIcon, Building } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
+import InstitutionalSettings from '@/components/InstitutionalSettings';
 
 export default function AdminConfiguracion() {
   const { profile } = useAuth();
   const { toast } = useToast();
+  const [configTab, setConfigTab] = useState('general'); // 'general' | 'institucional'
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ first_name: '', last_name: '' });
   const [logoFile, setLogoFile] = useState(null);
@@ -99,11 +101,30 @@ export default function AdminConfiguracion() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800">Configuración General</h2>
-        <p className="text-sm text-slate-500 font-medium mt-1">Ajustes globales y personalización del administrador</p>
+        <h2 className="text-2xl font-bold text-slate-800">Configuración</h2>
+        <p className="text-sm text-slate-500 font-medium mt-1">Ajustes globales y personalización</p>
       </div>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 text-blue-800 mb-6">
+      {/* Config tabs */}
+      <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
+        <button
+          onClick={() => setConfigTab('general')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${configTab === 'general' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+        >
+          Perfil y Logo
+        </button>
+        <button
+          onClick={() => setConfigTab('institucional')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${configTab === 'institucional' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+        >
+          <Building className="w-3.5 h-3.5" /> Datos Institucionales
+        </button>
+      </div>
+
+      {configTab === 'institucional' && <InstitutionalSettings />}
+      {configTab === 'general' && (
+        <>
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 text-blue-800 mb-6">
         <Info className="w-5 h-5 shrink-0 mt-0.5" />
         <div>
           <h4 className="font-bold">Información Importante</h4>
@@ -189,6 +210,8 @@ export default function AdminConfiguracion() {
           </div>
         </form>
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,101 +1,61 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet';
 import { Mail, Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
-const ForgotPasswordPage = () => {
+const COOLDOWN_MS = 60000;
+
+export default function ForgotPasswordPage() {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [successMessage, setSuccessMessage] = useState(false);
+  const [sent, setSent] = useState(false);
 
+  // Restaurar cooldown si el usuario recarga la página
   useEffect(() => {
-    const lastSent = localStorage.getItem('last_password_reset_request');
-    if (lastSent) {
-      const diff = Date.now() - parseInt(lastSent, 10);
-      if (diff < 60000) {
-        setCooldown(Math.ceil((60000 - diff) / 1000));
-      }
+    const last = localStorage.getItem('chanak_pwd_reset_ts');
+    if (last) {
+      const diff = Date.now() - parseInt(last, 10);
+      if (diff < COOLDOWN_MS) setCooldown(Math.ceil((COOLDOWN_MS - diff) / 1000));
     }
   }, []);
 
   useEffect(() => {
-    if (cooldown > 0) {
-      const timer = setInterval(() => {
-        setCooldown(prev => prev - 1);
-      }, 1000);
-      return () => clearInterval(timer);
-    }
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((prev) => prev - 1), 1000);
+    return () => clearInterval(t);
   }, [cooldown]);
 
-  const handleSendReset = async (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    console.log('🔐 [ResetPassword] Starting email reset flow for:', email);
-
-    if (!email) {
-      console.error('❌ [ResetPassword] Validation failed: Missing email');
-      toast({ title: "Error", description: "Please enter an email address.", variant: "destructive" });
-      return;
-    }
-
-    if (cooldown > 0) {
-      console.log(`➡️ [ResetPassword] Blocked by cooldown. Wait ${cooldown}s`);
-      return;
-    }
+    if (cooldown > 0) return;
 
     setLoading(true);
-    setSuccessMessage(false);
+    setSent(false);
 
-    const redirectTo = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:5173/auth/callback' 
-      : 'https://sis.chanakacademy.org/auth/callback';
-
-    console.log('➡️ [ResetPassword] Using redirect URL:', redirectTo);
+    // La URL de callback apunta a /auth/callback para que CallbackPage procese el token
+    const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
 
       if (error) {
-        console.error('❌ [ResetPassword] Supabase error:', error);
-        if (error.status === 429) {
-            throw new Error("Too many requests. Please wait 1-60 minutes before trying again.");
-        }
-        if (error.message.includes('Email provider not configured')) {
-            throw new Error("Email service is temporarily unavailable. Please contact support.");
-        }
-        if (error.message.includes('User not found') || error.status === 404) {
-            throw new Error("User not found with this email.");
-        }
+        if (error.status === 429) throw new Error('Demasiados intentos. Espera al menos 1 minuto.');
         throw error;
       }
 
-      console.log('✅ [ResetPassword] Reset email sent successfully.');
-      localStorage.setItem('last_password_reset_request', Date.now().toString());
+      localStorage.setItem('chanak_pwd_reset_ts', Date.now().toString());
       setCooldown(60);
-      setSuccessMessage(true);
+      setSent(true);
       setEmail('');
-      
-      toast({
-        title: "Link Sent",
-        description: "Please check your email for the password reset link.",
-      });
-
     } catch (err) {
-      console.error('❌ [ResetPassword] Caught Error:', err.message);
+      console.error('[ForgotPasswordPage]', err);
       toast({
-        title: "Request Failed",
-        description: err.message || "An error occurred while sending the reset link.",
-        variant: "destructive",
+        title: 'No se pudo enviar el enlace',
+        description: err.message || 'Intenta nuevamente en unos minutos.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -103,93 +63,80 @@ const ForgotPasswordPage = () => {
   };
 
   return (
-    <>
-      <Helmet>
-        <title>Forgot Password - CHANAK International Academy</title>
-      </Helmet>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
+      <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100">
+        <div className="flex justify-center mb-6">
+          <img
+            src="https://horizons-cdn.hostinger.com/fecf9528-708e-4a5b-9228-805062d89fe9/d9778ccb909ddc8597ac3c64740796e6.png"
+            alt="Chanak Academy"
+            className="h-16 w-auto object-contain"
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+        </div>
 
-      <div className="min-h-screen flex items-center justify-center p-4 bg-[#0B2D5C]">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-             <div className="flex justify-center mb-4">
-              <img 
-                src="https://horizons-cdn.hostinger.com/fecf9528-708e-4a5b-9228-805062d89fe9/4c172acccfd6da3811a3ad56c254d1fc.png" 
-                alt="CHANAK International Academy logo"
-                className="h-12 w-auto"
+        <h2 className="text-2xl font-black text-center text-slate-800 mb-1">Recuperar contraseña</h2>
+        <p className="text-center text-slate-500 text-sm mb-8 leading-relaxed">
+          Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.
+        </p>
+
+        {sent ? (
+          <div className="text-center space-y-4 py-4">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800">Revisa tu correo</h3>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Si el correo está registrado, recibirás un enlace de recuperación en los próximos minutos.
+              Revisa también tu carpeta de spam.
+            </p>
+            <button
+              onClick={() => setSent(false)}
+              disabled={cooldown > 0}
+              className="w-full py-2.5 border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors text-sm"
+            >
+              {cooldown > 0 ? `Reenviar en ${cooldown}s` : 'Enviar de nuevo'}
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSend} className="space-y-5">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-1">Correo electrónico</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@chanakacademy.org"
+                className="w-full p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-slate-800"
+                disabled={loading}
               />
             </div>
-            <CardTitle className="text-2xl">Reset Password</CardTitle>
-            <CardDescription>
-              Enter your email address and we'll send you a link to reset your password.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {successMessage ? (
-              <div className="text-center space-y-4 py-4">
-                <div className="flex justify-center text-green-500">
-                  <CheckCircle2 className="h-12 w-12" />
-                </div>
-                <h3 className="text-lg font-medium">Check your email</h3>
-                <p className="text-sm text-gray-500">
-                  We've sent a password reset link to your email.
-                </p>
-                <Button 
-                    variant="outline" 
-                    className="w-full mt-4"
-                    onClick={() => setSuccessMessage(false)}
-                >
-                    Resend Link {cooldown > 0 && `(${cooldown}s)`}
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={handleSendReset} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="user@chanak.edu"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
 
-                <Button 
-                  type="submit" 
-                  className="w-full bg-[#2F80ED] hover:bg-[#1a6bd3]"
-                  disabled={loading || cooldown > 0}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Sending...
-                    </>
-                  ) : cooldown > 0 ? (
-                    `Wait ${cooldown}s to resend`
-                  ) : (
-                    <>
-                      <Mail className="w-4 h-4 mr-2" />
-                      Send Reset Link
-                    </>
-                  )}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-          <CardFooter className="flex justify-center border-t p-4">
-            <Link 
-              to="/" 
-              className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-2"
+            <button
+              type="submit"
+              disabled={loading || cooldown > 0}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 flex justify-center items-center gap-2"
             >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Login
-            </Link>
-          </CardFooter>
-        </Card>
-      </div>
-    </>
-  );
-};
+              {loading ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> Enviando...</>
+              ) : cooldown > 0 ? (
+                `Reenviar en ${cooldown}s`
+              ) : (
+                <><Mail className="w-5 h-5" /> Enviar enlace de recuperación</>
+              )}
+            </button>
+          </form>
+        )}
 
-export default ForgotPasswordPage;
+        <div className="mt-6 text-center">
+          <Link
+            to="/login"
+            className="text-sm text-slate-400 hover:text-slate-600 flex items-center justify-center gap-1"
+          >
+            <ArrowLeft className="w-4 h-4" /> Volver al inicio de sesión
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

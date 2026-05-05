@@ -25,6 +25,268 @@ import { useToast } from '@/hooks/use-toast';
 import LegalDocuments from '@/pages/LegalDocuments';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
+import { generateTranscriptPDF } from '@/lib/transcriptPdf';
+
+function ParentBoletinesPanel({ children }) {
+  const [transcripts, setTranscripts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [downloading, setDownloading] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!children || children.length === 0) { setLoading(false); return; }
+    const ids = children.map(c => c.id);
+    supabase
+      .from('transcript_records')
+      .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
+      .in('student_id', ids)
+      .eq('status', 'published')
+      .order('school_year', { ascending: false })
+      .then(({ data }) => { setTranscripts(data || []); setLoading(false); });
+  }, [children]);
+
+  const handleDownload = async (tr) => {
+    setDownloading(tr.id);
+    try {
+      const child = children.find(c => c.id === tr.student_id);
+      const [coursesRes, settingsRes, creditsRes] = await Promise.all([
+        supabase.from('transcript_courses').select('*').eq('transcript_id', tr.id),
+        supabase.from('institutional_settings').select('*').limit(1).single(),
+        supabase.from('student_credits_summary').select('*').eq('student_id', tr.student_id),
+      ]);
+      generateTranscriptPDF({
+        transcript: tr,
+        courses: coursesRes.data || [],
+        student: child || { id: tr.student_id },
+        settings: settingsRes.data || null,
+        creditsSummary: creditsRes.data || [],
+        lang: tr.language || 'es',
+      });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+
+  if (transcripts.length === 0) return (
+    <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+      No hay boletines publicados disponibles en este momento.
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {transcripts.map(tr => {
+        const child = children.find(c => c.id === tr.student_id);
+        return (
+          <div key={tr.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center justify-between">
+            <div>
+              <p className="font-bold text-slate-800">{child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}</p>
+              <p className="text-sm text-slate-500">{tr.school_year} · {tr.quarter} · {tr.language?.toUpperCase() || 'ES'}</p>
+            </div>
+            <button
+              onClick={() => handleDownload(tr)}
+              disabled={downloading === tr.id}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
+            >
+              {downloading === tr.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Descargar PDF
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ParentDocumentosPanel({ children }) {
+  const [peis, setPeis]           = React.useState([]);
+  const [contracts, setContracts] = React.useState([]);
+  const [letters, setLetters]     = React.useState([]);
+  const [loading, setLoading]     = React.useState(true);
+  const [downloading, setDownloading] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!children || children.length === 0) { setLoading(false); return; }
+    const ids = children.map(c => c.id);
+    Promise.all([
+      supabase.from('individualized_education_plans')
+        .select('id, student_id, school_year, quarter, status, issue_date')
+        .in('student_id', ids).eq('status', 'published'),
+      supabase.from('enrollment_contracts')
+        .select('id, student_id, school_year, status, program')
+        .in('student_id', ids).in('status', ['sent', 'signed']),
+      supabase.from('enrollment_letters')
+        .select('id, student_id, school_year, status, program, modality')
+        .in('student_id', ids).eq('status', 'published'),
+    ]).then(([peiRes, conRes, letRes]) => {
+      setPeis(peiRes.data || []);
+      setContracts(conRes.data || []);
+      setLetters(letRes.data || []);
+      setLoading(false);
+    });
+  }, [children]);
+
+  const handleDownloadPei = async (pei) => {
+    setDownloading(`pei-${pei.id}`);
+    try {
+      const { generatePeiPDF } = await import('@/lib/peiPdf');
+      const child = children.find(c => c.id === pei.student_id);
+      const [pacesRes, settingsRes] = await Promise.all([
+        supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id),
+        supabase.from('institutional_settings').select('*').limit(1).single(),
+      ]);
+      generatePeiPDF({
+        pei,
+        paces: pacesRes.data || [],
+        student: child || { first_name: '', last_name: '' },
+        settings: settingsRes.data || null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const handleDownloadContract = async (contract) => {
+    setDownloading(`con-${contract.id}`);
+    try {
+      const { generateContractPDF } = await import('@/lib/contractPdf');
+      const child = children.find(c => c.id === contract.student_id);
+      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      generateContractPDF({
+        contract,
+        student: child || { first_name: '', last_name: '' },
+        settings: settings || null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const handleDownloadLetter = async (letter) => {
+    setDownloading(`let-${letter.id}`);
+    try {
+      const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
+      const child = children.find(c => c.id === letter.student_id);
+      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      generateEnrollmentLetterPDF({
+        letter,
+        student: child || { first_name: '', last_name: '' },
+        settings: settings || null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-[#193D6D]" /></div>;
+
+  const allEmpty = peis.length === 0 && contracts.length === 0 && letters.length === 0;
+
+  if (allEmpty) return (
+    <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+      No hay documentos publicados disponibles en este momento.
+    </div>
+  );
+
+  const DocRow = ({ icon, title, subtitle, onDownload, dlKey }) => (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[#193D6D]/10 flex items-center justify-center text-[#193D6D] shrink-0">
+          {icon}
+        </div>
+        <div>
+          <p className="font-bold text-slate-800">{title}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
+        </div>
+      </div>
+      <button
+        onClick={onDownload}
+        disabled={downloading === dlKey}
+        className="flex items-center gap-2 px-4 py-2 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
+      >
+        {downloading === dlKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        Descargar
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {peis.length > 0 && (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#193D6D]" /> Plan Educativo Individualizado (PEI)
+          </h3>
+          <div className="space-y-3">
+            {peis.map(pei => {
+              const child = children.find(c => c.id === pei.student_id);
+              return (
+                <DocRow key={pei.id}
+                  icon={<FileText className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`PEI · ${pei.school_year} · Publicado`}
+                  onDownload={() => handleDownloadPei(pei)}
+                  dlKey={`pei-${pei.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {contracts.length > 0 && (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <FileSignature className="w-5 h-5 text-blue-600" /> Contratos de Matrícula
+          </h3>
+          <div className="space-y-3">
+            {contracts.map(con => {
+              const child = children.find(c => c.id === con.student_id);
+              return (
+                <DocRow key={con.id}
+                  icon={<FileSignature className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`Contrato · ${con.school_year} · ${con.status === 'signed' ? 'Firmado' : 'Enviado'}`}
+                  onDownload={() => handleDownloadContract(con)}
+                  dlKey={`con-${con.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {letters.length > 0 && (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-teal-600" /> Cartas de Confirmación de Matrícula
+          </h3>
+          <div className="space-y-3">
+            {letters.map(letter => {
+              const child = children.find(c => c.id === letter.student_id);
+              return (
+                <DocRow key={letter.id}
+                  icon={<CheckCircle2 className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`Confirmación · ${letter.school_year} · ${letter.program || ''}`}
+                  onDownload={() => handleDownloadLetter(letter)}
+                  dlKey={`let-${letter.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ParentDashboard() {
   const { profile, logout } = useAuth();
@@ -84,12 +346,13 @@ export default function ParentDashboard() {
     return children.find((c) => c.id === childId);
   };
 
-  const getChildSubjects = (childId, quarter = selectedAcademicQuarter) => {
+  const getChildSubjects = (childId, quarter = selectedAcademicQuarter, onlyApproved = false) => {
     const raw = studentSubjects.filter(
       (s) =>
         s.student_id === childId &&
         s.school_year === ACTIVE_SCHOOL_YEAR &&
-        s.quarter === quarter
+        s.quarter === quarter &&
+        (!onlyApproved || s.grade_submission_status === 'approved')
     );
 
     const unique = dedupeAcademicSubjects(raw);
@@ -322,6 +585,26 @@ export default function ParentDashboard() {
             >
               <Scale className="w-5 h-5" /> 📋 Documentos Legales
             </button>
+            <button
+              onClick={() => setActiveTab('boletines')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'boletines'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📄 Boletines
+            </button>
+            <button
+              onClick={() => setActiveTab('documentos')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'documentos'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📁 Documentos
+            </button>
           </div>
         </div>
       </div>
@@ -451,7 +734,7 @@ export default function ParentDashboard() {
                           className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
                         >
                           <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform text-[#20B2AA]" />
-                          <span className="text-xs font-bold text-slate-700">Registrar Evaluaciones</span>
+                          <span className="text-xs font-bold text-slate-700">Ver Evaluaciones</span>
                         </button>
 
                         <button
@@ -552,6 +835,14 @@ export default function ParentDashboard() {
                 )}
               </div>
             )}
+
+            {activeTab === 'boletines' && (
+              <ParentBoletinesPanel children={children} />
+            )}
+
+            {activeTab === 'documentos' && (
+              <ParentDocumentosPanel children={children} />
+            )}
           </>
         )}
       </main>
@@ -617,7 +908,8 @@ export default function ParentDashboard() {
       {isBulletinModalOpen && (() => {
         const child = getChildById(selectedChildId);
         const bulletinQuarter = selectedAcademicQuarter;
-        const sortedSubjects = getChildSubjects(selectedChildId, bulletinQuarter);
+        // El boletín solo muestra materias con notas aprobadas por admin/coordinador
+        const sortedSubjects = getChildSubjects(selectedChildId, bulletinQuarter, true);
 
         const grouped = {};
         BLOCK_ORDER.forEach((block) => {
@@ -702,9 +994,10 @@ export default function ParentDashboard() {
                     {sortedSubjects.length === 0 ? (
                       <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
                         <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-500 font-bold text-lg">No academic records yet</p>
+                        <p className="text-slate-500 font-bold text-lg">Sin registros aprobados</p>
                         <p className="text-sm text-slate-400 mt-1">
-                          No hay materias registradas para {bulletinQuarter} del periodo {ACTIVE_SCHOOL_YEAR}.
+                          No hay materias con notas aprobadas para {bulletinQuarter} — {ACTIVE_SCHOOL_YEAR}.
+                          Las notas aparecerán aquí una vez que el coordinador las apruebe.
                         </p>
                       </div>
                     ) : (
@@ -1098,20 +1391,32 @@ export default function ParentDashboard() {
                     No hay materias disponibles para {selectedAcademicQuarter}.
                   </p>
                 ) : (
-                  availableSubjects.map((subject) => (
-                    <button
-                      key={subject.id}
-                      onClick={() => {
-                        setSelectedStudentSubjectForEntries(subject);
-                        setSubjectSelectionStep(false);
-                        setIsGradeEntriesModalOpen(true);
-                      }}
-                      className="w-full p-4 text-left border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-[#20B2AA] transition-colors group"
-                    >
-                      <p className="font-bold text-slate-800 group-hover:text-[#20B2AA]">{subject.subject_name}</p>
-                      <p className="text-xs text-slate-500 mt-1">{subject.category || 'General'}</p>
-                    </button>
-                  ))
+                  availableSubjects.map((subject) => {
+                    const statusMap = {
+                      approved:  { label: 'Aprobado',    cls: 'bg-emerald-100 text-emerald-700' },
+                      submitted: { label: 'En revisión', cls: 'bg-amber-100 text-amber-700' },
+                      rejected:  { label: 'Observado',   cls: 'bg-red-100 text-red-700' },
+                      draft:     { label: 'Pendiente',   cls: 'bg-slate-100 text-slate-500' },
+                    };
+                    const st = statusMap[subject.grade_submission_status || 'draft'];
+                    return (
+                      <button
+                        key={subject.id}
+                        onClick={() => {
+                          setSelectedStudentSubjectForEntries(subject);
+                          setSubjectSelectionStep(false);
+                          setIsGradeEntriesModalOpen(true);
+                        }}
+                        className="w-full p-4 text-left border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-[#20B2AA] transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-slate-800 group-hover:text-[#20B2AA]">{subject.subject_name}</p>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">{subject.category || 'General'}</p>
+                      </button>
+                    );
+                  })
                 )}
               </div>
               
@@ -1147,7 +1452,7 @@ export default function ParentDashboard() {
               <div className="p-6 overflow-y-auto flex-1">
                 <GradeEntriesManager
                   studentSubject={selectedStudentSubjectForEntries}
-                  canEdit={true}
+                  canEdit={false}
                   onEntriesChanged={handleEntriesChanged}
                 />
               </div>

@@ -26,14 +26,17 @@ export default function CreateUserForm({ onSuccess, onCancel }) {
 
     setLoading(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // PENDIENTE BACKEND: idealmente este flujo corre en una Edge Function
+      // con service_role para confirmar email automáticamente sin enviar correo.
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: formData.fullName,
-          role: formData.role
-        }
+        options: {
+          data: {
+            full_name: formData.fullName,
+            role: formData.role,
+          },
+        },
       });
 
       if (authError) throw authError;
@@ -58,7 +61,7 @@ export default function CreateUserForm({ onSuccess, onCancel }) {
         }
       }
 
-      toast({ title: 'Usuario Creado', description: 'El usuario ha sido creado exitosamente.' });
+      toast({ title: 'Usuario creado', description: `${formData.email} fue registrado. Debe confirmar su correo.` });
       if (onSuccess) onSuccess();
       
       setFormData({ email: '', password: '', fullName: '', role: '', hubs: [] });

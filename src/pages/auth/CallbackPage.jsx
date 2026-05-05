@@ -42,8 +42,15 @@ const CallbackPage = () => {
           const metadata = data.session?.user?.user_metadata || {};
           console.log('➡️ [AuthCallback] User Metadata:', metadata);
 
-          if (type === 'recovery' || type === 'invite') {
-            console.log(`➡️ [AuthCallback] Type is ${type}, redirecting to /auth/reset`);
+          // type viene del parámetro ?type=recovery que añadimos en redirectTo.
+          // Como fallback, detectamos recovery por el amr claim de la sesión.
+          const isRecovery =
+            type === 'recovery' ||
+            type === 'invite' ||
+            data.session?.user?.amr?.some?.((a) => a.method === 'otp');
+
+          if (isRecovery) {
+            console.log(`➡️ [AuthCallback] Recovery session detected (type=${type}), redirecting to /auth/reset`);
             setRedirectPath('/auth/reset');
           } else {
             console.log(`➡️ [AuthCallback] Redirecting to next: ${next}`);

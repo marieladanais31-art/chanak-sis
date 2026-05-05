@@ -45,41 +45,32 @@ export default function AdminUsuarios() {
     }
   };
 
+  // Cambiar contraseña de otro usuario desde el cliente no es posible sin service_role key.
+  // En su lugar enviamos un enlace de recuperación (flujo estándar de Supabase Auth).
+  // PENDIENTE BACKEND: mover cambio directo a una Edge Function.
   const handleResetPassword = async (e) => {
-    e.preventDefault(); // 1) Prevents form submission
-    
-    if (!selectedUserForPassword || !newPassword) return;
-
-    // 2) Validates password length
-    if (newPassword.length < 6) {
-      toast({ title: 'Atención', description: 'La contraseña debe tener al menos 6 caracteres.', variant: 'destructive' });
-      return;
-    }
+    e.preventDefault();
+    if (!selectedUserForPassword) return;
 
     setPasswordLoading(true);
     try {
-      // 3) Update password using admin API
-      const { error } = await supabase.auth.admin.updateUserById(
-        selectedUserForPassword.id,
-        { password: newPassword }
+      const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        selectedUserForPassword.email,
+        { redirectTo }
       );
-
       if (error) throw error;
 
-      // 5) Success alert
-      toast({ title: 'Éxito', description: 'Contraseña actualizada exitosamente' });
-      
-      // 6) Close modal and reset state
+      toast({ title: 'Correo enviado', description: `Enlace de recuperación enviado a ${selectedUserForPassword.email}.` });
       setShowPasswordModal(false);
       setNewPassword('');
       setSelectedUserForPassword(null);
     } catch (error) {
-      // 4) Error handling and logging
-      console.error('❌ Password reset error:', error);
-      toast({ 
-        title: 'Error de actualización', 
-        description: error.message || 'No se pudo actualizar la contraseña. Verifique permisos.', 
-        variant: 'destructive' 
+      console.error('❌ Recovery email error:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo enviar el correo de recuperación.',
+        variant: 'destructive',
       });
     } finally {
       setPasswordLoading(false);
@@ -323,39 +314,30 @@ export default function AdminUsuarios() {
                 <p className="text-slate-500 mb-1">Usuario seleccionado:</p>
                 <p className="font-bold text-slate-800">{selectedUserForPassword.email}</p>
               </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Nueva Contraseña:</label>
-                <input 
-                  type="password" 
-                  required
-                  minLength={6}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres..."
-                  className="w-full p-3 border border-slate-300 rounded-xl outline-none text-slate-800 focus:border-[#20B2AA]"
-                />
+
+              <div className="flex items-start gap-2 text-xs text-slate-500 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Se enviará un enlace de recuperación al correo del usuario.
+                  Cambiar contraseñas de terceros directamente requiere una Edge Function (pendiente backend).
+                </span>
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-slate-500 mt-2">
-                <AlertCircle className="w-4 h-4" /> Al guardar, el usuario podrá ingresar inmediatamente con esta nueva contraseña.
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button 
+              <div className="pt-2 flex gap-3">
+                <button
                   type="button"
                   onClick={() => setShowPasswordModal(false)}
                   className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold hover:bg-slate-200 transition-colors"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="submit"
-                  disabled={passwordLoading || newPassword.length < 6}
+                  disabled={passwordLoading}
                   className="flex-1 py-2.5 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ backgroundColor: '#193D6D' }}
                 >
-                  {passwordLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar'}
+                  {passwordLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Enviar enlace'}
                 </button>
               </div>
             </form>

@@ -9,6 +9,8 @@ import RoleBasedRouter from '@/components/RoleBasedRouter';
 import HomePage from '@/pages/HomePage';
 import LoginPage from '@/pages/LoginPage';
 import ResetPasswordPage from '@/pages/auth/ResetPasswordPage';
+import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage';
+import CallbackPage from '@/pages/auth/CallbackPage';
 
 import AdminPanel from '@/pages/AdminPanel';
 import ParentDashboard from '@/pages/ParentDashboard';
@@ -22,6 +24,12 @@ const AppContent = () => {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      {/* /auth/callback: procesa el token del email y redirige según tipo */}
+      <Route path="/auth/callback" element={<CallbackPage />} />
+      {/* /auth/reset: página de nueva contraseña tras recuperación */}
+      <Route path="/auth/reset" element={<ResetPasswordPage />} />
+      {/* Alias legacy por compatibilidad con emails ya enviados */}
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       
       {/* Root portal redirects based on role */}
