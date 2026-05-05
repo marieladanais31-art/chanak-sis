@@ -61,7 +61,7 @@ export default function AdminUserManagement() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, first_name, last_name, role, is_active, created_at, hub_id')
+        .select('*')
         .order('created_at', { ascending: false });
       if (error) throw error;
       setUsers(data || []);
@@ -191,7 +191,7 @@ export default function AdminUserManagement() {
     if (!selectedUser?.email) return;
     setSubmitting(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback`;
+      const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
       const { error } = await supabase.auth.resetPasswordForEmail(selectedUser.email, { redirectTo });
       if (error) throw error;
 

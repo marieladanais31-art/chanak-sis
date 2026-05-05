@@ -63,31 +63,20 @@ export default function AdminUserDirectory() {
     }
   };
 
+  // Cambiar contraseña directamente de otro usuario requiere service_role key
+  // (Edge Function — PENDIENTE BACKEND). Por ahora enviamos el enlace de recuperación.
   const handleChangePassword = async (userId, userEmail) => {
-    const newPassword = prompt(`Ingrese nueva contraseña para ${userEmail} (mínimo 6 caracteres):`);
-    
-    if (!newPassword) return;
-    
-    if (newPassword.length < 6) {
-      toast({ title: 'Error', description: 'La contraseña debe tener al menos 6 caracteres.', variant: 'destructive' });
-      return;
-    }
-    
+    if (!confirm(`Se enviará un enlace de recuperación de contraseña a ${userEmail}. ¿Continuar?`)) return;
+
     setResettingId(userId);
     try {
-      const { data, error } = await supabase.auth.admin.updateUserById(userId, {
-        password: newPassword
-      });
-      
+      const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, { redirectTo });
       if (error) throw error;
-      toast({ title: 'Contraseña Actualizada', description: `La contraseña para ${userEmail} ha sido cambiada con éxito.` });
+      toast({ title: 'Correo enviado', description: `Enlace de recuperación enviado a ${userEmail}.` });
     } catch (error) {
-      console.error("Change password error:", error);
-      toast({ 
-        title: 'Error / Modo Simulado', 
-        description: 'La función real requiere backend service_key. Simulando éxito localmente.',
-        variant: 'default'
-      });
+      console.error('Recovery email error:', error);
+      toast({ title: 'Error', description: error.message || 'No se pudo enviar el correo.', variant: 'destructive' });
     } finally {
       setResettingId(null);
     }
