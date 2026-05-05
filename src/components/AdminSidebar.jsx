@@ -16,7 +16,8 @@ import {
   Shield,
   ClipboardList,
   ScrollText,
-  Building
+  Building,
+  Mail
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -105,6 +106,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="contratos" icon={FileSignature} label="Contratos" />
             <NavItem section="users" icon={Users} label="Usuarios" />
             <NavItem section="boletines" icon={ScrollText} label="Boletines" />
+            <NavItem section="cartas" icon={Mail} label="Cartas" />
             <NavItem section="revision-notas" icon={ClipboardList} label="Revisión de Notas" />
             <NavItem section="seguridad" icon={Shield} label="Seguridad" />
             <NavItem section="settings" icon={Settings} label="Configuración" />

@@ -99,6 +99,195 @@ function ParentBoletinesPanel({ children }) {
   );
 }
 
+function ParentDocumentosPanel({ children }) {
+  const [peis, setPeis]           = React.useState([]);
+  const [contracts, setContracts] = React.useState([]);
+  const [letters, setLetters]     = React.useState([]);
+  const [loading, setLoading]     = React.useState(true);
+  const [downloading, setDownloading] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!children || children.length === 0) { setLoading(false); return; }
+    const ids = children.map(c => c.id);
+    Promise.all([
+      supabase.from('individualized_education_plans')
+        .select('id, student_id, school_year, quarter, status, issue_date')
+        .in('student_id', ids).eq('status', 'published'),
+      supabase.from('enrollment_contracts')
+        .select('id, student_id, school_year, status, program')
+        .in('student_id', ids).in('status', ['sent', 'signed']),
+      supabase.from('enrollment_letters')
+        .select('id, student_id, school_year, status, program, modality')
+        .in('student_id', ids).eq('status', 'published'),
+    ]).then(([peiRes, conRes, letRes]) => {
+      setPeis(peiRes.data || []);
+      setContracts(conRes.data || []);
+      setLetters(letRes.data || []);
+      setLoading(false);
+    });
+  }, [children]);
+
+  const handleDownloadPei = async (pei) => {
+    setDownloading(`pei-${pei.id}`);
+    try {
+      const { generatePeiPDF } = await import('@/lib/peiPdf');
+      const child = children.find(c => c.id === pei.student_id);
+      const [pacesRes, settingsRes] = await Promise.all([
+        supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id),
+        supabase.from('institutional_settings').select('*').limit(1).single(),
+      ]);
+      generatePeiPDF({
+        pei,
+        paces: pacesRes.data || [],
+        student: child || { first_name: '', last_name: '' },
+        settings: settingsRes.data || null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const handleDownloadContract = async (contract) => {
+    setDownloading(`con-${contract.id}`);
+    try {
+      const { generateContractPDF } = await import('@/lib/contractPdf');
+      const child = children.find(c => c.id === contract.student_id);
+      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      generateContractPDF({
+        contract,
+        student: child || { first_name: '', last_name: '' },
+        settings: settings || null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const handleDownloadLetter = async (letter) => {
+    setDownloading(`let-${letter.id}`);
+    try {
+      const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
+      const child = children.find(c => c.id === letter.student_id);
+      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      generateEnrollmentLetterPDF({
+        letter,
+        student: child || { first_name: '', last_name: '' },
+        settings: settings || null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-[#193D6D]" /></div>;
+
+  const allEmpty = peis.length === 0 && contracts.length === 0 && letters.length === 0;
+
+  if (allEmpty) return (
+    <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+      No hay documentos publicados disponibles en este momento.
+    </div>
+  );
+
+  const DocRow = ({ icon, title, subtitle, onDownload, dlKey }) => (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-[#193D6D]/10 flex items-center justify-center text-[#193D6D] shrink-0">
+          {icon}
+        </div>
+        <div>
+          <p className="font-bold text-slate-800">{title}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
+        </div>
+      </div>
+      <button
+        onClick={onDownload}
+        disabled={downloading === dlKey}
+        className="flex items-center gap-2 px-4 py-2 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
+      >
+        {downloading === dlKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        Descargar
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {peis.length > 0 && (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#193D6D]" /> Plan Educativo Individualizado (PEI)
+          </h3>
+          <div className="space-y-3">
+            {peis.map(pei => {
+              const child = children.find(c => c.id === pei.student_id);
+              return (
+                <DocRow key={pei.id}
+                  icon={<FileText className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`PEI · ${pei.school_year} · Publicado`}
+                  onDownload={() => handleDownloadPei(pei)}
+                  dlKey={`pei-${pei.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {contracts.length > 0 && (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <FileSignature className="w-5 h-5 text-blue-600" /> Contratos de Matrícula
+          </h3>
+          <div className="space-y-3">
+            {contracts.map(con => {
+              const child = children.find(c => c.id === con.student_id);
+              return (
+                <DocRow key={con.id}
+                  icon={<FileSignature className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`Contrato · ${con.school_year} · ${con.status === 'signed' ? 'Firmado' : 'Enviado'}`}
+                  onDownload={() => handleDownloadContract(con)}
+                  dlKey={`con-${con.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {letters.length > 0 && (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-teal-600" /> Cartas de Confirmación de Matrícula
+          </h3>
+          <div className="space-y-3">
+            {letters.map(letter => {
+              const child = children.find(c => c.id === letter.student_id);
+              return (
+                <DocRow key={letter.id}
+                  icon={<CheckCircle2 className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`Confirmación · ${letter.school_year} · ${letter.program || ''}`}
+                  onDownload={() => handleDownloadLetter(letter)}
+                  dlKey={`let-${letter.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ParentDashboard() {
   const { profile, logout } = useAuth();
   const navigate = useNavigate();
@@ -406,6 +595,16 @@ export default function ParentDashboard() {
             >
               📄 Boletines
             </button>
+            <button
+              onClick={() => setActiveTab('documentos')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'documentos'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📁 Documentos
+            </button>
           </div>
         </div>
       </div>
@@ -639,6 +838,10 @@ export default function ParentDashboard() {
 
             {activeTab === 'boletines' && (
               <ParentBoletinesPanel children={children} />
+            )}
+
+            {activeTab === 'documentos' && (
+              <ParentDocumentosPanel children={children} />
             )}
           </>
         )}
