@@ -20,6 +20,14 @@ const STATUS_META = {
 
 const GRADE_STATUS = ['pending', 'approved', 'failed'];
 
+const SUBJECT_LIST = [
+  'Math', 'English', 'Word Building', 'Science', 'Social Studies',
+  'Spanish Language', 'History & Geography Local', 'World History',
+  'World Geography', 'American History',
+  'Life Skills', 'Physical Education', 'Arts',
+  '— Manual (escribir) —',
+];
+
 const EMPTY_COURSE = {
   subject_name: '', academic_block: '', pace_numbers: '',
   credits: '0.5', final_grade: '', grade_status: 'pending',
@@ -312,15 +320,32 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
             )}
           </div>
           <div className="space-y-2">
-            {courses.map((course, idx) => (
+            {courses.map((course, idx) => {
+              const isManual = !SUBJECT_LIST.slice(0, -1).includes(course.subject_name);
+              return (
               <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-xl p-2 border border-slate-200">
-                <input
-                  className="col-span-3 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
-                  placeholder="Materia"
-                  value={course.subject_name}
-                  onChange={setCourseField(idx, 'subject_name')}
-                  disabled={isReadOnly}
-                />
+                {isManual ? (
+                  <input
+                    className="col-span-3 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                    placeholder="Nombre de la materia"
+                    value={course.subject_name}
+                    onChange={setCourseField(idx, 'subject_name')}
+                    disabled={isReadOnly}
+                  />
+                ) : (
+                  <select
+                    className="col-span-3 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                    value={course.subject_name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCourseField(idx, 'subject_name')({ target: { value: val === '— Manual (escribir) —' ? '' : val } });
+                    }}
+                    disabled={isReadOnly}
+                  >
+                    <option value="">— Seleccionar —</option>
+                    {SUBJECT_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
                 <input
                   className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
                   placeholder="Bloque"
@@ -367,7 +392,8 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
                   </button>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

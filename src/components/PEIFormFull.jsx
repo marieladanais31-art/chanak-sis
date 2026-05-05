@@ -99,29 +99,38 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const [peiId, setPeiId]         = useState(initialPeiId || null);
   const [form, setForm]           = useState(DEFAULT_FORM);
 
+  const [fichaLevels, setFichaLevels] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       // Always prefill from student ficha (DOB, modality, grade, vocational, etc.)
       const { data: studentData } = await supabase
         .from('students')
-        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name')
+        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies')
         .eq('id', studentId)
         .single();
 
       if (studentData) {
         const fichaDefaults = {};
-        if (studentData.date_of_birth)          fichaDefaults.student_dob             = studentData.date_of_birth;
-        if (studentData.enrollment_date)        fichaDefaults.enrollment_date          = studentData.enrollment_date;
-        if (studentData.last_grade_completed)   fichaDefaults.last_grade_completed     = studentData.last_grade_completed;
-        if (studentData.grade_level)            fichaDefaults.grade_level              = studentData.us_grade_level || studentData.grade_level;
-        if (studentData.modality)               fichaDefaults.modality                 = studentData.modality;
-        if (studentData.curriculum_base)        fichaDefaults.curriculum_base          = studentData.curriculum_base;
-        if (studentData.vocational_interest)    fichaDefaults.vocational_interest      = studentData.vocational_interest;
+        if (studentData.date_of_birth)            fichaDefaults.student_dob             = studentData.date_of_birth;
+        if (studentData.enrollment_date)          fichaDefaults.enrollment_date          = studentData.enrollment_date;
+        if (studentData.last_grade_completed)     fichaDefaults.last_grade_completed     = studentData.last_grade_completed;
+        if (studentData.grade_level)              fichaDefaults.grade_level              = studentData.us_grade_level || studentData.grade_level;
+        if (studentData.modality)                 fichaDefaults.modality                 = studentData.modality;
+        if (studentData.curriculum_base)          fichaDefaults.curriculum_base          = studentData.curriculum_base;
+        if (studentData.vocational_interest)      fichaDefaults.vocational_interest      = studentData.vocational_interest;
         if (studentData.graduation_pathway_notes) fichaDefaults.graduation_pathway_notes = studentData.graduation_pathway_notes;
-        if (studentData.diagnostic_notes)       fichaDefaults.initial_diagnosis        = studentData.diagnostic_notes;
-        if (studentData.parent1_name)           fichaDefaults.parent_signature_name    = studentData.parent1_name;
+        if (studentData.diagnostic_notes)         fichaDefaults.initial_diagnosis        = studentData.diagnostic_notes;
+        if (studentData.parent1_name)             fichaDefaults.parent_signature_name    = studentData.parent1_name;
         setForm(prev => ({ ...prev, ...fichaDefaults }));
+        setFichaLevels({
+          math:          studentData.diag_math          || null,
+          english:       studentData.diag_english       || null,
+          word_building: studentData.diag_word_building || null,
+          science:       studentData.diag_science       || null,
+          social_studies:studentData.diag_social_studies|| null,
+        });
       }
 
       if (!initialPeiId) { setLoading(false); return; }
@@ -434,6 +443,29 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         {/* ── DIAGNÓSTICO ──────────────────────────────────────────────────── */}
         {activeTab === 'diagnostico' && (
           <div className="space-y-4">
+            {/* Per-subject diagnostic levels from student ficha */}
+            {fichaLevels && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <p className="text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Niveles Diagnósticos A.C.E. — desde Ficha del Estudiante</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {[
+                    { label: 'Mathematics', val: fichaLevels.math },
+                    { label: 'English',     val: fichaLevels.english },
+                    { label: 'Word Building',val: fichaLevels.word_building },
+                    { label: 'Science',     val: fichaLevels.science },
+                    { label: 'Social Studies',val: fichaLevels.social_studies },
+                  ].map(({ label, val }) => (
+                    <div key={label} className="bg-white rounded-lg border border-slate-200 p-3 text-center">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
+                      <p className={`font-black text-sm ${val ? 'text-blue-700' : 'text-slate-300'}`}>
+                        {val || '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">Estos niveles se editan en la Ficha del Estudiante → pestaña Académico.</p>
+              </div>
+            )}
             <div>
               <label className={LABEL}>Cómo funciona el currículo A.C.E.</label>
               <textarea rows={4} value={form.ace_curriculum_description || ACE_DEFAULT} onChange={set('ace_curriculum_description')} disabled={isReadOnly} className={TEXTAREA}
@@ -445,14 +477,14 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                 placeholder="Descripción del estado académico inicial del estudiante al momento de ingreso. Contexto, historial académico, necesidades detectadas." />
             </div>
             <div>
-              <label className={LABEL}>Resultados del Diagnóstico</label>
-              <textarea rows={4} value={form.diagnostic_results} onChange={set('diagnostic_results')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Resultados concretos de las pruebas de nivel A.C.E.: PACE de entrada por materia, puntuaciones, observaciones evaluativas." />
+              <label className={LABEL}>Resultados del Diagnóstico — PACE de Entrada por Asignatura</label>
+              <textarea rows={5} value={form.diagnostic_results} onChange={set('diagnostic_results')} disabled={isReadOnly} className={TEXTAREA}
+                placeholder={'Mathematics: Math PACE 1076\nEnglish: English PACE 1075\nWord Building: WB PACE 1074\nScience: Science PACE 1074\nSocial Studies: Social PACE 1073\n\nPuntuaciones y observaciones evaluativas.'} />
             </div>
             <div>
-              <label className={LABEL}>Interpretación Académica del Diagnóstico</label>
+              <label className={LABEL}>Interpretación y Brechas Detectadas</label>
               <textarea rows={4} value={form.diagnostic_interpretation} onChange={set('diagnostic_interpretation')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Análisis e interpretación de los resultados. Qué significa el nivel de entrada para el plan de estudios. Brechas detectadas y estrategias de abordaje." />
+                placeholder="Análisis de los resultados. Brechas detectadas por asignatura. Estrategias de nivelación y abordaje específico para cada área." />
             </div>
           </div>
         )}
