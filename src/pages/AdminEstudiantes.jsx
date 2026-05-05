@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, Search, Plus, Edit, Trash2, X } from 'lucide-react';
+import { Loader2, Search, Plus, Edit, Trash2, X, ClipboardList } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import StudentFicha from '@/components/StudentFicha';
 
 export default function AdminEstudiantes() {
   const [students, setStudents] = useState([]);
@@ -20,6 +21,9 @@ export default function AdminEstudiantes() {
   // Edit Modal
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+
+  // Ficha Modal
+  const [fichaStudentId, setFichaStudentId] = useState(null);
   const [editFormData, setEditFormData] = useState({
     first_name: '',
     last_name: '',
@@ -227,7 +231,7 @@ export default function AdminEstudiantes() {
                 <th className="p-4">Grado</th>
                 <th className="p-4">Programa</th>
                 <th className="p-4">Hub</th>
-                <th className="p-4 text-right">Acciones</th>
+                <th className="p-4 text-right">Ficha / Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -245,6 +249,9 @@ export default function AdminEstudiantes() {
                       </span>
                     </td>
                     <td className="p-4 text-right space-x-2">
+                      <Button onClick={() => setFichaStudentId(student.id)} variant="outline" size="sm" className="h-8 w-8 p-0 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200" title="Ver Ficha Completa">
+                        <ClipboardList className="w-4 h-4" />
+                      </Button>
                       <Button onClick={() => handleEditStudent(student)} variant="outline" size="sm" className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200">
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -499,6 +506,14 @@ export default function AdminEstudiantes() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Ficha Modal */}
+      {fichaStudentId && (
+        <StudentFicha
+          studentId={fichaStudentId}
+          onClose={() => { setFichaStudentId(null); loadData(); }}
+        />
       )}
     </div>
   );
