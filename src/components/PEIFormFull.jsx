@@ -77,6 +77,7 @@ const DEFAULT_FORM = {
   strategic_objectives:       '',
   graduation_pathway_notes:   '',
   pace_status_notes:          '',
+  vocational_plan:            '',
   // Firmas
   director_signature_name:    '',
   director_signature_date:    '',
@@ -434,6 +435,30 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                   'Edad 13-14 — Consolidación de bases: nivelación matemática y Language Arts.\n' +
                   'Edad 15 — Grade 10 / Diagnóstico: simulacro SAT, definición de créditos High School.\n' +
                   'Edad 16-18 — High School y Graduación: créditos estimados 17-19, transcript completo, Dual Diploma si aplica.'
+                }
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Plan Vocacional — Lecturas, Práctica &amp; Tech</label>
+              <textarea
+                rows={7}
+                value={form.vocational_plan}
+                onChange={set('vocational_plan')}
+                disabled={isReadOnly}
+                className={TEXTAREA}
+                placeholder={
+                  'Describe el plan vocacional detallado. Ejemplo:\n\n' +
+                  'LECTURAS RECOMENDADAS\n' +
+                  '• Padre Rico, Padre Pobre — Robert Kiyosaki\n' +
+                  '• El Inversor Inteligente — Benjamin Graham\n' +
+                  '• Think and Grow Rich — Napoleon Hill\n\n' +
+                  'PRÁCTICA & TECH\n' +
+                  '• Simulador de inversiones / paper trading (Investopedia)\n' +
+                  '• Khan Academy: Finance & Capital Markets\n' +
+                  '• Proyecto práctico: análisis de empresa cotizada\n\n' +
+                  'PACING Y EVALUACIÓN\n' +
+                  '• Revisión mensual de avance con tutor\n' +
+                  '• Entrega de proyecto vocacional al cierre de cada trimestre'
                 }
               />
             </div>

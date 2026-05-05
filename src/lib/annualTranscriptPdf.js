@@ -128,7 +128,9 @@ export function generateAnnualTranscriptPDF({ student, years, settings, isHighSc
   const regBody = years.map(yr => [
     settings?.institution_name || 'Chanak International Academy',
     student.id ? student.id.slice(0, 8).toUpperCase() : '—',
-    yr.us_grade_level || yr.grade_level || '—',
+    yr.hs_year_name
+      ? `${yr.hs_year_name} — ${yr.us_grade_level || yr.grade_level || ''}`
+      : (yr.us_grade_level || yr.grade_level || '—'),
     yr.school_year,
     '',
   ]);
@@ -160,9 +162,10 @@ export function generateAnnualTranscriptPDF({ student, years, settings, isHighSc
   });
   const subjects = Array.from(subjectSet);
 
-  // Build columns: Subject | [Q1 Q2 Q3 Avg] per year | Letter
-  // For compactness: one column per year (annual avg)
-  const yearLabels = years.map(yr => yr.school_year);
+  // Build columns: Subject | annual avg per year | Letter / Credits
+  const yearLabels = years.map(yr =>
+    isHighSchool && yr.hs_year_name ? `${yr.hs_year_name} (${yr.school_year})` : yr.school_year
+  );
 
   const gradeHead = [
     ['SUBJECT', ...yearLabels, isHighSchool ? 'Credits' : 'Avg.'],

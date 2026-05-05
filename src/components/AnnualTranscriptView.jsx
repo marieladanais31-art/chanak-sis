@@ -37,6 +37,29 @@ function detectHighSchool(student) {
   return HS_GRADE_KEYWORDS.some(kw => gl.includes(kw));
 }
 
+const HS_YEAR_NAMES = { 9: 'Freshman', 10: 'Sophomore', 11: 'Junior', 12: 'Senior' };
+
+function gradeNumFromLevel(gl) {
+  const s = (gl || '').toLowerCase();
+  if (s.includes('9th') || s.includes('freshman') || s.includes('grade 9') || s === '9') return 9;
+  if (s.includes('10th') || s.includes('sophomore') || s.includes('grade 10') || s === '10') return 10;
+  if (s.includes('11th') || s.includes('junior') || s.includes('grade 11') || s === '11') return 11;
+  if (s.includes('12th') || s.includes('senior') || s.includes('grade 12') || s === '12') return 12;
+  return null;
+}
+
+function buildHsYearNames(yearData, student) {
+  const currentGrade = gradeNumFromLevel(student?.us_grade_level || student?.grade_level);
+  if (!currentGrade) return {};
+  const n = yearData.length;
+  const result = {};
+  yearData.forEach((yr, idx) => {
+    const gNum = currentGrade - (n - 1 - idx);
+    if (gNum >= 9 && gNum <= 12) result[yr.school_year] = HS_YEAR_NAMES[gNum];
+  });
+  return result;
+}
+
 /**
  * Props:
  *  studentId, studentName
@@ -110,13 +133,15 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
     setDownloading(true);
     try {
       const isHighSchool = detectHighSchool(student);
+      const hsNames = isHighSchool ? buildHsYearNames(yearData, student) : {};
 
       const yearsForPdf = yearData.map(yr => ({
-        school_year: yr.school_year,
-        grade_level: yr.grade_level,
+        school_year:    yr.school_year,
+        grade_level:    yr.grade_level,
         us_grade_level: student?.us_grade_level || yr.grade_level,
+        hs_year_name:   hsNames[yr.school_year] || null,
         records: yr.records.map(r => ({
-          quarter: r.quarter,
+          quarter:  r.quarter,
           subjects: r.subjects,
         })),
       }));
@@ -167,6 +192,7 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
 
   const matrix = buildMatrix();
   const isHighSchool = detectHighSchool(student);
+  const hsYearNames  = isHighSchool ? buildHsYearNames(yearData, student) : {};
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -175,7 +201,9 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200" style={{ background: NAVY }}>
           <div>
-            <h2 className="text-xl font-black text-white">Transcript Oficial</h2>
+            <h2 className="text-xl font-black text-white">
+              {isHighSchool ? 'Transcript Oficial' : 'Informe Académico Anual'}
+            </h2>
             <p className="text-blue-200 text-sm mt-0.5 font-medium">{studentName}</p>
           </div>
           <div className="flex items-center gap-3">
@@ -247,6 +275,11 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
                     <th className="px-4 py-3 text-left sticky left-0 bg-slate-50 border-r border-slate-200 min-w-[160px]">Asignatura</th>
                     {yearData.map(yr => (
                       <th key={yr.school_year} className="px-3 py-3 text-center border-l border-slate-200" colSpan={3}>
+                        {isHighSchool && hsYearNames[yr.school_year] && (
+                          <div className="text-blue-700 font-black text-[9px] uppercase tracking-widest mb-0.5">
+                            {hsYearNames[yr.school_year]}
+                          </div>
+                        )}
                         <div className="text-slate-800 font-black">{yr.school_year}</div>
                         <div className="flex gap-1 justify-center mt-1">
                           {yr.records.map(r => (
