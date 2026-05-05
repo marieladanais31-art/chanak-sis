@@ -27,9 +27,15 @@ function fmt(val) {
   return Number(val).toFixed(2);
 }
 
-// HS grade levels
-const HS_GRADES = ['9th Grade', '10th Grade', '11th Grade', '12th Grade',
-  '9.º', '10.º', '11.º', '12.º', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
+const HS_GRADE_KEYWORDS = ['9th','10th','11th','12th','9.º','10.º','11.º','12.º','Grade 9','Grade 10','Grade 11','Grade 12'];
+
+function detectHighSchool(student) {
+  if (!student) return false;
+  if (student.school_stage === 'high_school') return true;
+  if (student.school_stage === 'elementary' || student.school_stage === 'middle_school') return false;
+  const gl = student.us_grade_level || student.grade_level || '';
+  return HS_GRADE_KEYWORDS.some(kw => gl.includes(kw));
+}
 
 /**
  * Props:
@@ -103,9 +109,7 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const isHighSchool = HS_GRADES.some(g =>
-        (student?.grade_level || '').includes(g.replace('th Grade','').replace('.º','').trim())
-      );
+      const isHighSchool = detectHighSchool(student);
 
       const yearsForPdf = yearData.map(yr => ({
         school_year: yr.school_year,
@@ -162,9 +166,7 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
   );
 
   const matrix = buildMatrix();
-  const isHighSchool = HS_GRADES.some(g =>
-    (student?.grade_level || '').includes(g.replace('th Grade','').replace('.º','').trim())
-  );
+  const isHighSchool = detectHighSchool(student);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">

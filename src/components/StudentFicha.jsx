@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Loader2, X, User, Users, BookOpen, Shield } from 'lucide-react';
+import { Save, Loader2, X, User, Users, BookOpen, Heart } from 'lucide-react';
 
 const INPUT = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 text-sm bg-white';
 const LABEL = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider';
@@ -11,20 +11,29 @@ const TABS = [
   { id: 'personal',  label: 'Personal',  icon: User },
   { id: 'familia',   label: 'Familia',   icon: Users },
   { id: 'academico', label: 'Académico', icon: BookOpen },
-  { id: 'admin',     label: 'Admin',     icon: Shield },
+  { id: 'admin',     label: 'Admin / Salud', icon: Heart },
 ];
 
 const EMPTY = {
   first_name: '', last_name: '', date_of_birth: '', nationality: 'Española',
   id_document_type: 'Pasaporte', id_document_number: '', gender: '',
-  address: '', city: '', country: 'España', phone: '', student_email: '',
+  birth_country: '', birth_city: '',
+  address: '', city: '', province: '', postal_code: '', country: 'España',
+  phone: '', student_email: '',
   parent1_name: '', parent1_relationship: 'Madre', parent1_phone: '', parent1_email: '',
   parent2_name: '', parent2_relationship: 'Padre', parent2_phone: '', parent2_email: '',
-  enrollment_date: '', last_school_name: '', last_grade_completed: '',
-  grade_level: '', us_grade_level: '', modality: 'Off-Campus', curriculum_base: 'ACE',
+  enrollment_date: '', start_date: '', estimated_end_date: '',
+  last_school_name: '', last_grade_completed: '',
+  grade_level: '', us_grade_level: '', school_stage: 'elementary',
+  modality: 'Off-Campus', curriculum_base: 'ACE',
+  diag_math: '', diag_english: '', diag_word_building: '', diag_science: '', diag_social_studies: '',
   diagnostic_notes: '', vocational_interest: '', graduation_pathway_notes: '',
+  pei_observations: '',
   dual_diploma_enrolled: false, dual_diploma_partner_school: '', dual_diploma_country: '',
-  student_status: 'active', admin_notes: '', hub_id: '', tutor_id: '',
+  dual_diploma_observations: '',
+  student_status: 'active', admission_status: 'enrolled',
+  admin_notes: '', medical_notes: '', special_educational_needs: '',
+  documentary_notes: '', hub_id: '', tutor_id: '',
 };
 
 export default function StudentFicha({ studentId, onClose }) {
@@ -53,8 +62,12 @@ export default function StudentFicha({ studentId, onClose }) {
         id_document_type: s.id_document_type || 'Pasaporte',
         id_document_number: s.id_document_number || '',
         gender: s.gender || '',
+        birth_country: s.birth_country || '',
+        birth_city: s.birth_city || '',
         address: s.address || '',
         city: s.city || '',
+        province: s.province || '',
+        postal_code: s.postal_code || '',
         country: s.country || 'España',
         phone: s.phone || '',
         student_email: s.student_email || '',
@@ -67,20 +80,34 @@ export default function StudentFicha({ studentId, onClose }) {
         parent2_phone: s.parent2_phone || '',
         parent2_email: s.parent2_email || '',
         enrollment_date: s.enrollment_date || '',
+        start_date: s.start_date || '',
+        estimated_end_date: s.estimated_end_date || '',
         last_school_name: s.last_school_name || '',
         last_grade_completed: s.last_grade_completed || '',
         grade_level: s.grade_level || '',
         us_grade_level: s.us_grade_level || '',
+        school_stage: s.school_stage || 'elementary',
         modality: s.modality || 'Off-Campus',
         curriculum_base: s.curriculum_base || 'ACE',
+        diag_math: s.diag_math || '',
+        diag_english: s.diag_english || '',
+        diag_word_building: s.diag_word_building || '',
+        diag_science: s.diag_science || '',
+        diag_social_studies: s.diag_social_studies || '',
         diagnostic_notes: s.diagnostic_notes || '',
         vocational_interest: s.vocational_interest || '',
         graduation_pathway_notes: s.graduation_pathway_notes || '',
+        pei_observations: s.pei_observations || '',
         dual_diploma_enrolled: s.dual_diploma_enrolled || false,
         dual_diploma_partner_school: s.dual_diploma_partner_school || '',
         dual_diploma_country: s.dual_diploma_country || '',
+        dual_diploma_observations: s.dual_diploma_observations || '',
         student_status: s.student_status || 'active',
+        admission_status: s.admission_status || 'enrolled',
         admin_notes: s.admin_notes || '',
+        medical_notes: s.medical_notes || '',
+        special_educational_needs: s.special_educational_needs || '',
+        documentary_notes: s.documentary_notes || '',
         hub_id: s.hub_id || '',
         tutor_id: s.tutor_id || '',
       });
@@ -97,6 +124,11 @@ export default function StudentFicha({ studentId, onClose }) {
     setForm(prev => ({ ...prev, [field]: val }));
   };
 
+  const calcAge = () => {
+    if (!form.date_of_birth) return null;
+    return Math.floor((Date.now() - new Date(form.date_of_birth).getTime()) / (365.25 * 24 * 3600 * 1000));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     const { error } = await supabase
@@ -109,8 +141,12 @@ export default function StudentFicha({ studentId, onClose }) {
         id_document_type: form.id_document_type || null,
         id_document_number: form.id_document_number,
         gender: form.gender || null,
+        birth_country: form.birth_country,
+        birth_city: form.birth_city,
         address: form.address,
         city: form.city,
+        province: form.province,
+        postal_code: form.postal_code,
         country: form.country,
         phone: form.phone,
         student_email: form.student_email,
@@ -123,20 +159,34 @@ export default function StudentFicha({ studentId, onClose }) {
         parent2_phone: form.parent2_phone,
         parent2_email: form.parent2_email,
         enrollment_date: form.enrollment_date || null,
+        start_date: form.start_date || null,
+        estimated_end_date: form.estimated_end_date || null,
         last_school_name: form.last_school_name,
         last_grade_completed: form.last_grade_completed,
         grade_level: form.grade_level,
         us_grade_level: form.us_grade_level,
+        school_stage: form.school_stage || null,
         modality: form.modality,
         curriculum_base: form.curriculum_base,
+        diag_math: form.diag_math,
+        diag_english: form.diag_english,
+        diag_word_building: form.diag_word_building,
+        diag_science: form.diag_science,
+        diag_social_studies: form.diag_social_studies,
         diagnostic_notes: form.diagnostic_notes,
         vocational_interest: form.vocational_interest,
         graduation_pathway_notes: form.graduation_pathway_notes,
+        pei_observations: form.pei_observations,
         dual_diploma_enrolled: form.dual_diploma_enrolled,
         dual_diploma_partner_school: form.dual_diploma_partner_school,
         dual_diploma_country: form.dual_diploma_country,
+        dual_diploma_observations: form.dual_diploma_observations,
         student_status: form.student_status,
+        admission_status: form.admission_status,
         admin_notes: form.admin_notes,
+        medical_notes: form.medical_notes,
+        special_educational_needs: form.special_educational_needs,
+        documentary_notes: form.documentary_notes,
         hub_id: form.hub_id || null,
         tutor_id: form.tutor_id || null,
       })
@@ -151,64 +201,56 @@ export default function StudentFicha({ studentId, onClose }) {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center h-96">
-      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+      <Loader2 className="w-10 h-10 animate-spin text-white" />
     </div>
   );
 
+  const age = calcAge();
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-200" style={{ background: '#193D6D' }}>
+        <div className="flex items-center justify-between p-5 border-b border-slate-200" style={{ background: '#193D6D' }}>
           <div>
-            <h2 className="text-xl font-black text-white">Ficha del Estudiante</h2>
-            <p className="text-blue-200 text-sm font-medium mt-0.5">
-              {form.first_name} {form.last_name}
-            </p>
+            <h2 className="font-black text-white text-lg">
+              {form.first_name || 'Estudiante'} {form.last_name}
+            </h2>
+            <p className="text-blue-200 text-xs mt-0.5">Ficha completa del estudiante</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-sm font-bold transition-all"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Guardar
-            </button>
-            <button onClick={onClose} className="text-white/70 hover:text-white transition-colors">
-              <X className="w-6 h-6" />
-            </button>
-          </div>
+          <button onClick={onClose} className="text-blue-200 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 bg-slate-50 shrink-0">
+        <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto shrink-0">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex items-center gap-2 px-6 py-3.5 text-sm font-bold transition-all border-b-2 ${
+              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${
                 tab === id
                   ? 'border-blue-600 text-blue-700 bg-white'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              {label}
+              <Icon className="w-4 h-4" /> {label}
             </button>
           ))}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
+          {/* ── PERSONAL ── */}
           {tab === 'personal' && (
             <>
               <div className={SECTION}>
                 <div>
-                  <label className={LABEL}>Nombre</label>
+                  <label className={LABEL}>Nombre(s)</label>
                   <input className={INPUT} value={form.first_name} onChange={set('first_name')} />
                 </div>
                 <div>
@@ -218,6 +260,9 @@ export default function StudentFicha({ studentId, onClose }) {
                 <div>
                   <label className={LABEL}>Fecha de nacimiento</label>
                   <input type="date" className={INPUT} value={form.date_of_birth} onChange={set('date_of_birth')} />
+                  {age !== null && (
+                    <p className="text-xs text-slate-500 mt-1">Edad: <strong>{age} años</strong></p>
+                  )}
                 </div>
                 <div>
                   <label className={LABEL}>Género</label>
@@ -231,6 +276,14 @@ export default function StudentFicha({ studentId, onClose }) {
                 <div>
                   <label className={LABEL}>Nacionalidad</label>
                   <input className={INPUT} value={form.nationality} onChange={set('nationality')} />
+                </div>
+                <div>
+                  <label className={LABEL}>País de nacimiento</label>
+                  <input className={INPUT} value={form.birth_country} onChange={set('birth_country')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Ciudad de nacimiento</label>
+                  <input className={INPUT} value={form.birth_city} onChange={set('birth_city')} />
                 </div>
                 <div>
                   <label className={LABEL}>Tipo de documento</label>
@@ -265,6 +318,14 @@ export default function StudentFicha({ studentId, onClose }) {
                   <input className={INPUT} value={form.city} onChange={set('city')} />
                 </div>
                 <div>
+                  <label className={LABEL}>Provincia / Estado</label>
+                  <input className={INPUT} value={form.province} onChange={set('province')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Código postal</label>
+                  <input className={INPUT} value={form.postal_code} onChange={set('postal_code')} />
+                </div>
+                <div>
                   <label className={LABEL}>País</label>
                   <input className={INPUT} value={form.country} onChange={set('country')} />
                 </div>
@@ -272,6 +333,7 @@ export default function StudentFicha({ studentId, onClose }) {
             </>
           )}
 
+          {/* ── FAMILIA ── */}
           {tab === 'familia' && (
             <>
               <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
@@ -331,28 +393,17 @@ export default function StudentFicha({ studentId, onClose }) {
             </>
           )}
 
+          {/* ── ACADÉMICO ── */}
           {tab === 'academico' && (
             <>
               <div className={SECTION}>
                 <div>
-                  <label className={LABEL}>Fecha de inscripción</label>
-                  <input type="date" className={INPUT} value={form.enrollment_date} onChange={set('enrollment_date')} />
-                </div>
-                <div>
-                  <label className={LABEL}>Último colegio</label>
-                  <input className={INPUT} value={form.last_school_name} onChange={set('last_school_name')} />
-                </div>
-                <div>
-                  <label className={LABEL}>Último grado completado</label>
-                  <input className={INPUT} placeholder="6.º Primaria" value={form.last_grade_completed} onChange={set('last_grade_completed')} />
-                </div>
-                <div>
-                  <label className={LABEL}>Grado actual (español)</label>
-                  <input className={INPUT} placeholder="1.º ESO" value={form.grade_level} onChange={set('grade_level')} />
-                </div>
-                <div>
-                  <label className={LABEL}>Grado actual (US)</label>
-                  <input className={INPUT} placeholder="7th Grade" value={form.us_grade_level} onChange={set('us_grade_level')} />
+                  <label className={LABEL}>Etapa escolar</label>
+                  <select className={INPUT} value={form.school_stage} onChange={set('school_stage')}>
+                    <option value="elementary">Elementary (Primaria)</option>
+                    <option value="middle_school">Middle School (Secundaria)</option>
+                    <option value="high_school">High School (Bachillerato)</option>
+                  </select>
                 </div>
                 <div>
                   <label className={LABEL}>Modalidad</label>
@@ -363,23 +414,72 @@ export default function StudentFicha({ studentId, onClose }) {
                   </select>
                 </div>
                 <div>
+                  <label className={LABEL}>Grado actual (español)</label>
+                  <input className={INPUT} placeholder="1.º ESO" value={form.grade_level} onChange={set('grade_level')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Grado actual (US)</label>
+                  <input className={INPUT} placeholder="7th Grade" value={form.us_grade_level} onChange={set('us_grade_level')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Último grado completado</label>
+                  <input className={INPUT} placeholder="6.º Primaria" value={form.last_grade_completed} onChange={set('last_grade_completed')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Último colegio</label>
+                  <input className={INPUT} value={form.last_school_name} onChange={set('last_school_name')} />
+                </div>
+                <div>
                   <label className={LABEL}>Currículo base</label>
                   <input className={INPUT} value={form.curriculum_base} onChange={set('curriculum_base')} />
                 </div>
+                <div>
+                  <label className={LABEL}>Fecha de matrícula</label>
+                  <input type="date" className={INPUT} value={form.enrollment_date} onChange={set('enrollment_date')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Fecha de inicio</label>
+                  <input type="date" className={INPUT} value={form.start_date} onChange={set('start_date')} />
+                </div>
+                <div>
+                  <label className={LABEL}>Fecha fin estimada</label>
+                  <input type="date" className={INPUT} value={form.estimated_end_date} onChange={set('estimated_end_date')} />
+                </div>
+              </div>
+
+              <hr className="border-slate-200" />
+              <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Niveles diagnósticos por materia</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {[
+                  { field: 'diag_math',           label: 'Math' },
+                  { field: 'diag_english',         label: 'English' },
+                  { field: 'diag_word_building',   label: 'Word Building' },
+                  { field: 'diag_science',         label: 'Science' },
+                  { field: 'diag_social_studies',  label: 'Social Studies' },
+                ].map(({ field, label }) => (
+                  <div key={field}>
+                    <label className={LABEL}>{label}</label>
+                    <input className={INPUT} placeholder="Ej. PACE 37" value={form[field]} onChange={set(field)} />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className={LABEL}>Observaciones diagnósticas</label>
+                <textarea rows={3} className={INPUT} placeholder="Fortalezas, vacíos, áreas de atención…" value={form.diagnostic_notes} onChange={set('diagnostic_notes')} />
               </div>
               <div>
                 <label className={LABEL}>Interés vocacional</label>
                 <input className={INPUT} placeholder="Área Financiera, Ingeniería, Artes…" value={form.vocational_interest} onChange={set('vocational_interest')} />
               </div>
               <div>
-                <label className={LABEL}>Notas diagnósticas</label>
-                <textarea rows={4} className={INPUT} placeholder="Fortalezas, vacíos, áreas de atención…" value={form.diagnostic_notes} onChange={set('diagnostic_notes')} />
+                <label className={LABEL}>Graduation Pathway / Ruta de graduación</label>
+                <textarea rows={2} className={INPUT} placeholder="Plan de graduación, créditos esperados…" value={form.graduation_pathway_notes} onChange={set('graduation_pathway_notes')} />
               </div>
               <div>
-                <label className={LABEL}>Graduation Pathway</label>
-                <textarea rows={3} className={INPUT} placeholder="Plan de graduación, créditos esperados, ruta universitaria…" value={form.graduation_pathway_notes} onChange={set('graduation_pathway_notes')} />
+                <label className={LABEL}>Observaciones para PEI</label>
+                <textarea rows={2} className={INPUT} value={form.pei_observations} onChange={set('pei_observations')} />
               </div>
-              {/* Dual Diploma */}
+
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-4">
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -391,14 +491,20 @@ export default function StudentFicha({ studentId, onClose }) {
                   <span className="font-bold text-slate-800 text-sm">Dual Diploma activo</span>
                 </label>
                 {form.dual_diploma_enrolled && (
-                  <div className={SECTION}>
-                    <div>
-                      <label className={LABEL}>Centro colaborador</label>
-                      <input className={INPUT} value={form.dual_diploma_partner_school} onChange={set('dual_diploma_partner_school')} />
+                  <div className="space-y-3">
+                    <div className={SECTION}>
+                      <div>
+                        <label className={LABEL}>Centro colaborador</label>
+                        <input className={INPUT} value={form.dual_diploma_partner_school} onChange={set('dual_diploma_partner_school')} />
+                      </div>
+                      <div>
+                        <label className={LABEL}>País del centro</label>
+                        <input className={INPUT} value={form.dual_diploma_country} onChange={set('dual_diploma_country')} />
+                      </div>
                     </div>
                     <div>
-                      <label className={LABEL}>País del centro</label>
-                      <input className={INPUT} value={form.dual_diploma_country} onChange={set('dual_diploma_country')} />
+                      <label className={LABEL}>Observaciones Dual Diploma / convalidación</label>
+                      <textarea rows={2} className={INPUT} value={form.dual_diploma_observations} onChange={set('dual_diploma_observations')} />
                     </div>
                   </div>
                 )}
@@ -406,6 +512,7 @@ export default function StudentFicha({ studentId, onClose }) {
             </>
           )}
 
+          {/* ── ADMIN / SALUD ── */}
           {tab === 'admin' && (
             <>
               <div className={SECTION}>
@@ -432,10 +539,34 @@ export default function StudentFicha({ studentId, onClose }) {
                     <option value="withdrawn">Retirado</option>
                   </select>
                 </div>
+                <div>
+                  <label className={LABEL}>Estado de admisión</label>
+                  <select className={INPUT} value={form.admission_status} onChange={set('admission_status')}>
+                    <option value="prospect">Prospecto</option>
+                    <option value="pre_enrolled">Pre-inscrito</option>
+                    <option value="enrolled">Matriculado</option>
+                    <option value="graduated">Graduado</option>
+                    <option value="withdrawn">Retirado</option>
+                  </select>
+                </div>
               </div>
               <div>
                 <label className={LABEL}>Notas administrativas</label>
-                <textarea rows={5} className={INPUT} value={form.admin_notes} onChange={set('admin_notes')} />
+                <textarea rows={3} className={INPUT} value={form.admin_notes} onChange={set('admin_notes')} />
+              </div>
+              <div>
+                <label className={LABEL}>Notas documentales (documentos recibidos / pendientes)</label>
+                <textarea rows={3} className={INPUT} value={form.documentary_notes} onChange={set('documentary_notes')} />
+              </div>
+              <hr className="border-slate-200" />
+              <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Salud y Necesidades Educativas</p>
+              <div>
+                <label className={LABEL}>Notas médicas</label>
+                <textarea rows={3} className={INPUT} placeholder="Alergias, condiciones crónicas, medicamentos…" value={form.medical_notes} onChange={set('medical_notes')} />
+              </div>
+              <div>
+                <label className={LABEL}>Necesidades Educativas Especiales (NEE)</label>
+                <textarea rows={3} className={INPUT} placeholder="TDAH, dislexia, apoyos específicos requeridos…" value={form.special_educational_needs} onChange={set('special_educational_needs')} />
               </div>
             </>
           )}

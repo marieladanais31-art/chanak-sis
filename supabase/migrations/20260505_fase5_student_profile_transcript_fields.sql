@@ -109,6 +109,41 @@ ALTER TABLE public.individualized_education_plans
   ADD COLUMN IF NOT EXISTS pace_status_notes         text,
   ADD COLUMN IF NOT EXISTS strategic_objectives      text;
 
+-- ── 1b. Columnas adicionales de Ficha Completa en students ───────────────────
+
+ALTER TABLE public.students
+  ADD COLUMN IF NOT EXISTS school_stage             text
+    CHECK (school_stage IN ('elementary','middle_school','high_school')),
+  ADD COLUMN IF NOT EXISTS birth_country            text,
+  ADD COLUMN IF NOT EXISTS birth_city               text,
+  ADD COLUMN IF NOT EXISTS province                 text,
+  ADD COLUMN IF NOT EXISTS postal_code              text,
+  ADD COLUMN IF NOT EXISTS start_date               date,
+  ADD COLUMN IF NOT EXISTS estimated_end_date       date,
+  ADD COLUMN IF NOT EXISTS admission_status         text DEFAULT 'enrolled'
+    CHECK (admission_status IN ('prospect','pre_enrolled','enrolled','graduated','withdrawn')),
+  ADD COLUMN IF NOT EXISTS medical_notes            text,
+  ADD COLUMN IF NOT EXISTS special_educational_needs text,
+  ADD COLUMN IF NOT EXISTS documentary_notes        text,
+  ADD COLUMN IF NOT EXISTS pei_observations         text,
+  ADD COLUMN IF NOT EXISTS dual_diploma_observations text,
+  -- Niveles diagnósticos por asignatura
+  ADD COLUMN IF NOT EXISTS diag_math                text,
+  ADD COLUMN IF NOT EXISTS diag_english             text,
+  ADD COLUMN IF NOT EXISTS diag_word_building       text,
+  ADD COLUMN IF NOT EXISTS diag_science             text,
+  ADD COLUMN IF NOT EXISTS diag_social_studies      text;
+
+-- ── 2b. Expandir estatus en monthly_assignments ───────────────────────────────
+-- Elimina y recrea el check constraint para incluir reviewed y overdue
+
+ALTER TABLE public.monthly_assignments
+  DROP CONSTRAINT IF EXISTS monthly_assignments_status_check;
+
+ALTER TABLE public.monthly_assignments
+  ADD CONSTRAINT monthly_assignments_status_check
+    CHECK (status IN ('pending','submitted','reviewed','graded','overdue'));
+
 -- ── 4. Categoría de asignaturas en transcript_courses ───────────────────────
 
 ALTER TABLE public.transcript_courses

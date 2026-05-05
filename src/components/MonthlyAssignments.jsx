@@ -7,7 +7,10 @@ import { ACTIVE_SCHOOL_YEAR } from '@/lib/academicUtils';
 const INPUT = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 text-sm bg-white';
 const LABEL = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider';
 
-const SUBJECTS = ['Español', 'Life Skills', 'Physical Education', 'Arts'];
+const ALL_SUBJECTS = [
+  'Español', 'Life Skills', 'Physical Education', 'Arts',
+  'Historia y Geografía Local', 'Formación en Valores', 'Proyecto Integrador',
+];
 
 const MONTH_NAMES = [
   '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -17,7 +20,9 @@ const MONTH_NAMES = [
 const STATUS_META = {
   pending:   { label: 'Pendiente',   color: 'bg-slate-100 text-slate-700' },
   submitted: { label: 'Entregado',   color: 'bg-amber-100 text-amber-800' },
+  reviewed:  { label: 'Revisado',    color: 'bg-blue-100 text-blue-800' },
   graded:    { label: 'Calificado',  color: 'bg-green-100 text-green-700' },
+  overdue:   { label: 'Vencido',     color: 'bg-red-100 text-red-700' },
 };
 
 const EMPTY_FORM = {
@@ -26,7 +31,8 @@ const EMPTY_FORM = {
   submitted_date: '', score: '', status: 'pending', feedback: '',
 };
 
-export default function MonthlyAssignments({ studentId, studentName, schoolYear, canEdit = false }) {
+export default function MonthlyAssignments({ studentId, studentName, schoolYear, subjectFilter, canEdit = false }) {
+  const SUBJECTS = subjectFilter || ALL_SUBJECTS;
   const { toast } = useToast();
   const year = schoolYear || ACTIVE_SCHOOL_YEAR;
 
@@ -58,7 +64,7 @@ export default function MonthlyAssignments({ studentId, studentName, schoolYear,
 
   const openNew = () => {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, subject_name: SUBJECTS[0] || 'Español' });
     setShowModal(true);
   };
 
@@ -268,7 +274,9 @@ export default function MonthlyAssignments({ studentId, studentName, schoolYear,
                   <select className={INPUT} value={form.status} onChange={set('status')}>
                     <option value="pending">Pendiente</option>
                     <option value="submitted">Entregado</option>
+                    <option value="reviewed">Revisado</option>
                     <option value="graded">Calificado</option>
+                    <option value="overdue">Vencido</option>
                   </select>
                 </div>
                 <div>

@@ -104,6 +104,35 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
   const addCourse = () => setCourses(prev => [...prev, { ...EMPTY_COURSE }]);
   const removeCourse = (idx) => setCourses(prev => prev.filter((_, i) => i !== idx));
 
+  const importFromAcademico = async () => {
+    const { data, error } = await supabase
+      .from('student_subjects')
+      .select('subject_name, academic_block, grade, credit_value, approval_status')
+      .eq('student_id', studentId)
+      .eq('school_year', meta.school_year)
+      .eq('quarter', meta.quarter)
+      .eq('approval_status', 'approved');
+
+    if (error) {
+      toast({ title: 'Error al importar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    if (!data || data.length === 0) {
+      toast({ title: 'Sin materias aprobadas', description: `No hay materias con estado "Aprobado" en ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
+      return;
+    }
+    const imported = data.map(s => ({
+      subject_name: s.subject_name || '',
+      academic_block: s.academic_block || '',
+      pace_numbers: '',
+      credits: String(s.credit_value ?? 0.5),
+      final_grade: s.grade !== null && s.grade !== undefined ? String(s.grade) : '',
+      grade_status: 'approved',
+    }));
+    setCourses(imported);
+    toast({ title: `${imported.length} materias importadas desde Académico` });
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -269,9 +298,17 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
           <div className="flex items-center justify-between mb-2">
             <label className={LABEL}>Materias del Trimestre</label>
             {!isReadOnly && (
-              <button onClick={addCourse} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
-                <Plus className="w-3.5 h-3.5" /> Agregar materia
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={importFromAcademico}
+                  className="flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200"
+                >
+                  Importar desde Académico
+                </button>
+                <button onClick={addCourse} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
+                  <Plus className="w-3.5 h-3.5" /> Agregar materia
+                </button>
+              </div>
             )}
           </div>
           <div className="space-y-2">

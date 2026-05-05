@@ -74,7 +74,7 @@ export default function AdminPanel() {
       case 'contratos': return 'Contratos';
       case 'revision-notas': return 'Revisión de Notas';
       case 'boletines': return 'Boletines Académicos';
-      case 'asignaciones': return 'Asignaciones Mensuales';
+      case 'asignaciones': return 'Asignaciones y PACEs';
       case 'cartas': return 'Cartas de Confirmación';
       case 'config-institucional': return 'Configuración Institucional';
       case 'seguridad': return 'Seguridad y Accesos';
