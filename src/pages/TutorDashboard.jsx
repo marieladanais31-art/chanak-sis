@@ -200,6 +200,7 @@ export default function TutorDashboard() {
         )}
 
         {mainTab === 'notas' && (
+        <>
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Users className="w-6 h-6 text-teal-600" />
@@ -359,8 +360,9 @@ export default function TutorDashboard() {
           </div>
         </div>
       )}
-        </div> {/* end notas tab inner */}
-        )} {/* end mainTab === 'notas' */}
+        </div> {/* end notas tab inner div */}
+        </> {/* end fragment */}
+      )}
       </main>
     </div>
   );

@@ -301,26 +301,26 @@ export default function CoordinatorDashboard() {
 
       {/* Notas tab (original content) */}
       {mainTab === 'notas' && (
+        <>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wider">
+            <GraduationCap className="w-4 h-4 inline-block mr-1 text-blue-600" /> Seleccionar Estudiante
+          </label>
+          <select
+            className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium bg-slate-50"
+            value={selectedStudent}
+            onChange={(e) => setSelectedStudent(e.target.value)}
+          >
+            <option value="">-- Seleccione un estudiante de la lista --</option>
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.first_name} {student.last_name} ({student.grade_label || student.us_grade_level || 'N/A'})
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wider">
-          <GraduationCap className="w-4 h-4 inline-block mr-1 text-blue-600" /> Seleccionar Estudiante
-        </label>
-        <select
-          className="w-full p-3 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 font-medium bg-slate-50"
-          value={selectedStudent}
-          onChange={(e) => setSelectedStudent(e.target.value)}
-        >
-          <option value="">-- Seleccione un estudiante de la lista --</option>
-          {students.map((student) => (
-            <option key={student.id} value={student.id}>
-              {student.first_name} {student.last_name} ({student.grade_label || student.us_grade_level || 'N/A'})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedStudent && (
+        {selectedStudent && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto">
             {QUARTERS.map((quarter) => (
@@ -461,38 +461,39 @@ export default function CoordinatorDashboard() {
         </div>
       )}
 
-      {mainTab === 'notas' && isGradeEntriesModalOpen && selectedStudentSubject && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-              <h3 className="font-black text-lg text-slate-800">
-                Notas Parciales: {selectedStudentSubject.subject_name} · {selectedStudentSubject.quarter}
-              </h3>
-              <button
-                onClick={() => setIsGradeEntriesModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex-1">
-              <GradeEntriesManager
-                studentSubject={selectedStudentSubject}
-                canEdit={true}
-                onEntriesChanged={handleEntriesChanged}
-              />
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button
-                onClick={() => setIsGradeEntriesModalOpen(false)}
-                className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg font-bold hover:bg-slate-300 transition-colors"
-              >
-                Cerrar
-              </button>
+        {isGradeEntriesModalOpen && selectedStudentSubject && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <h3 className="font-black text-lg text-slate-800">
+                  Notas Parciales: {selectedStudentSubject.subject_name} · {selectedStudentSubject.quarter}
+                </h3>
+                <button
+                  onClick={() => setIsGradeEntriesModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1">
+                <GradeEntriesManager
+                  studentSubject={selectedStudentSubject}
+                  canEdit={true}
+                  onEntriesChanged={handleEntriesChanged}
+                />
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                <button
+                  onClick={() => setIsGradeEntriesModalOpen(false)}
+                  className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg font-bold hover:bg-slate-300 transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+        </>
       )}
     </div>
   );

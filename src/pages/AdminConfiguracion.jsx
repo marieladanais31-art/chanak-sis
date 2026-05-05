@@ -123,8 +123,8 @@ export default function AdminConfiguracion() {
 
       {configTab === 'institucional' && <InstitutionalSettings />}
       {configTab === 'general' && (
-
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 text-blue-800 mb-6">
+        <>
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 text-blue-800 mb-6">
         <Info className="w-5 h-5 shrink-0 mt-0.5" />
         <div>
           <h4 className="font-bold">Información Importante</h4>
@@ -210,7 +210,8 @@ export default function AdminConfiguracion() {
           </div>
         </form>
       </div>
-      )} {/* end configTab === 'general' */}
+        </> {/* end fragment */}
+      )}
     </div>
   );
 }
