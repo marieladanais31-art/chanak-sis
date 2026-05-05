@@ -210,7 +210,7 @@ export default function AdminConfiguracion() {
           </div>
         </form>
       </div>
-        </> {/* end fragment */}
+        </>
       )}
     </div>
   );
