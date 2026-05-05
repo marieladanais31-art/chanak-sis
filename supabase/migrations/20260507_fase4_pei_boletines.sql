@@ -17,17 +17,13 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   ) IN ('super_admin', 'admin', 'coordinator')
 $$;
 
--- Cubre: students.parent_id (relación directa) Y family_students (relación familiar)
+-- Usa family_students.family_id = auth.uid() (tabla real del esquema)
+-- No existe public.families — family_id en family_students es directamente el auth.uid() del padre
 CREATE OR REPLACE FUNCTION public.is_parent_of(p_student_id uuid)
 RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT EXISTS (
-    SELECT 1 FROM public.students s
-    WHERE s.id = p_student_id AND s.parent_id = auth.uid()
-  )
-  OR EXISTS (
     SELECT 1 FROM public.family_students fs
-    JOIN public.families f ON fs.family_id = f.id
-    WHERE fs.student_id = p_student_id AND f.parent_id = auth.uid()
+    WHERE fs.student_id = p_student_id AND fs.family_id = auth.uid()
   )
 $$;
 
