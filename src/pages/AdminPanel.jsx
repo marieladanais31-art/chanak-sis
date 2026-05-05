@@ -14,7 +14,9 @@ import AdminConfiguracion from '@/pages/AdminConfiguracion';
 import GradeReviewPanel from '@/components/GradeReviewPanel';
 import AdminBoletines from '@/pages/AdminBoletines';
 import AdminCartas from '@/pages/AdminCartas';
+import AdminAsignaciones from '@/pages/AdminAsignaciones';
 import InstitutionalSettings from '@/components/InstitutionalSettings';
+import AcademicCalendarManager from '@/components/AcademicCalendarManager';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, Users, Building2, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -73,6 +75,8 @@ export default function AdminPanel() {
       case 'contratos': return 'Contratos';
       case 'revision-notas': return 'Revisión de Notas';
       case 'boletines': return 'Boletines Académicos';
+      case 'asignaciones': return 'Asignaciones y PACEs';
+      case 'calendario': return 'Calendario Escolar';
       case 'cartas': return 'Cartas de Confirmación';
       case 'config-institucional': return 'Configuración Institucional';
       case 'seguridad': return 'Seguridad y Accesos';
@@ -193,6 +197,8 @@ export default function AdminPanel() {
       case 'users': return <AdminUserManagement />;
       case 'revision-notas': return <GradeReviewPanel />;
       case 'boletines': return <AdminBoletines />;
+      case 'asignaciones': return <AdminAsignaciones />;
+      case 'calendario': return <AcademicCalendarManager />;
       case 'cartas': return <AdminCartas />;
       case 'config-institucional': return <InstitutionalSettings />;
       case 'seguridad': return <AdminSeguridad />;

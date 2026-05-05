@@ -8,7 +8,7 @@ import {
   Save, Loader2, X, ChevronRight,
   FileText, AlertCircle, CheckCircle, ClipboardList,
   BookOpen, Target, Users, MessageSquare, Send, Eye,
-  Download, Home, Heart, BarChart3, Award
+  Download, Home, Heart, BarChart3, Award, Briefcase
 } from 'lucide-react';
 
 const INPUT    = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 text-sm bg-white';
@@ -18,6 +18,7 @@ const LABEL    = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking
 const TABS = [
   { id: 'portada',    label: 'Portada',           icon: Home },
   { id: 'perfil',     label: 'Perfil',            icon: Target },
+  { id: 'vocacional', label: 'Vocacional',         icon: Briefcase },
   { id: 'diagnostico',label: 'Diagnóstico',       icon: ClipboardList },
   { id: 'plan',       label: 'Plan de Estudios',  icon: BookOpen },
   { id: 'metodologia',label: 'Metodología',       icon: BarChart3 },
@@ -71,6 +72,12 @@ const DEFAULT_FORM = {
   family_message:             '',
   institutional_conclusion:   '',
   coordinator_observations:   '',
+  // Vocacional (modelo Daniel)
+  vocational_interest:        '',
+  strategic_objectives:       '',
+  graduation_pathway_notes:   '',
+  pace_status_notes:          '',
+  vocational_plan:            '',
   // Firmas
   director_signature_name:    '',
   director_signature_date:    '',
@@ -93,10 +100,42 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const [peiId, setPeiId]         = useState(initialPeiId || null);
   const [form, setForm]           = useState(DEFAULT_FORM);
 
+  const [fichaLevels, setFichaLevels] = useState(null);
+
   const load = useCallback(async () => {
-    if (!initialPeiId) return;
     setLoading(true);
     try {
+      // Always prefill from student ficha (DOB, modality, grade, vocational, etc.)
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies')
+        .eq('id', studentId)
+        .single();
+
+      if (studentData) {
+        const fichaDefaults = {};
+        if (studentData.date_of_birth)            fichaDefaults.student_dob             = studentData.date_of_birth;
+        if (studentData.enrollment_date)          fichaDefaults.enrollment_date          = studentData.enrollment_date;
+        if (studentData.last_grade_completed)     fichaDefaults.last_grade_completed     = studentData.last_grade_completed;
+        if (studentData.grade_level)              fichaDefaults.grade_level              = studentData.us_grade_level || studentData.grade_level;
+        if (studentData.modality)                 fichaDefaults.modality                 = studentData.modality;
+        if (studentData.curriculum_base)          fichaDefaults.curriculum_base          = studentData.curriculum_base;
+        if (studentData.vocational_interest)      fichaDefaults.vocational_interest      = studentData.vocational_interest;
+        if (studentData.graduation_pathway_notes) fichaDefaults.graduation_pathway_notes = studentData.graduation_pathway_notes;
+        if (studentData.diagnostic_notes)         fichaDefaults.initial_diagnosis        = studentData.diagnostic_notes;
+        if (studentData.parent1_name)             fichaDefaults.parent_signature_name    = studentData.parent1_name;
+        setForm(prev => ({ ...prev, ...fichaDefaults }));
+        setFichaLevels({
+          math:          studentData.diag_math          || null,
+          english:       studentData.diag_english       || null,
+          word_building: studentData.diag_word_building || null,
+          science:       studentData.diag_science       || null,
+          social_studies:studentData.diag_social_studies|| null,
+        });
+      }
+
+      if (!initialPeiId) { setLoading(false); return; }
+
       const { data, error } = await supabase
         .from('individualized_education_plans')
         .select('*')
@@ -115,7 +154,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
     } finally {
       setLoading(false);
     }
-  }, [initialPeiId]);
+  }, [initialPeiId, studentId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -330,9 +369,128 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           </div>
         )}
 
+        {/* ── VOCACIONAL ───────────────────────────────────────────────────── */}
+        {activeTab === 'vocacional' && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Perfil Vocacional</p>
+              <p className="text-xs text-amber-700">Basado en el modelo de PEI de Daniel Vidal. Define el interés vocacional, estado de PACEs, objetivos estratégicos y ruta de graduación del estudiante.</p>
+            </div>
+            <div>
+              <label className={LABEL}>Interés Principal / Área Vocacional</label>
+              <input
+                type="text"
+                value={form.vocational_interest}
+                onChange={set('vocational_interest')}
+                disabled={isReadOnly}
+                className={INPUT}
+                placeholder="Ej. Área Financiera (Broker / Finanzas) con enfoque ético · Ingeniería · Medicina · Artes"
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Estado Académico Actual — PACE Status</label>
+              <textarea
+                rows={5}
+                value={form.pace_status_notes}
+                onChange={set('pace_status_notes')}
+                disabled={isReadOnly}
+                className={TEXTAREA}
+                placeholder={
+                  'Describe el nivel actual por asignatura. Ejemplo:\n' +
+                  'Mathematics: Math 1081\n' +
+                  'English: English 1076\n' +
+                  'Word Building: WB 1078\n' +
+                  'Science: Science 1078\n' +
+                  'Social Studies: Social 1077'
+                }
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Objetivos Estratégicos del Año</label>
+              <textarea
+                rows={5}
+                value={form.strategic_objectives}
+                onChange={set('strategic_objectives')}
+                disabled={isReadOnly}
+                className={TEXTAREA}
+                placeholder={
+                  'Enumera los objetivos clave del año. Ejemplo:\n' +
+                  '• Progresar de forma continua en todas las asignaturas del sequence ACE.\n' +
+                  '• Prioridad: Matemáticas e Inglés por proyección universitaria y perfil financiero.\n' +
+                  '• Consolidar vocabulario académico (Word Building) y pensamiento crítico.\n' +
+                  '• Introducir educación financiera estructurada, práctica y ética.'
+                }
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Graduation Pathway — Ruta de Graduación</label>
+              <textarea
+                rows={5}
+                value={form.graduation_pathway_notes}
+                onChange={set('graduation_pathway_notes')}
+                disabled={isReadOnly}
+                className={TEXTAREA}
+                placeholder={
+                  'Define la ruta estimada hacia la graduación. Ejemplo:\n' +
+                  'Edad 13-14 — Consolidación de bases: nivelación matemática y Language Arts.\n' +
+                  'Edad 15 — Grade 10 / Diagnóstico: simulacro SAT, definición de créditos High School.\n' +
+                  'Edad 16-18 — High School y Graduación: créditos estimados 17-19, transcript completo, Dual Diploma si aplica.'
+                }
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Plan Vocacional — Lecturas, Práctica &amp; Tech</label>
+              <textarea
+                rows={7}
+                value={form.vocational_plan}
+                onChange={set('vocational_plan')}
+                disabled={isReadOnly}
+                className={TEXTAREA}
+                placeholder={
+                  'Describe el plan vocacional detallado. Ejemplo:\n\n' +
+                  'LECTURAS RECOMENDADAS\n' +
+                  '• Padre Rico, Padre Pobre — Robert Kiyosaki\n' +
+                  '• El Inversor Inteligente — Benjamin Graham\n' +
+                  '• Think and Grow Rich — Napoleon Hill\n\n' +
+                  'PRÁCTICA & TECH\n' +
+                  '• Simulador de inversiones / paper trading (Investopedia)\n' +
+                  '• Khan Academy: Finance & Capital Markets\n' +
+                  '• Proyecto práctico: análisis de empresa cotizada\n\n' +
+                  'PACING Y EVALUACIÓN\n' +
+                  '• Revisión mensual de avance con tutor\n' +
+                  '• Entrega de proyecto vocacional al cierre de cada trimestre'
+                }
+              />
+            </div>
+          </div>
+        )}
+
         {/* ── DIAGNÓSTICO ──────────────────────────────────────────────────── */}
         {activeTab === 'diagnostico' && (
           <div className="space-y-4">
+            {/* Per-subject diagnostic levels from student ficha */}
+            {fichaLevels && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <p className="text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Niveles Diagnósticos A.C.E. — desde Ficha del Estudiante</p>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  {[
+                    { label: 'Mathematics', val: fichaLevels.math },
+                    { label: 'English',     val: fichaLevels.english },
+                    { label: 'Word Building',val: fichaLevels.word_building },
+                    { label: 'Science',     val: fichaLevels.science },
+                    { label: 'Social Studies',val: fichaLevels.social_studies },
+                  ].map(({ label, val }) => (
+                    <div key={label} className="bg-white rounded-lg border border-slate-200 p-3 text-center">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{label}</p>
+                      <p className={`font-black text-sm ${val ? 'text-blue-700' : 'text-slate-300'}`}>
+                        {val || '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2">Estos niveles se editan en la Ficha del Estudiante → pestaña Académico.</p>
+              </div>
+            )}
             <div>
               <label className={LABEL}>Cómo funciona el currículo A.C.E.</label>
               <textarea rows={4} value={form.ace_curriculum_description || ACE_DEFAULT} onChange={set('ace_curriculum_description')} disabled={isReadOnly} className={TEXTAREA}
@@ -344,14 +502,14 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                 placeholder="Descripción del estado académico inicial del estudiante al momento de ingreso. Contexto, historial académico, necesidades detectadas." />
             </div>
             <div>
-              <label className={LABEL}>Resultados del Diagnóstico</label>
-              <textarea rows={4} value={form.diagnostic_results} onChange={set('diagnostic_results')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Resultados concretos de las pruebas de nivel A.C.E.: PACE de entrada por materia, puntuaciones, observaciones evaluativas." />
+              <label className={LABEL}>Resultados del Diagnóstico — PACE de Entrada por Asignatura</label>
+              <textarea rows={5} value={form.diagnostic_results} onChange={set('diagnostic_results')} disabled={isReadOnly} className={TEXTAREA}
+                placeholder={'Mathematics: Math PACE 1076\nEnglish: English PACE 1075\nWord Building: WB PACE 1074\nScience: Science PACE 1074\nSocial Studies: Social PACE 1073\n\nPuntuaciones y observaciones evaluativas.'} />
             </div>
             <div>
-              <label className={LABEL}>Interpretación Académica del Diagnóstico</label>
+              <label className={LABEL}>Interpretación y Brechas Detectadas</label>
               <textarea rows={4} value={form.diagnostic_interpretation} onChange={set('diagnostic_interpretation')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Análisis e interpretación de los resultados. Qué significa el nivel de entrada para el plan de estudios. Brechas detectadas y estrategias de abordaje." />
+                placeholder="Análisis de los resultados. Brechas detectadas por asignatura. Estrategias de nivelación y abordaje específico para cada área." />
             </div>
           </div>
         )}
