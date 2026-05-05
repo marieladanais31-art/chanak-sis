@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X } from 'lucide-react';
+import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
+import PEIFormFull from '@/components/PEIFormFull';
+import TranscriptGenerator from '@/components/TranscriptGenerator';
+import AcademicAlerts from '@/components/AcademicAlerts';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 
 export default function CoordinatorDashboard() {
@@ -12,6 +15,7 @@ export default function CoordinatorDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'pei' | 'boletines' | 'alertas'
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [subjects, setSubjects] = useState([]);
@@ -21,6 +25,11 @@ export default function CoordinatorDashboard() {
   const [savingId, setSavingId] = useState(null);
   const [selectedStudentSubject, setSelectedStudentSubject] = useState(null);
   const [isGradeEntriesModalOpen, setIsGradeEntriesModalOpen] = useState(false);
+  // PEI / Boletín modal state
+  const [peiModal, setPeiModal] = useState(null);   // { studentId, studentName, peiId }
+  const [trModal, setTrModal]   = useState(null);   // { studentId, studentName, transcriptId }
+  const [peis, setPeis]         = useState([]);
+  const [transcripts, setTranscripts] = useState([]);
 
   useEffect(() => {
     if (!profile) return;
@@ -44,20 +53,18 @@ export default function CoordinatorDashboard() {
   const loadStudents = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, first_name, last_name, grade_label, us_grade_level')
-        .order('first_name', { ascending: true });
-
-      if (error) throw error;
-      setStudents(data || []);
+      const [studRes, peiRes, trRes] = await Promise.all([
+        supabase.from('students').select('id, first_name, last_name, grade_label, us_grade_level').order('first_name'),
+        supabase.from('individualized_education_plans').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
+        supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
+      ]);
+      if (studRes.error) throw studRes.error;
+      setStudents(studRes.data || []);
+      setPeis(peiRes.data || []);
+      setTranscripts(trRes.data || []);
     } catch (err) {
       console.error('[CoordinatorDashboard] Error loading students:', err);
-      toast({
-        title: 'Error',
-        description: 'Error al cargar estudiantes.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Error al cargar estudiantes.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -162,14 +169,138 @@ export default function CoordinatorDashboard() {
     );
   }
 
+  const getPei = (studentId) => peis.find(p => p.student_id === studentId);
+  const getTr  = (studentId) => transcripts.find(t => t.student_id === studentId);
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans p-4 md:p-8 space-y-6">
+      {/* PEI modal */}
+      {peiModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <PEIFormFull
+            studentId={peiModal.studentId}
+            studentName={peiModal.studentName}
+            peiId={peiModal.peiId}
+            canEdit={true}
+            onClose={() => { setPeiModal(null); }}
+          />
+        </div>
+      )}
+      {/* Transcript modal */}
+      {trModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <TranscriptGenerator
+            studentId={trModal.studentId}
+            studentName={trModal.studentName}
+            transcriptId={trModal.transcriptId}
+            canEdit={true}
+            onClose={() => { setTrModal(null); }}
+          />
+        </div>
+      )}
+
       <div>
-        <h2 className="text-2xl font-bold text-slate-800">Módulo Académico - Coordinador</h2>
-        <p className="text-sm text-slate-500 font-medium">
-          Gestión académica compartida basada en `student_subjects` y `student_grade_entries`
-        </p>
+        <h2 className="text-2xl font-bold text-slate-800">Panel del Coordinador</h2>
+        <p className="text-sm text-slate-500 font-medium">Gestión académica integral</p>
       </div>
+
+      {/* Main tabs */}
+      <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
+        {[
+          { id: 'notas',     label: 'Notas',     icon: BookOpen },
+          { id: 'pei',       label: 'PEI',        icon: FileText },
+          { id: 'boletines', label: 'Boletines',  icon: ScrollText },
+          { id: 'alertas',   label: 'Alertas',    icon: AlertTriangle },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setMainTab(id)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+              mainTab === id ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Alertas tab */}
+      {mainTab === 'alertas' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <AcademicAlerts targetRole="coordinator" />
+        </div>
+      )}
+
+      {/* PEI tab */}
+      {mainTab === 'pei' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase">
+              <tr>
+                <th className="p-4">Estudiante</th>
+                <th className="p-4">PEI</th>
+                <th className="p-4 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {students.map(s => {
+                const pei = getPei(s.id);
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="p-4 font-bold text-slate-800">{s.first_name} {s.last_name}</td>
+                    <td className="p-4 text-slate-500 text-xs">{pei ? `${pei.school_year} · ${pei.status}` : '—'}</td>
+                    <td className="p-4 text-right">
+                      <button
+                        onClick={() => setPeiModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, peiId: pei?.id || null })}
+                        className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg font-bold text-xs"
+                      >
+                        {pei ? 'Ver / Editar' : 'Crear PEI'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Boletines tab */}
+      {mainTab === 'boletines' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase">
+              <tr>
+                <th className="p-4">Estudiante</th>
+                <th className="p-4">Boletín</th>
+                <th className="p-4 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {students.map(s => {
+                const tr = getTr(s.id);
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50">
+                    <td className="p-4 font-bold text-slate-800">{s.first_name} {s.last_name}</td>
+                    <td className="p-4 text-slate-500 text-xs">{tr ? `${tr.school_year} · ${tr.quarter} · ${tr.status}` : '—'}</td>
+                    <td className="p-4 text-right">
+                      <button
+                        onClick={() => setTrModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, transcriptId: tr?.id || null })}
+                        className="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg font-bold text-xs"
+                      >
+                        {tr ? 'Ver / Editar' : 'Crear boletín'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Notas tab (original content) */}
+      {mainTab === 'notas' && (
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wider">
@@ -330,7 +461,7 @@ export default function CoordinatorDashboard() {
         </div>
       )}
 
-      {isGradeEntriesModalOpen && selectedStudentSubject && (
+      {mainTab === 'notas' && isGradeEntriesModalOpen && selectedStudentSubject && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
@@ -361,6 +492,7 @@ export default function CoordinatorDashboard() {
             </div>
           </div>
         </div>
+      )}
       )}
     </div>
   );

@@ -2,10 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
-import { LogOut, Users, BookOpen, Loader2, X, CalendarDays } from 'lucide-react';
+import { LogOut, Users, BookOpen, Loader2, X, CalendarDays, FileText, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
+import PEIFormFull from '@/components/PEIFormFull';
+import AcademicAlerts from '@/components/AcademicAlerts';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 
 export default function TutorDashboard() {
@@ -13,6 +15,9 @@ export default function TutorDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'pei' | 'alertas'
+  const [peiModal, setPeiModal] = useState(null); // { studentId, studentName, peiId }
+  const [peis, setPeis] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +39,15 @@ export default function TutorDashboard() {
         .eq('tutor_id', profile.id);
       if (error) throw error;
       setStudents(data || []);
+      if (data && data.length > 0) {
+        const ids = data.map(s => s.id);
+        const { data: peiData } = await supabase
+          .from('individualized_education_plans')
+          .select('id, student_id, school_year, quarter, status')
+          .in('student_id', ids)
+          .order('updated_at', { ascending: false });
+        setPeis(peiData || []);
+      }
     } catch (err) {
       console.error(err);
       toast({ title: 'Error', description: 'Error al cargar estudiantes asignados.', variant: 'destructive' });
@@ -105,7 +119,87 @@ export default function TutorDashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-6 space-y-8">
+      {/* PEI modal */}
+      {peiModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <PEIFormFull
+            studentId={peiModal.studentId}
+            studentName={peiModal.studentName}
+            peiId={peiModal.peiId}
+            canEdit={false}
+            onClose={() => setPeiModal(null)}
+          />
+        </div>
+      )}
+
+      <main className="max-w-6xl mx-auto p-6 space-y-6">
+        {/* Tab switcher */}
+        <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
+          {[
+            { id: 'notas',   label: 'Mis Estudiantes', icon: Users },
+            { id: 'pei',     label: 'PEI',             icon: FileText },
+            { id: 'alertas', label: 'Alertas',          icon: AlertTriangle },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setMainTab(id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                mainTab === id ? 'bg-teal-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Alertas tab */}
+        {mainTab === 'alertas' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <AcademicAlerts />
+          </div>
+        )}
+
+        {/* PEI tab */}
+        {mainTab === 'pei' && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {loading ? (
+              <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-teal-600" /></div>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase">
+                  <tr>
+                    <th className="p-4">Estudiante</th>
+                    <th className="p-4">PEI</th>
+                    <th className="p-4 text-right">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {students.map(s => {
+                    const pei = peis.find(p => p.student_id === s.id);
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="p-4 font-bold text-slate-800">{s.first_name} {s.last_name}</td>
+                        <td className="p-4 text-slate-500 text-xs">{pei ? `${pei.school_year} · ${pei.status}` : 'Sin PEI'}</td>
+                        <td className="p-4 text-right">
+                          {pei ? (
+                            <button
+                              onClick={() => setPeiModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, peiId: pei.id })}
+                              className="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg font-bold text-xs"
+                            >
+                              Ver PEI
+                            </button>
+                          ) : <span className="text-slate-400 text-xs">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {mainTab === 'notas' && (
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Users className="w-6 h-6 text-teal-600" />
@@ -232,7 +326,6 @@ export default function TutorDashboard() {
             </div>
           </div>
         )}
-      </main>
 
       {isGradeEntriesModalOpen && selectedStudentSubject && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -266,6 +359,9 @@ export default function TutorDashboard() {
           </div>
         </div>
       )}
+        </div> {/* end notas tab inner */}
+        )} {/* end mainTab === 'notas' */}
+      </main>
     </div>
   );
 }

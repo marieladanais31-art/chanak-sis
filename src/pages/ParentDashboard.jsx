@@ -25,6 +25,79 @@ import { useToast } from '@/hooks/use-toast';
 import LegalDocuments from '@/pages/LegalDocuments';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
+import { generateTranscriptPDF } from '@/lib/transcriptPdf';
+
+function ParentBoletinesPanel({ children }) {
+  const [transcripts, setTranscripts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [downloading, setDownloading] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!children || children.length === 0) { setLoading(false); return; }
+    const ids = children.map(c => c.id);
+    supabase
+      .from('transcript_records')
+      .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
+      .in('student_id', ids)
+      .eq('status', 'published')
+      .order('school_year', { ascending: false })
+      .then(({ data }) => { setTranscripts(data || []); setLoading(false); });
+  }, [children]);
+
+  const handleDownload = async (tr) => {
+    setDownloading(tr.id);
+    try {
+      const child = children.find(c => c.id === tr.student_id);
+      const [coursesRes, settingsRes, creditsRes] = await Promise.all([
+        supabase.from('transcript_courses').select('*').eq('transcript_id', tr.id),
+        supabase.from('institutional_settings').select('*').limit(1).single(),
+        supabase.from('student_credits_summary').select('*').eq('student_id', tr.student_id),
+      ]);
+      generateTranscriptPDF({
+        transcript: tr,
+        courses: coursesRes.data || [],
+        student: child || { id: tr.student_id },
+        settings: settingsRes.data || null,
+        creditsSummary: creditsRes.data || [],
+        lang: tr.language || 'es',
+      });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+
+  if (transcripts.length === 0) return (
+    <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+      No hay boletines publicados disponibles en este momento.
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {transcripts.map(tr => {
+        const child = children.find(c => c.id === tr.student_id);
+        return (
+          <div key={tr.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center justify-between">
+            <div>
+              <p className="font-bold text-slate-800">{child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}</p>
+              <p className="text-sm text-slate-500">{tr.school_year} · {tr.quarter} · {tr.language?.toUpperCase() || 'ES'}</p>
+            </div>
+            <button
+              onClick={() => handleDownload(tr)}
+              disabled={downloading === tr.id}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
+            >
+              {downloading === tr.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Descargar PDF
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function ParentDashboard() {
   const { profile, logout } = useAuth();
@@ -323,6 +396,16 @@ export default function ParentDashboard() {
             >
               <Scale className="w-5 h-5" /> 📋 Documentos Legales
             </button>
+            <button
+              onClick={() => setActiveTab('boletines')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'boletines'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📄 Boletines
+            </button>
           </div>
         </div>
       </div>
@@ -552,6 +635,10 @@ export default function ParentDashboard() {
                   />
                 )}
               </div>
+            )}
+
+            {activeTab === 'boletines' && (
+              <ParentBoletinesPanel children={children} />
             )}
           </>
         )}

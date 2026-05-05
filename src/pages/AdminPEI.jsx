@@ -1,116 +1,144 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, Upload, FileText, Download } from 'lucide-react';
+import { Loader2, FileText, Plus, Eye, BookOpen, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
+import PEIFormFull from '@/components/PEIFormFull';
+import AcademicAlerts from '@/components/AcademicAlerts';
+
+const STATUS_BADGE = {
+  draft:     'bg-slate-100 text-slate-700',
+  in_review: 'bg-amber-100 text-amber-800',
+  approved:  'bg-blue-100 text-blue-800',
+  published: 'bg-green-100 text-green-800',
+};
+const STATUS_LABEL = {
+  draft: 'Borrador', in_review: 'En revisión', approved: 'Aprobado', published: 'Publicado',
+};
 
 export default function AdminPEI() {
-  const [students, setStudents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(null);
   const { toast } = useToast();
+  const [students, setStudents] = useState([]);
+  const [peis, setPeis]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState(null); // { studentId, studentName, peiId }
 
-  useEffect(() => {
-    loadStudents();
-  }, []);
-
-  const loadStudents = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('students').select('id, first_name, last_name, pei_url').order('first_name');
-      if (error) throw error;
-      setStudents(data || []);
+      const [studRes, peiRes] = await Promise.all([
+        supabase.from('students').select('id, first_name, last_name, grade_level').order('first_name'),
+        supabase.from('individualized_education_plans')
+          .select('id, student_id, school_year, quarter, status, updated_at')
+          .order('updated_at', { ascending: false }),
+      ]);
+      if (studRes.error) throw studRes.error;
+      if (peiRes.error && peiRes.error.code !== 'PGRST116') throw peiRes.error;
+      setStudents(studRes.data || []);
+      setPeis(peiRes.data || []);
     } catch (err) {
-      toast({ title: 'Error', description: 'Error al cargar estudiantes.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'No se pudo cargar la lista de estudiantes.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const getPei = (studentId) => peis.find(p => p.student_id === studentId);
+
+  const openNew = (student) => setSelected({ studentId: student.id, studentName: `${student.first_name} ${student.last_name}`, peiId: null });
+  const openExisting = (student, pei) => setSelected({ studentId: student.id, studentName: `${student.first_name} ${student.last_name}`, peiId: pei.id });
+
+  const handleClose = () => {
+    setSelected(null);
+    load();
   };
 
-  const handleFileUpload = async (e, studentId) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setUploading(studentId);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${studentId}-${Date.now()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      const { error: uploadError } = await supabase.storage.from('pei_files').upload(filePath, file);
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage.from('pei_files').getPublicUrl(filePath);
-
-      const { error: updateError } = await supabase.from('students').update({ pei_url: publicUrl }).eq('id', studentId);
-      if (updateError) throw updateError;
-
-      toast({ title: 'Éxito', description: 'Archivo PEI subido correctamente.' });
-      loadStudents();
-    } catch (error) {
-      console.error(error);
-      toast({ title: 'Error', description: 'No se pudo subir el archivo.', variant: 'destructive' });
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
+  if (selected) return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <PEIFormFull
+        studentId={selected.studentId}
+        studentName={selected.studentName}
+        peiId={selected.peiId}
+        canEdit={true}
+        onClose={handleClose}
+      />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">Gestión de PEI (Plan Educativo Individualizado)</h2>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-blue-600" /> Gestión de PEI
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">Planes Educativos Individualizados</p>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-100 text-slate-600 font-bold">
-            <tr>
-              <th className="p-4">Estudiante</th>
-              <th className="p-4">Estado PEI</th>
-              <th className="p-4 text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {students.map(student => (
-              <tr key={student.id} className="hover:bg-slate-50">
-                <td className="p-4 font-bold text-slate-800">{student.first_name} {student.last_name}</td>
-                <td className="p-4">
-                  {student.pei_url ? (
-                    <span className="flex items-center gap-2 text-emerald-600 font-medium text-xs bg-emerald-50 px-2 py-1 rounded w-fit">
-                      <FileText className="w-3 h-3" /> Subido
-                    </span>
-                  ) : (
-                    <span className="text-slate-400 text-xs bg-slate-100 px-2 py-1 rounded">Pendiente</span>
-                  )}
-                </td>
-                <td className="p-4 text-right flex items-center justify-end gap-2">
-                  {student.pei_url && (
-                    <a href={student.pei_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800">
-                      <Button variant="outline" size="sm" className="h-8">
-                        <Download className="w-4 h-4 mr-2" /> Ver PEI
-                      </Button>
-                    </a>
-                  )}
-                  <div className="relative">
-                    <Button variant="outline" size="sm" className="h-8 relative overflow-hidden" disabled={uploading === student.id}>
-                      {uploading === student.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                      {uploading === student.id ? 'Subiendo...' : 'Subir Archivo'}
-                      <input 
-                        type="file" 
-                        accept=".pdf,.doc,.docx" 
-                        onChange={(e) => handleFileUpload(e, student.id)}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                      />
-                    </Button>
-                  </div>
-                </td>
+      {/* Alerts panel */}
+      <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+        <AcademicAlerts targetRole="admin" />
+      </div>
+
+      {/* Students table */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+              <tr>
+                <th className="p-4">Estudiante</th>
+                <th className="p-4">Grado</th>
+                <th className="p-4">PEI Actual</th>
+                <th className="p-4">Estado</th>
+                <th className="p-4 text-right">Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {students.map(student => {
+                const pei = getPei(student.id);
+                return (
+                  <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-4 font-bold text-slate-800">{student.first_name} {student.last_name}</td>
+                    <td className="p-4 text-slate-500 text-xs">{student.grade_level || '—'}</td>
+                    <td className="p-4 text-slate-500 text-xs">
+                      {pei ? `${pei.school_year} · ${pei.quarter || ''}` : '—'}
+                    </td>
+                    <td className="p-4">
+                      {pei ? (
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_BADGE[pei.status] || 'bg-slate-100 text-slate-700'}`}>
+                          {STATUS_LABEL[pei.status] || pei.status}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">Sin PEI</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-right flex items-center justify-end gap-2">
+                      {pei ? (
+                        <button
+                          onClick={() => openExisting(student, pei)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg font-bold text-xs transition-colors border border-blue-200"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Ver / Editar
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => openNew(student)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-700 hover:bg-slate-100 rounded-lg font-bold text-xs transition-colors border border-slate-200"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Crear PEI
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
