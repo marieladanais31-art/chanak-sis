@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { Lock, Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
@@ -151,6 +151,12 @@ const LoginPage = () => {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <Label htmlFor="password" className="text-slate-700 font-bold">Contraseña</Label>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </Link>
                 </div>
                 <div className="relative">
                   <Input

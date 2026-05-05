@@ -84,12 +84,13 @@ export default function ParentDashboard() {
     return children.find((c) => c.id === childId);
   };
 
-  const getChildSubjects = (childId, quarter = selectedAcademicQuarter) => {
+  const getChildSubjects = (childId, quarter = selectedAcademicQuarter, onlyApproved = false) => {
     const raw = studentSubjects.filter(
       (s) =>
         s.student_id === childId &&
         s.school_year === ACTIVE_SCHOOL_YEAR &&
-        s.quarter === quarter
+        s.quarter === quarter &&
+        (!onlyApproved || s.grade_submission_status === 'approved')
     );
 
     const unique = dedupeAcademicSubjects(raw);
@@ -617,7 +618,8 @@ export default function ParentDashboard() {
       {isBulletinModalOpen && (() => {
         const child = getChildById(selectedChildId);
         const bulletinQuarter = selectedAcademicQuarter;
-        const sortedSubjects = getChildSubjects(selectedChildId, bulletinQuarter);
+        // El boletín solo muestra materias con notas aprobadas por admin/coordinador
+        const sortedSubjects = getChildSubjects(selectedChildId, bulletinQuarter, true);
 
         const grouped = {};
         BLOCK_ORDER.forEach((block) => {
@@ -702,9 +704,10 @@ export default function ParentDashboard() {
                     {sortedSubjects.length === 0 ? (
                       <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
                         <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-500 font-bold text-lg">No academic records yet</p>
+                        <p className="text-slate-500 font-bold text-lg">Sin registros aprobados</p>
                         <p className="text-sm text-slate-400 mt-1">
-                          No hay materias registradas para {bulletinQuarter} del periodo {ACTIVE_SCHOOL_YEAR}.
+                          No hay materias con notas aprobadas para {bulletinQuarter} — {ACTIVE_SCHOOL_YEAR}.
+                          Las notas aparecerán aquí una vez que el coordinador las apruebe.
                         </p>
                       </div>
                     ) : (
@@ -1098,20 +1101,32 @@ export default function ParentDashboard() {
                     No hay materias disponibles para {selectedAcademicQuarter}.
                   </p>
                 ) : (
-                  availableSubjects.map((subject) => (
-                    <button
-                      key={subject.id}
-                      onClick={() => {
-                        setSelectedStudentSubjectForEntries(subject);
-                        setSubjectSelectionStep(false);
-                        setIsGradeEntriesModalOpen(true);
-                      }}
-                      className="w-full p-4 text-left border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-[#20B2AA] transition-colors group"
-                    >
-                      <p className="font-bold text-slate-800 group-hover:text-[#20B2AA]">{subject.subject_name}</p>
-                      <p className="text-xs text-slate-500 mt-1">{subject.category || 'General'}</p>
-                    </button>
-                  ))
+                  availableSubjects.map((subject) => {
+                    const statusMap = {
+                      approved:  { label: 'Aprobado',    cls: 'bg-emerald-100 text-emerald-700' },
+                      submitted: { label: 'En revisión', cls: 'bg-amber-100 text-amber-700' },
+                      rejected:  { label: 'Observado',   cls: 'bg-red-100 text-red-700' },
+                      draft:     { label: 'Pendiente',   cls: 'bg-slate-100 text-slate-500' },
+                    };
+                    const st = statusMap[subject.grade_submission_status || 'draft'];
+                    return (
+                      <button
+                        key={subject.id}
+                        onClick={() => {
+                          setSelectedStudentSubjectForEntries(subject);
+                          setSubjectSelectionStep(false);
+                          setIsGradeEntriesModalOpen(true);
+                        }}
+                        className="w-full p-4 text-left border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-[#20B2AA] transition-colors group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="font-bold text-slate-800 group-hover:text-[#20B2AA]">{subject.subject_name}</p>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">{subject.category || 'General'}</p>
+                      </button>
+                    );
+                  })
                 )}
               </div>
               
