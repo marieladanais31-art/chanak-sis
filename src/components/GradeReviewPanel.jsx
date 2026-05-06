@@ -19,7 +19,7 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function GradeReviewPanel() {
+export default function GradeReviewPanel({ hubId = null }) {
   const { toast } = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +44,7 @@ export default function GradeReviewPanel() {
           grade_reviewed_at,
           grade_review_comment,
           student_id,
-          students ( first_name, last_name, us_grade_level )
+          students ( first_name, last_name, us_grade_level, hub_id )
         `)
         .order('grade_submitted_at', { ascending: false });
 
@@ -53,6 +53,14 @@ export default function GradeReviewPanel() {
       }
 
       const { data, error } = await query;
+
+      // Filter by hub when a hubId is provided (coordinator view)
+      if (!error && hubId && data) {
+        const filtered = data.filter((item) => item.students?.hub_id === hubId);
+        setItems(filtered);
+        setLoading(false);
+        return;
+      }
       if (error) throw error;
       setItems(data || []);
     } catch (err) {
@@ -61,7 +69,7 @@ export default function GradeReviewPanel() {
     } finally {
       setLoading(false);
     }
-  }, [filterStatus, toast]);
+  }, [filterStatus, hubId, toast]);
 
   useEffect(() => {
     loadSubmissions();
