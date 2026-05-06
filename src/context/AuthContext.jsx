@@ -220,21 +220,26 @@ export const AuthProvider = ({ children }) => {
       if (!isMounted) return;
       setSession(initialSession);
 
-      // Si onAuthStateChange ya detectó una sesión de recovery (isPasswordRecoveryRef = true),
-      // no inicializar el perfil → dejar que ResetPasswordPage maneje el flujo.
-      if (isPasswordRecoveryRef.current) {
-        console.log('🔑 AuthContext: setupAuth — recovery session detected, skipping profile load.');
-        return;
-      }
+      // ── HARD STOP: bloquear init si hay recovery en curso ────────────────
+      // Capas de detección (cualquiera es suficiente para bloquear):
+      //  1. sessionStorage flag  — lo más fiable (persiste a través de redirects)
+      //  2. pathname — callback, reset-password, auth/reset nunca deben cargar perfil
+      //  3. isPasswordRecoveryRef — set por evento PASSWORD_RECOVERY anterior
+      //  4. AMR claim — sesión PKCE de recovery
+      const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+      const recoveryPath   = ['/auth/callback', '/auth/reset', '/reset-password'].includes(
+        window.location.pathname
+      );
+      const amrMethods     = initialSession?.user?.amr?.map?.((a) => a.method) ?? [];
+      const amrRecovery    = amrMethods.includes('otp') || amrMethods.includes('recovery');
 
-      // Verificar también AMR en la sesión inicial para flujos donde onAuthStateChange
-      // aún no ha procesado el hash en el momento en que getSession completa.
-      const amrMethods = initialSession?.user?.amr?.map?.((a) => a.method) ?? [];
-      if (amrMethods.includes('otp') || amrMethods.includes('recovery')) {
-        console.log('🔑 AuthContext: setupAuth — AMR indica recovery session, bloqueando init.');
+      if (storedRecovery || recoveryPath || isPasswordRecoveryRef.current || amrRecovery) {
+        console.log('SKIPPING ROLE REDIRECT - password recovery in progress (setupAuth)',
+          { storedRecovery, recoveryPath, ref: isPasswordRecoveryRef.current, amrRecovery }
+        );
         isPasswordRecoveryRef.current = true;
         setIsPasswordRecovery(true);
-        setUser(initialSession.user);
+        if (initialSession?.user) setUser(initialSession.user);
         setProfile(null);
         setIsInitialized(true);
         setLoading(false);
@@ -253,7 +258,8 @@ export const AuthProvider = ({ children }) => {
 
         if (event === 'PASSWORD_RECOVERY') {
           // Flujo implícito (hash): Supabase detecta #type=recovery en el hash
-          console.log('🔑 AuthContext: PASSWORD_RECOVERY — bloqueando redirect, esperando nueva contraseña.');
+          console.log('SKIPPING ROLE REDIRECT - password recovery in progress (PASSWORD_RECOVERY event)');
+          sessionStorage.setItem('passwordRecoveryInProgress', 'true');
           isPasswordRecoveryRef.current = true;
           setIsPasswordRecovery(true);
           setUser(newSession?.user || null);
@@ -262,16 +268,25 @@ export const AuthProvider = ({ children }) => {
           setLoading(false);
 
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          // Flujo PKCE: la sesión de recuperación llega como SIGNED_IN.
-          // Detectar recovery via AMR claim (amr.method = 'otp' en magic links / recovery).
+          // ── HARD STOP: bloquear init si hay recovery en curso ────────────
+          const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+          const recoveryPath   = ['/auth/callback', '/auth/reset', '/reset-password'].includes(
+            window.location.pathname
+          );
+
+          // Flujo PKCE: la sesión de recuperación llega como SIGNED_IN con AMR otp.
           const amrMethods = newSession?.user?.amr?.map?.((a) => a.method) ?? [];
           const isRecoverySignIn =
+            storedRecovery ||
+            recoveryPath ||
             amrMethods.includes('otp') ||
             amrMethods.includes('recovery') ||
             isPasswordRecoveryRef.current;
 
           if (isRecoverySignIn) {
-            console.log(`🔑 AuthContext: SIGNED_IN de sesión de recuperación (amr=${JSON.stringify(amrMethods)}) — bloqueando redirect.`);
+            console.log('SKIPPING ROLE REDIRECT - password recovery in progress (SIGNED_IN)',
+              { storedRecovery, recoveryPath, amr: amrMethods, ref: isPasswordRecoveryRef.current }
+            );
             isPasswordRecoveryRef.current = true;
             setIsPasswordRecovery(true);
             setUser(newSession?.user || null);
@@ -285,13 +300,14 @@ export const AuthProvider = ({ children }) => {
           }
 
         } else if (event === 'USER_UPDATED') {
-          // Contraseña actualizada correctamente (supabase.auth.updateUser completado).
-          // Limpiamos el recovery state; ResetPasswordPage llama signOut inmediatamente después.
-          console.log('✅ AuthContext: USER_UPDATED — contraseña actualizada, limpiando recovery state.');
+          // Contraseña actualizada correctamente. ResetPasswordPage llama signOut inmediatamente.
+          console.log('PASSWORD UPDATED - clearing recovery state (USER_UPDATED)');
+          sessionStorage.removeItem('passwordRecoveryInProgress');
           isPasswordRecoveryRef.current = false;
           setIsPasswordRecovery(false);
 
         } else if (event === 'SIGNED_OUT') {
+          sessionStorage.removeItem('passwordRecoveryInProgress');
           isPasswordRecoveryRef.current = false;
           setIsPasswordRecovery(false);
           setUser(null);

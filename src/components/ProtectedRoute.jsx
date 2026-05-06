@@ -43,10 +43,10 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   }
 
   // ── Sesión de recuperación de contraseña ──────────────────────────────────
-  // Si el usuario tiene una sesión de recovery activa no dejarlo entrar
-  // a rutas protegidas; mandarlo a completar el cambio de contraseña.
-  if (isPasswordRecovery) {
-    console.log('🔑 ProtectedRoute: Recovery session active. Redirecting to /reset-password.');
+  // Doble verificación: context state + sessionStorage hard stop.
+  const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+  if (isPasswordRecovery || storedRecovery) {
+    console.log('SKIPPING ROLE REDIRECT - password recovery in progress (ProtectedRoute)');
     return <Navigate to="/reset-password" replace />;
   }
 

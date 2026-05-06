@@ -1482,9 +1482,13 @@ export default function ParentDashboard() {
                 </button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
+                {/* canEdit={true}: GradeEntriesManager bloquea edición internamente
+                    cuando grade_submission_status es 'submitted' o 'approved'.
+                    El padre puede ingresar notas (draft) y enviarlas a revisión (submitted).
+                    El coordinador/tutor luego aprueba o rechaza desde su panel. */}
                 <GradeEntriesManager
                   studentSubject={selectedStudentSubjectForEntries}
-                  canEdit={false}
+                  canEdit={true}
                   onEntriesChanged={handleEntriesChanged}
                 />
               </div>

@@ -25,8 +25,9 @@ const LoginPage = () => {
     if (!isInitialized || authLoading) return;
 
     // Sesión de recuperación de contraseña → no redirigir al dashboard
-    if (isPasswordRecovery) {
-      console.log('🔑 [LoginPage] Recovery session active. Redirecting to /reset-password.');
+    const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+    if (isPasswordRecovery || storedRecovery) {
+      console.log('SKIPPING ROLE REDIRECT - password recovery in progress (LoginPage)');
       navigate('/reset-password', { replace: true });
       return;
     }

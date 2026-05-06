@@ -5,27 +5,27 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2 } from 'lucide-react';
 
 /**
- * CallbackPage — procesa el token de Supabase que llega por email.
+ * CallbackPage — procesa tokens de Supabase (PKCE y flujo implícito).
  *
- * Soporta dos flujos:
- *  A. PKCE  : URL contiene ?code=...  → llama exchangeCodeForSession
- *  B. Implicit: URL contiene hash #access_token=... → Supabase SDK auto-procesa
+ * HARD STOP para recovery:
+ *  Si detecta que el callback es de recuperación de contraseña (por URL o sessionStorage),
+ *  pone la bandera 'passwordRecoveryInProgress' en sessionStorage y redirige a /auth/reset
+ *  SIN cargar perfil ni navegar por rol.
  *
- * Para detectar si el callback es de recuperación de contraseña:
- *  1. ?type=recovery en query params (añadido por ForgotPasswordPage)
- *  2. #type=recovery en el hash original (flujo implícito)
- *  3. AMR claim 'otp' en la sesión (PKCE recovery)
- *
- * IMPORTANTE: capturamos search y hash en refs síncronos ANTES de que el SDK
- * pueda limpiar el hash con detectSessionInUrl=true.
+ * Detección de recovery (por orden de prioridad):
+ *  1. sessionStorage.getItem('passwordRecoveryInProgress') === 'true'  (misma sesión de browser)
+ *  2. ?type=recovery  en query string
+ *  3. type=recovery   en el hash original (antes de que el SDK lo limpie)
+ *  4. AMR claim 'otp' en la sesión (PKCE recovery)
  */
 const CallbackPage = () => {
   const hasProcessed = useRef(false);
 
-  // Capturar search y hash de forma síncrona durante el primer render,
-  // antes de que el SDK los limpie al procesar la sesión.
-  const originalSearch = useRef(window.location.search);
-  const originalHash   = useRef(window.location.hash);
+  // ── Captura SÍNCRONA del search y hash antes de cualquier effect ──────────
+  // IMPORTANTE: se captura en el cuerpo del componente (render síncrono),
+  // antes de que el SDK pueda limpiar el hash con detectSessionInUrl=true.
+  const rawSearch = useRef(window.location.search);
+  const rawHash   = useRef(window.location.hash);
 
   const [redirectPath, setRedirectPath] = useState(null);
 
@@ -33,77 +33,119 @@ const CallbackPage = () => {
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
+    console.log('CALLBACK search:', rawSearch.current);
+    console.log('CALLBACK hash:  ', rawHash.current ? '(present, len=' + rawHash.current.length + ')' : '(empty)');
+
     const handleCallback = async () => {
-      console.log('🔐 [AuthCallback] Init', window.location.href);
-      console.log('🔐 [AuthCallback] Original search:', originalSearch.current);
-      console.log('🔐 [AuthCallback] Original hash:', originalHash.current ? '(present, length=' + originalHash.current.length + ')' : '(empty)');
-
       try {
-        const urlParams = new URLSearchParams(originalSearch.current);
+        const urlParams = new URLSearchParams(rawSearch.current);
         const code = urlParams.get('code');
+        const type = urlParams.get('type');                   // ?type=recovery
         const next = urlParams.get('next') || '/';
-        const type = urlParams.get('type');
 
-        // Detectar recovery desde el hash original (antes de que SDK lo limpie)
-        const hashHasRecovery =
-          originalHash.current.includes('type=recovery') ||
-          originalHash.current.includes('type%3Drecovery');
+        // ── DETECCIÓN DE RECOVERY: nivel 1 — sessionStorage ─────────────────
+        const storedFlag = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
 
-        console.log(`➡️ [AuthCallback] code=${!!code} type=${type} next=${next} hashRecovery=${hashHasRecovery}`);
+        // ── DETECCIÓN DE RECOVERY: nivel 2 — URL ────────────────────────────
+        const recoveryInSearch =
+          rawSearch.current.includes('type=recovery') ||
+          rawSearch.current.includes('type=PASSWORD_RECOVERY');
+
+        const recoveryInHash =
+          rawHash.current.includes('type=recovery') ||
+          rawHash.current.includes('type=PASSWORD_RECOVERY');
+
+        const recoveryFromUrl = recoveryInSearch || recoveryInHash;
+
+        // Detección rápida: si ya tenemos señal sin necesitar intercambiar sesión
+        const isEarlyRecovery = storedFlag || recoveryFromUrl;
+
+        console.log(`CALLBACK type=${type} code=${!!code} storedFlag=${storedFlag} recoveryFromUrl=${recoveryFromUrl}`);
 
         if (code) {
-          // ── Flujo PKCE: intercambiar código por sesión ───────────────────
-          console.log('🔐 [AuthCallback] PKCE: exchanging code for session...');
+          // ── Flujo PKCE: intercambiar código ──────────────────────────────
+          console.log('CALLBACK: exchanging PKCE code...');
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
           if (error) {
-            console.error('❌ [AuthCallback] exchangeCodeForSession failed:', error);
-            throw error;
+            console.error('CALLBACK: exchangeCodeForSession failed:', error.message);
+            // Si el flag de recovery ya estaba, igual redirigir a /auth/reset
+            // para que el usuario vea un mensaje de "enlace expirado"
+            if (isEarlyRecovery) {
+              console.log('RECOVERY DETECTED - redirecting to /auth/reset (session error)');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+              return;
+            }
+            setRedirectPath('/login');
+            return;
           }
 
-          console.log('✅ [AuthCallback] Session exchanged. User:', data.session?.user?.id);
-
-          // Limpiar URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-
-          // Detectar recovery por: type param, AMR claim, o flag previo
+          // ── DETECCIÓN DE RECOVERY: nivel 3 — AMR ────────────────────────
           const amrMethods = data.session?.user?.amr?.map?.((a) => a.method) ?? [];
-          const isRecovery =
-            type === 'recovery' ||
-            hashHasRecovery ||
+          const recoveryFromAmr =
             amrMethods.includes('otp') ||
             amrMethods.includes('recovery');
 
-          console.log(`➡️ [AuthCallback] isRecovery=${isRecovery} amr=${JSON.stringify(amrMethods)}`);
-          setRedirectPath(isRecovery ? '/auth/reset' : next);
+          const isRecovery = isEarlyRecovery || recoveryFromAmr;
+          console.log(`CALLBACK: isRecovery=${isRecovery} amr=${JSON.stringify(amrMethods)}`);
+
+          if (isRecovery) {
+            console.log('RECOVERY DETECTED - redirecting to /auth/reset');
+            sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+            // Limpiar URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setRedirectPath('/auth/reset');
+          } else {
+            console.log(`CALLBACK: normal session. Redirecting to ${next}`);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setRedirectPath(next);
+          }
 
         } else {
-          // ── Flujo implícito: SDK ya procesó el hash, obtener sesión ─────
-          console.log('➡️ [AuthCallback] No PKCE code. Checking existing session...');
+          // ── Flujo implícito: SDK ya procesó el hash ──────────────────────
+          // Si la detección por URL ya nos dice que es recovery, redirigir directo
+          if (isEarlyRecovery) {
+            // Esperar brevemente para que el SDK establezca la sesión desde el hash
+            await new Promise((r) => setTimeout(r, 300));
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+              console.log('RECOVERY DETECTED - redirecting to /auth/reset (implicit)');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+            } else {
+              // Session not yet ready — still redirect to /auth/reset, it will show error
+              console.log('RECOVERY DETECTED but no session - /auth/reset will show expired error');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+            }
+            return;
+          }
 
-          // Pequeño delay para que el SDK complete el procesamiento del hash
-          await new Promise((r) => setTimeout(r, 300));
+          // Sin señal de recovery — comprobar sesión e intentar AMR
+          await new Promise((r) => setTimeout(r, 400));
           const { data: { session } } = await supabase.auth.getSession();
 
           if (session) {
-            console.log('✅ [AuthCallback] Session found (implicit flow). User:', session.user?.id);
-
             const amrMethods = session.user?.amr?.map?.((a) => a.method) ?? [];
-            const isRecovery =
-              type === 'recovery' ||
-              hashHasRecovery ||
-              amrMethods.includes('otp') ||
-              amrMethods.includes('recovery');
+            const recoveryFromAmr =
+              amrMethods.includes('otp') || amrMethods.includes('recovery');
 
-            console.log(`➡️ [AuthCallback] isRecovery=${isRecovery} amr=${JSON.stringify(amrMethods)}`);
-            setRedirectPath(isRecovery ? '/auth/reset' : next);
+            if (recoveryFromAmr) {
+              console.log('RECOVERY DETECTED - redirecting to /auth/reset (AMR, no code)');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+            } else {
+              console.log(`CALLBACK: normal implicit session. → ${next}`);
+              setRedirectPath(next);
+            }
           } else {
-            console.warn('⚠️ [AuthCallback] No session found. Redirecting to login.');
+            console.warn('CALLBACK: no session found. → /login');
             setRedirectPath('/login');
           }
         }
-      } catch (error) {
-        console.error('❌ [AuthCallback] Error:', error);
+      } catch (err) {
+        console.error('CALLBACK error:', err);
         setRedirectPath('/login');
       }
     };
@@ -116,7 +158,7 @@ const CallbackPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-800">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
       <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
       <p className="text-sm font-medium text-slate-500">Verificando enlace de acceso...</p>
     </div>

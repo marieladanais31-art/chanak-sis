@@ -117,6 +117,9 @@ export default function ResetPasswordPage() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
+      console.log('PASSWORD UPDATED - signOut and redirect to /login');
+      sessionStorage.removeItem('passwordRecoveryInProgress');
+
       setSuccess(true);
       toast({ title: 'Contraseña actualizada', description: 'Tu contraseña fue cambiada correctamente.' });
 
