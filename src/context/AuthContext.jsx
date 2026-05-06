@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 
 export const ROLES = {
@@ -59,6 +59,11 @@ export const AuthProvider = ({ children }) => {
   const [error,              setError]              = useState(null);
   const [blockedReason,      setBlockedReason]      = useState(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+
+  // Ref para evitar problemas de closure en onAuthStateChange:
+  // PASSWORD_RECOVERY (flujo hash) puede llegar antes que SIGNED_IN (flujo PKCE),
+  // y el ref asegura que el flag se lea correctamente en ambos casos.
+  const isPasswordRecoveryRef = useRef(false);
 
   // ─── fetchProfile ────────────────────────────────────────────────────────────
   // Búsqueda robusta en 3 pasos para soportar perfiles legacy donde
@@ -212,10 +217,31 @@ export const AuthProvider = ({ children }) => {
 
     const setupAuth = async () => {
       const { data: { session: initialSession } } = await supabase.auth.getSession();
-      if (isMounted) {
-        setSession(initialSession);
-        await initializeAuth(initialSession);
+      if (!isMounted) return;
+      setSession(initialSession);
+
+      // Si onAuthStateChange ya detectó una sesión de recovery (isPasswordRecoveryRef = true),
+      // no inicializar el perfil → dejar que ResetPasswordPage maneje el flujo.
+      if (isPasswordRecoveryRef.current) {
+        console.log('🔑 AuthContext: setupAuth — recovery session detected, skipping profile load.');
+        return;
       }
+
+      // Verificar también AMR en la sesión inicial para flujos donde onAuthStateChange
+      // aún no ha procesado el hash en el momento en que getSession completa.
+      const amrMethods = initialSession?.user?.amr?.map?.((a) => a.method) ?? [];
+      if (amrMethods.includes('otp') || amrMethods.includes('recovery')) {
+        console.log('🔑 AuthContext: setupAuth — AMR indica recovery session, bloqueando init.');
+        isPasswordRecoveryRef.current = true;
+        setIsPasswordRecovery(true);
+        setUser(initialSession.user);
+        setProfile(null);
+        setIsInitialized(true);
+        setLoading(false);
+        return;
+      }
+
+      await initializeAuth(initialSession);
     };
     setupAuth();
 
@@ -226,16 +252,47 @@ export const AuthProvider = ({ children }) => {
         setSession(newSession);
 
         if (event === 'PASSWORD_RECOVERY') {
-          console.log('🔑 AuthContext: PASSWORD_RECOVERY — esperando nueva contraseña.');
+          // Flujo implícito (hash): Supabase detecta #type=recovery en el hash
+          console.log('🔑 AuthContext: PASSWORD_RECOVERY — bloqueando redirect, esperando nueva contraseña.');
+          isPasswordRecoveryRef.current = true;
           setIsPasswordRecovery(true);
           setUser(newSession?.user || null);
           setProfile(null);
           setIsInitialized(true);
           setLoading(false);
+
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Flujo PKCE: la sesión de recuperación llega como SIGNED_IN.
+          // Detectar recovery via AMR claim (amr.method = 'otp' en magic links / recovery).
+          const amrMethods = newSession?.user?.amr?.map?.((a) => a.method) ?? [];
+          const isRecoverySignIn =
+            amrMethods.includes('otp') ||
+            amrMethods.includes('recovery') ||
+            isPasswordRecoveryRef.current;
+
+          if (isRecoverySignIn) {
+            console.log(`🔑 AuthContext: SIGNED_IN de sesión de recuperación (amr=${JSON.stringify(amrMethods)}) — bloqueando redirect.`);
+            isPasswordRecoveryRef.current = true;
+            setIsPasswordRecovery(true);
+            setUser(newSession?.user || null);
+            setProfile(null);
+            setIsInitialized(true);
+            setLoading(false);
+          } else {
+            isPasswordRecoveryRef.current = false;
+            setIsPasswordRecovery(false);
+            if (newSession?.user) await initializeAuth(newSession);
+          }
+
+        } else if (event === 'USER_UPDATED') {
+          // Contraseña actualizada correctamente (supabase.auth.updateUser completado).
+          // Limpiamos el recovery state; ResetPasswordPage llama signOut inmediatamente después.
+          console.log('✅ AuthContext: USER_UPDATED — contraseña actualizada, limpiando recovery state.');
+          isPasswordRecoveryRef.current = false;
           setIsPasswordRecovery(false);
-          if (newSession?.user) await initializeAuth(newSession);
+
         } else if (event === 'SIGNED_OUT') {
+          isPasswordRecoveryRef.current = false;
           setIsPasswordRecovery(false);
           setUser(null);
           setProfile(null);

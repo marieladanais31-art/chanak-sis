@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, user, profile, loading: authLoading, error: authError, isInitialized, blockedReason } = useAuth();
+  const { login, user, profile, loading: authLoading, error: authError, isInitialized, blockedReason, isPasswordRecovery } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,15 +22,24 @@ const LoginPage = () => {
   const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
-    if (isInitialized && !authLoading && user && profile) {
+    if (!isInitialized || authLoading) return;
+
+    // Sesión de recuperación de contraseña → no redirigir al dashboard
+    if (isPasswordRecovery) {
+      console.log('🔑 [LoginPage] Recovery session active. Redirecting to /reset-password.');
+      navigate('/reset-password', { replace: true });
+      return;
+    }
+
+    if (user && profile) {
       console.log(`➡️ [LoginPage] Valid session. Role: ${profile.role}. Redirecting...`);
-      
+
       const from = location.state?.from?.pathname;
       if (from && from !== '/login') {
         navigate(from, { replace: true });
         return;
       }
-      
+
       switch (profile.role) {
         case ROLES.SUPER_ADMIN:
         case ROLES.ADMIN: 
@@ -60,7 +69,7 @@ const LoginPage = () => {
           break;
       }
     }
-  }, [isInitialized, authLoading, user, profile, navigate, location]);
+  }, [isInitialized, authLoading, isPasswordRecovery, user, profile, navigate, location]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
