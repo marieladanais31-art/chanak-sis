@@ -262,6 +262,17 @@ export default function GradeEntriesManager({ studentSubject, canEdit = false, o
         </div>
       </div>
 
+      {/* < 80 mastery alert */}
+      {average !== null && Number(average) < 80 && (
+        <div className="mx-4 mt-3 mb-0 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-amber-800 text-sm shrink-0">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+          <span>
+            <strong>Promedio bajo el nivel de dominio esperado (80).</strong>{' '}
+            Se recomienda revisión adicional o actividad de recuperación antes de enviar.
+          </span>
+        </div>
+      )}
+
       <div className="p-4 flex-1 overflow-y-auto min-h-[250px]">
         {loading ? (
           <div className="flex justify-center items-center h-full">

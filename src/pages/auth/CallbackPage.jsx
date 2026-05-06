@@ -4,81 +4,149 @@ import { Navigate } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2 } from 'lucide-react';
 
+/**
+ * CallbackPage — procesa tokens de Supabase (PKCE y flujo implícito).
+ *
+ * HARD STOP para recovery:
+ *  Si detecta que el callback es de recuperación de contraseña (por URL o sessionStorage),
+ *  pone la bandera 'passwordRecoveryInProgress' en sessionStorage y redirige a /auth/reset
+ *  SIN cargar perfil ni navegar por rol.
+ *
+ * Detección de recovery (por orden de prioridad):
+ *  1. sessionStorage.getItem('passwordRecoveryInProgress') === 'true'  (misma sesión de browser)
+ *  2. ?type=recovery  en query string
+ *  3. type=recovery   en el hash original (antes de que el SDK lo limpie)
+ *  4. AMR claim 'otp' en la sesión (PKCE recovery)
+ */
 const CallbackPage = () => {
   const hasProcessed = useRef(false);
-  const [status, setStatus] = useState('Processing verification...');
+
+  // ── Captura SÍNCRONA del search y hash antes de cualquier effect ──────────
+  // IMPORTANTE: se captura en el cuerpo del componente (render síncrono),
+  // antes de que el SDK pueda limpiar el hash con detectSessionInUrl=true.
+  const rawSearch = useRef(window.location.search);
+  const rawHash   = useRef(window.location.hash);
+
   const [redirectPath, setRedirectPath] = useState(null);
 
   useEffect(() => {
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
+    console.log('CALLBACK search:', rawSearch.current);
+    console.log('CALLBACK hash:  ', rawHash.current ? '(present, len=' + rawHash.current.length + ')' : '(empty)');
+
     const handleCallback = async () => {
-      console.log('🔐 [AuthCallback] Init', window.location.href);
       try {
-        const urlParams = new URLSearchParams(window.location.search);
+        const urlParams = new URLSearchParams(rawSearch.current);
         const code = urlParams.get('code');
+        const type = urlParams.get('type');                   // ?type=recovery
         const next = urlParams.get('next') || '/';
-        const type = urlParams.get('type');
-        
-        console.log(`➡️ [AuthCallback] Params -> code: ${!!code}, type: ${type}, next: ${next}`);
+
+        // ── DETECCIÓN DE RECOVERY: nivel 1 — sessionStorage ─────────────────
+        const storedFlag = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+
+        // ── DETECCIÓN DE RECOVERY: nivel 2 — URL ────────────────────────────
+        const recoveryInSearch =
+          rawSearch.current.includes('type=recovery') ||
+          rawSearch.current.includes('type=PASSWORD_RECOVERY');
+
+        const recoveryInHash =
+          rawHash.current.includes('type=recovery') ||
+          rawHash.current.includes('type=PASSWORD_RECOVERY');
+
+        const recoveryFromUrl = recoveryInSearch || recoveryInHash;
+
+        // Detección rápida: si ya tenemos señal sin necesitar intercambiar sesión
+        const isEarlyRecovery = storedFlag || recoveryFromUrl;
+
+        console.log(`CALLBACK type=${type} code=${!!code} storedFlag=${storedFlag} recoveryFromUrl=${recoveryFromUrl}`);
 
         if (code) {
-          console.log('🔐 [AuthCallback] Exchanging code for session...');
+          // ── Flujo PKCE: intercambiar código ──────────────────────────────
+          console.log('CALLBACK: exchanging PKCE code...');
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-          
+
           if (error) {
-            console.error('❌ [AuthCallback] Session exchange failed:', error);
-            throw error;
+            console.error('CALLBACK: exchangeCodeForSession failed:', error.message);
+            // Si el flag de recovery ya estaba, igual redirigir a /auth/reset
+            // para que el usuario vea un mensaje de "enlace expirado"
+            if (isEarlyRecovery) {
+              console.log('RECOVERY DETECTED - redirecting to /auth/reset (session error)');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+              return;
+            }
+            setRedirectPath('/login');
+            return;
           }
-          
-          console.log('✅ [AuthCallback] Session exchange successful', data.session?.user?.id);
-          
-          // Clean the URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-          console.log('✅ [AuthCallback] URL cleaned.');
 
-          // User metadata inspection
-          const metadata = data.session?.user?.user_metadata || {};
-          console.log('➡️ [AuthCallback] User Metadata:', metadata);
+          // ── DETECCIÓN DE RECOVERY: nivel 3 — AMR ────────────────────────
+          const amrMethods = data.session?.user?.amr?.map?.((a) => a.method) ?? [];
+          const recoveryFromAmr =
+            amrMethods.includes('otp') ||
+            amrMethods.includes('recovery');
 
-          // type viene del parámetro ?type=recovery que añadimos en redirectTo.
-          // Como fallback, detectamos recovery por el amr claim de la sesión.
-          const isRecovery =
-            type === 'recovery' ||
-            type === 'invite' ||
-            data.session?.user?.amr?.some?.((a) => a.method === 'otp');
+          const isRecovery = isEarlyRecovery || recoveryFromAmr;
+          console.log(`CALLBACK: isRecovery=${isRecovery} amr=${JSON.stringify(amrMethods)}`);
 
           if (isRecovery) {
-            console.log(`➡️ [AuthCallback] Recovery session detected (type=${type}), redirecting to /auth/reset`);
+            console.log('RECOVERY DETECTED - redirecting to /auth/reset');
+            sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+            // Limpiar URL
+            window.history.replaceState({}, document.title, window.location.pathname);
             setRedirectPath('/auth/reset');
           } else {
-            console.log(`➡️ [AuthCallback] Redirecting to next: ${next}`);
+            console.log(`CALLBACK: normal session. Redirecting to ${next}`);
+            window.history.replaceState({}, document.title, window.location.pathname);
             setRedirectPath(next);
           }
+
         } else {
-          console.log('➡️ [AuthCallback] No code found in URL, checking session directly...');
-          const { data: { session } } = await supabase.auth.getSession();
-          
-          if (session) {
-            console.log('✅ [AuthCallback] Session found natively');
-            const hash = window.location.hash;
-            if (hash && hash.includes('type=recovery')) {
-               console.log('➡️ [AuthCallback] Hash contains recovery, redirecting to /auth/reset');
-               setRedirectPath('/auth/reset');
+          // ── Flujo implícito: SDK ya procesó el hash ──────────────────────
+          // Si la detección por URL ya nos dice que es recovery, redirigir directo
+          if (isEarlyRecovery) {
+            // Esperar brevemente para que el SDK establezca la sesión desde el hash
+            await new Promise((r) => setTimeout(r, 300));
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+              console.log('RECOVERY DETECTED - redirecting to /auth/reset (implicit)');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
             } else {
-               console.log('➡️ [AuthCallback] Redirecting to /');
-               setRedirectPath('/');
+              // Session not yet ready — still redirect to /auth/reset, it will show error
+              console.log('RECOVERY DETECTED but no session - /auth/reset will show expired error');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+            }
+            return;
+          }
+
+          // Sin señal de recovery — comprobar sesión e intentar AMR
+          await new Promise((r) => setTimeout(r, 400));
+          const { data: { session } } = await supabase.auth.getSession();
+
+          if (session) {
+            const amrMethods = session.user?.amr?.map?.((a) => a.method) ?? [];
+            const recoveryFromAmr =
+              amrMethods.includes('otp') || amrMethods.includes('recovery');
+
+            if (recoveryFromAmr) {
+              console.log('RECOVERY DETECTED - redirecting to /auth/reset (AMR, no code)');
+              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+              setRedirectPath('/auth/reset');
+            } else {
+              console.log(`CALLBACK: normal implicit session. → ${next}`);
+              setRedirectPath(next);
             }
           } else {
-            console.log('❌ [AuthCallback] No session found, redirecting to login');
-            setRedirectPath('/');
+            console.warn('CALLBACK: no session found. → /login');
+            setRedirectPath('/login');
           }
         }
-      } catch (error) {
-        console.error('❌ [AuthCallback] Global catch error:', error);
-        setStatus('Verification failed. Redirecting...');
-        setTimeout(() => setRedirectPath('/'), 2000);
+      } catch (err) {
+        console.error('CALLBACK error:', err);
+        setRedirectPath('/login');
       }
     };
 
@@ -90,10 +158,9 @@ const CallbackPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0B2D5C] text-white">
-      <Loader2 className="h-12 w-12 animate-spin text-[#2F80ED] mb-4" />
-      <h2 className="text-xl font-semibold">{status}</h2>
-      <p className="text-white/60 text-sm mt-2">Please wait while we secure your connection...</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+      <Loader2 className="h-10 w-10 animate-spin text-blue-600 mb-4" />
+      <p className="text-sm font-medium text-slate-500">Verificando enlace de acceso...</p>
     </div>
   );
 };

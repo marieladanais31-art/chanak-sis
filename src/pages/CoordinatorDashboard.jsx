@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle } from 'lucide-react';
+import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
+import GradeReviewPanel from '@/components/GradeReviewPanel';
 import PEIFormFull from '@/components/PEIFormFull';
 import TranscriptGenerator from '@/components/TranscriptGenerator';
 import AcademicAlerts from '@/components/AcademicAlerts';
@@ -15,7 +16,7 @@ export default function CoordinatorDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'pei' | 'boletines' | 'alertas'
+  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'revision' | 'pei' | 'boletines' | 'alertas'
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [subjects, setSubjects] = useState([]);
@@ -34,7 +35,8 @@ export default function CoordinatorDashboard() {
   useEffect(() => {
     if (!profile) return;
 
-    if (profile.role !== ROLES.COORDINATOR) {
+    const allowedRoles = [ROLES.COORDINATOR, ROLES.ADMIN, ROLES.SUPER_ADMIN];
+    if (!allowedRoles.includes(profile.role)) {
       navigate('/');
       return;
     }
@@ -53,8 +55,15 @@ export default function CoordinatorDashboard() {
   const loadStudents = async () => {
     setLoading(true);
     try {
+      // Hub filter: coordinators only see their hub; admins see all
+      const isCoordinatorOnly = profile?.role === ROLES.COORDINATOR;
+      const hubFilter = isCoordinatorOnly && profile?.hub_id;
+
+      let studQuery = supabase.from('students').select('id, first_name, last_name, grade_level, us_grade_level').order('first_name');
+      if (hubFilter) studQuery = studQuery.eq('hub_id', profile.hub_id);
+
       const [studRes, peiRes, trRes] = await Promise.all([
-        supabase.from('students').select('id, first_name, last_name, grade_label, us_grade_level').order('first_name'),
+        studQuery,
         supabase.from('individualized_education_plans').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
         supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
       ]);
@@ -207,10 +216,11 @@ export default function CoordinatorDashboard() {
       {/* Main tabs */}
       <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
         {[
-          { id: 'notas',     label: 'Notas',     icon: BookOpen },
-          { id: 'pei',       label: 'PEI',        icon: FileText },
-          { id: 'boletines', label: 'Boletines',  icon: ScrollText },
-          { id: 'alertas',   label: 'Alertas',    icon: AlertTriangle },
+          { id: 'notas',     label: 'Notas',           icon: BookOpen },
+          { id: 'revision',  label: 'Revisar Notas',   icon: ClipboardList },
+          { id: 'pei',       label: 'PEI',              icon: FileText },
+          { id: 'boletines', label: 'Boletines',        icon: ScrollText },
+          { id: 'alertas',   label: 'Alertas',          icon: AlertTriangle },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -228,6 +238,20 @@ export default function CoordinatorDashboard() {
       {mainTab === 'alertas' && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
           <AcademicAlerts targetRole="coordinator" />
+        </div>
+      )}
+
+      {/* Revisar Notas tab */}
+      {mainTab === 'revision' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <div className="mb-4">
+            <h3 className="text-base font-black text-slate-800">Revisión de Notas Pendientes</h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Notas enviadas por padres o tutores que requieren aprobación
+              {profile?.hub_id ? ' · Solo tu hub' : ''}.
+            </p>
+          </div>
+          <GradeReviewPanel hubId={profile?.role === 'coordinator' ? profile?.hub_id : null} />
         </div>
       )}
 
@@ -314,7 +338,7 @@ export default function CoordinatorDashboard() {
             <option value="">-- Seleccione un estudiante de la lista --</option>
             {students.map((student) => (
               <option key={student.id} value={student.id}>
-                {student.first_name} {student.last_name} ({student.grade_label || student.us_grade_level || 'N/A'})
+                {student.first_name} {student.last_name} ({student.grade_level || student.us_grade_level || 'N/A'})
               </option>
             ))}
           </select>

@@ -457,7 +457,7 @@ export default function ParentDashboard() {
       const studentSubjectsRes = await supabase
         .from('student_subjects')
         .select(
-          'id, student_id, subject_id, subject_name, category, academic_block, pillar_type, grade, quarter, school_year, submitted_at, approval_status, convalidation_status, credit_value, credits, subject_order, comments, convalidation_required'
+          'id, student_id, subject_id, subject_name, category, academic_block, pillar_type, grade, quarter, school_year, submitted_at, approval_status, convalidation_status, credit_value, credits, subject_order, comments, convalidation_required, grade_submission_status, grade_review_comment'
         )
         .in('student_id', studentIds)
         .eq('school_year', ACTIVE_SCHOOL_YEAR)
@@ -1482,9 +1482,13 @@ export default function ParentDashboard() {
                 </button>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
+                {/* canEdit={true}: GradeEntriesManager bloquea edición internamente
+                    cuando grade_submission_status es 'submitted' o 'approved'.
+                    El padre puede ingresar notas (draft) y enviarlas a revisión (submitted).
+                    El coordinador/tutor luego aprueba o rechaza desde su panel. */}
                 <GradeEntriesManager
                   studentSubject={selectedStudentSubjectForEntries}
-                  canEdit={false}
+                  canEdit={true}
                   onEntriesChanged={handleEntriesChanged}
                 />
               </div>

@@ -37,6 +37,12 @@ export default function ForgotPasswordPage() {
 
     // La URL de callback apunta a /auth/callback para que CallbackPage procese el token
     const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+    console.log('FORGOT redirectTo:', redirectTo);
+
+    // Marcar recovery en curso ANTES de enviar el email.
+    // Esto garantiza que si el usuario hace clic en el enlace en la misma sesión del navegador,
+    // el flag ya está presente cuando AuthContext o CallbackPage ejecutan su lógica.
+    sessionStorage.setItem('passwordRecoveryInProgress', 'true');
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
@@ -52,6 +58,7 @@ export default function ForgotPasswordPage() {
       setEmail('');
     } catch (err) {
       console.error('[ForgotPasswordPage]', err);
+      sessionStorage.removeItem('passwordRecoveryInProgress'); // limpiamos si falla
       toast({
         title: 'No se pudo enviar el enlace',
         description: err.message || 'Intenta nuevamente en unos minutos.',

@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, user, profile, loading: authLoading, error: authError, isInitialized } = useAuth();
+  const { login, user, profile, loading: authLoading, error: authError, isInitialized, blockedReason, isPasswordRecovery } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,15 +22,25 @@ const LoginPage = () => {
   const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
-    if (isInitialized && !authLoading && user && profile) {
+    if (!isInitialized || authLoading) return;
+
+    // Sesión de recuperación de contraseña → no redirigir al dashboard
+    const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+    if (isPasswordRecovery || storedRecovery) {
+      console.log('SKIPPING ROLE REDIRECT - password recovery in progress (LoginPage)');
+      navigate('/reset-password', { replace: true });
+      return;
+    }
+
+    if (user && profile) {
       console.log(`➡️ [LoginPage] Valid session. Role: ${profile.role}. Redirecting...`);
-      
+
       const from = location.state?.from?.pathname;
       if (from && from !== '/login') {
         navigate(from, { replace: true });
         return;
       }
-      
+
       switch (profile.role) {
         case ROLES.SUPER_ADMIN:
         case ROLES.ADMIN: 
@@ -45,16 +55,22 @@ const LoginPage = () => {
         case ROLES.STUDENT: 
           navigate('/student', { replace: true }); 
           break;
-        case ROLES.PARENT: 
-          navigate('/parent', { replace: true }); 
+        case ROLES.PARENT:
+          navigate('/parent', { replace: true });
           break;
-        default: 
-          console.warn(`⚠️ [LoginPage] Unknown role: ${profile.role}`);
-          navigate('/login', { replace: true }); 
+        case 'mentor':
+          navigate('/tutor', { replace: true });
+          break;
+        case 'family':
+          navigate('/parent', { replace: true });
+          break;
+        default:
+          console.warn(`⚠️ [LoginPage] Unknown role: ${profile.role}. Redirecting to home.`);
+          navigate('/', { replace: true });
           break;
       }
     }
-  }, [isInitialized, authLoading, user, profile, navigate, location]);
+  }, [isInitialized, authLoading, isPasswordRecovery, user, profile, navigate, location]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -119,14 +135,25 @@ const LoginPage = () => {
           </CardHeader>
           <CardContent>
             
-            {authError && (
+            {/* Cuenta desactivada (is_active = false) */}
+            {blockedReason && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700 text-sm">
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+                <div>
+                  <p className="font-bold">Cuenta desactivada</p>
+                  <p className="mt-0.5">{blockedReason}</p>
+                </div>
+              </div>
+            )}
+
+            {authError && !blockedReason && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700 text-sm">
                 <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
                 <span><strong>Error de sistema:</strong> {authError.message || 'Error de inicialización.'}</span>
               </div>
             )}
 
-            {formError && (
+            {formError && !blockedReason && (
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 text-sm">
                 <AlertCircle className="w-5 h-5 shrink-0 text-amber-500" />
                 <span>{formError}</span>
