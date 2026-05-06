@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, user, profile, loading: authLoading, error: authError, isInitialized } = useAuth();
+  const { login, user, profile, loading: authLoading, error: authError, isInitialized, blockedReason } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -125,14 +125,25 @@ const LoginPage = () => {
           </CardHeader>
           <CardContent>
             
-            {authError && (
+            {/* Cuenta desactivada (is_active = false) */}
+            {blockedReason && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700 text-sm">
+                <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+                <div>
+                  <p className="font-bold">Cuenta desactivada</p>
+                  <p className="mt-0.5">{blockedReason}</p>
+                </div>
+              </div>
+            )}
+
+            {authError && !blockedReason && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700 text-sm">
                 <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
                 <span><strong>Error de sistema:</strong> {authError.message || 'Error de inicialización.'}</span>
               </div>
             )}
 
-            {formError && (
+            {formError && !blockedReason && (
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 text-sm">
                 <AlertCircle className="w-5 h-5 shrink-0 text-amber-500" />
                 <span>{formError}</span>
