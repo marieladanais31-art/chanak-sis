@@ -45,12 +45,18 @@ const LoginPage = () => {
         case ROLES.STUDENT: 
           navigate('/student', { replace: true }); 
           break;
-        case ROLES.PARENT: 
-          navigate('/parent', { replace: true }); 
+        case ROLES.PARENT:
+          navigate('/parent', { replace: true });
           break;
-        default: 
-          console.warn(`⚠️ [LoginPage] Unknown role: ${profile.role}`);
-          navigate('/login', { replace: true }); 
+        case 'mentor':
+          navigate('/tutor', { replace: true });
+          break;
+        case 'family':
+          navigate('/parent', { replace: true });
+          break;
+        default:
+          console.warn(`⚠️ [LoginPage] Unknown role: ${profile.role}. Redirecting to home.`);
+          navigate('/', { replace: true });
           break;
       }
     }

@@ -34,7 +34,8 @@ export default function CoordinatorDashboard() {
   useEffect(() => {
     if (!profile) return;
 
-    if (profile.role !== ROLES.COORDINATOR) {
+    const allowedRoles = [ROLES.COORDINATOR, ROLES.ADMIN, ROLES.SUPER_ADMIN];
+    if (!allowedRoles.includes(profile.role)) {
       navigate('/');
       return;
     }
@@ -53,8 +54,15 @@ export default function CoordinatorDashboard() {
   const loadStudents = async () => {
     setLoading(true);
     try {
+      // Hub filter: coordinators only see their hub; admins see all
+      const isCoordinatorOnly = profile?.role === ROLES.COORDINATOR;
+      const hubFilter = isCoordinatorOnly && profile?.hub_id;
+
+      let studQuery = supabase.from('students').select('id, first_name, last_name, grade_level, us_grade_level').order('first_name');
+      if (hubFilter) studQuery = studQuery.eq('hub_id', profile.hub_id);
+
       const [studRes, peiRes, trRes] = await Promise.all([
-        supabase.from('students').select('id, first_name, last_name, grade_label, us_grade_level').order('first_name'),
+        studQuery,
         supabase.from('individualized_education_plans').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
         supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
       ]);
@@ -314,7 +322,7 @@ export default function CoordinatorDashboard() {
             <option value="">-- Seleccione un estudiante de la lista --</option>
             {students.map((student) => (
               <option key={student.id} value={student.id}>
-                {student.first_name} {student.last_name} ({student.grade_label || student.us_grade_level || 'N/A'})
+                {student.first_name} {student.last_name} ({student.grade_level || student.us_grade_level || 'N/A'})
               </option>
             ))}
           </select>

@@ -4,6 +4,20 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
+const getRoleDashboard = (role) => {
+  switch (role) {
+    case 'super_admin':
+    case 'admin':      return '/admin';
+    case 'coordinator':return '/coordinator';
+    case 'tutor':
+    case 'mentor':     return '/tutor';
+    case 'parent':
+    case 'family':     return '/parent';
+    case 'student':    return '/student';
+    default:           return '/login';
+  }
+};
+
 const ProtectedRoute = ({ children, requiredRole }) => {
   const { user, profile, isInitialized, loading } = useAuth();
   const location = useLocation();
@@ -27,8 +41,9 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   if (requiredRole) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!roles.includes(profile.role)) {
-      console.log(`🔒 ProtectedRoute: Access denied. Required: ${roles.join(',')}, Actual: ${profile.role}`);
-      return <Navigate to="/" replace />;
+      const dest = getRoleDashboard(profile.role);
+      console.log(`🔒 ProtectedRoute: Access denied. Required: ${roles.join(',')}, Actual: ${profile.role}. Redirecting to ${dest}`);
+      return <Navigate to={dest} replace />;
     }
   }
 

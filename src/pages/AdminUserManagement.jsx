@@ -43,6 +43,7 @@ export default function AdminUserManagement() {
   const [selectedUser, setSelectedUser] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [hubs, setHubs]             = useState([]);
 
   // Formulario de creación
   const [createForm, setCreateForm] = useState({
@@ -51,10 +52,15 @@ export default function AdminUserManagement() {
   const [showCreatePwd, setShowCreatePwd] = useState(false);
 
   // Formulario de edición de perfil
-  const EDIT_DEFAULTS = { firstName: '', lastName: '', role: '', isActive: true };
+  const EDIT_DEFAULTS = { firstName: '', lastName: '', role: '', isActive: true, hubId: null };
   const [editForm, setEditForm] = useState(EDIT_DEFAULTS);
 
-  // ─── Carga de usuarios ──────────────────────────────────────────────────────
+  // ─── Carga de usuarios y hubs ───────────────────────────────────────────────
+
+  const loadHubs = async () => {
+    const { data } = await supabase.from('organizations').select('id, name').order('name');
+    setHubs(data || []);
+  };
 
   const loadUsers = async () => {
     setLoading(true);
@@ -73,7 +79,7 @@ export default function AdminUserManagement() {
     }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadUsers(); loadHubs(); }, []);
 
   const filtered = users.filter((u) => {
     const q = searchTerm.toLowerCase();
@@ -146,6 +152,7 @@ export default function AdminUserManagement() {
       lastName:  user.last_name  || '',
       role:      user.role       || ROLES.STUDENT,
       isActive:  user.is_active  ?? true,
+      hubId:     user.hub_id     || null,
     });
     setEditOpen(true);
   };
@@ -162,6 +169,7 @@ export default function AdminUserManagement() {
           last_name:  editForm.lastName.trim(),
           role:       editForm.role,
           is_active:  editForm.isActive,
+          hub_id:     editForm.hubId || null,
         })
         .eq('id', selectedUser.id);
 
@@ -405,6 +413,18 @@ export default function AdminUserManagement() {
             </div>
             <Field label="Rol">
               <RoleSelect value={editForm.role} onChange={(v) => setEditForm({ ...editForm, role: v })} />
+            </Field>
+            <Field label="Hub asignado">
+              <select
+                value={editForm.hubId || ''}
+                onChange={(e) => setEditForm({ ...editForm, hubId: e.target.value || null })}
+                className={INPUT_CLS}
+              >
+                <option value="">— Sin hub asignado —</option>
+                {hubs.map((h) => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Estado">
               <div className="flex items-center gap-3">
