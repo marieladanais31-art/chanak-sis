@@ -298,6 +298,7 @@ export default function ParentDashboard() {
 
   const [activeTab, setActiveTab] = useState('children');
   const [children, setChildren] = useState([]);
+  const [hubs, setHubs] = useState([]);
   const [pendingLink, setPendingLink] = useState(false);
 
   const [studentSubjects, setStudentSubjects] = useState([]);
@@ -431,58 +432,58 @@ export default function ParentDashboard() {
         return;
       }
 
-      const { data: validStudents, error: studentsError } = await supabase
-        .from('students')
-        .select('id, first_name, last_name, us_grade_level, created_at, family_id')
-        .in('id', studentIds)
-        .order('last_name', { ascending: true });
+      const [studentsRes, hubsRes] = await Promise.all([
+        supabase
+          .from('students')
+          .select('id, first_name, last_name, grade_level, us_grade_level, school_stage, modality, academic_year, hub_id, created_at')
+          .in('id', studentIds)
+          .order('last_name', { ascending: true }),
+        supabase
+          .from('organizations')
+          .select('id, name'),
+      ]);
 
-      if (studentsError) throw studentsError;
+      if (studentsRes.error) throw studentsRes.error;
 
-      const loadedChildren = validStudents || [];
+      const loadedChildren = studentsRes.data || [];
       setChildren(loadedChildren);
+      setHubs(hubsRes.data || []);
 
       if (loadedChildren.length > 0) {
         setLegalSelectedChildId(loadedChildren[0].id);
       }
 
-      const [
-        studentSubjectsRes,
-        paymentStatusRes,
-        documentRecordsRes,
-        paceProjectionRes
-      ] = await Promise.all([
-        supabase
-          .from('student_subjects')
-          .select(
-            'id, student_id, subject_id, subject_name, category, academic_block, pillar_type, grade, quarter, school_year, submitted_at, approval_status, convalidation_status, credit_value, credits, subject_order, comments, convalidation_required'
-          )
-          .in('student_id', studentIds)
-          .eq('school_year', ACTIVE_SCHOOL_YEAR)
-          .in('quarter', QUARTERS.map((quarter) => quarter.id)),
-        supabase
-          .from('payment_status')
-          .select('id, student_id, family_id, billing_month, due_date, due_amount, paid_amount, status, restriction_flag, warning_message')
-          .in('student_id', studentIds),
-        supabase
-          .from('document_records')
-          .select('id, student_id, family_id, document_type, title, file_url, created_at, school_year, quarter')
-          .in('student_id', studentIds),
-        supabase
-          .from('student_pace_projection')
-          .select('id, student_id, school_year, pillar_type, subject_name, pace_number, quarter, status, due_date, completion_date')
-          .in('student_id', studentIds)
-      ]);
+      // student_subjects — tabla real, lanzar error si falla
+      const studentSubjectsRes = await supabase
+        .from('student_subjects')
+        .select(
+          'id, student_id, subject_id, subject_name, category, academic_block, pillar_type, grade, quarter, school_year, submitted_at, approval_status, convalidation_status, credit_value, credits, subject_order, comments, convalidation_required'
+        )
+        .in('student_id', studentIds)
+        .eq('school_year', ACTIVE_SCHOOL_YEAR)
+        .in('quarter', QUARTERS.map((quarter) => quarter.id));
 
       if (studentSubjectsRes.error) throw studentSubjectsRes.error;
-      if (paymentStatusRes.error) throw paymentStatusRes.error;
-      if (documentRecordsRes.error) throw documentRecordsRes.error;
-      if (paceProjectionRes.error) throw paceProjectionRes.error;
-
       setStudentSubjects(studentSubjectsRes.data || []);
-      setPaymentStatus(paymentStatusRes.data || []);
-      setDocumentRecords(documentRecordsRes.data || []);
-      setPaceProjection(paceProjectionRes.data || []);
+
+      // Tablas legacy / no implementadas — errores no fatales
+      const [paymentStatusRes, documentRecordsRes, paceProjectionRes] = await Promise.all([
+        supabase.from('payment_status').select('id, student_id, billing_month, due_date, due_amount, paid_amount, status').in('student_id', studentIds),
+        supabase.from('document_records').select('id, student_id, document_type, title, file_url, created_at, school_year').in('student_id', studentIds),
+        supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
+      ]);
+
+      setPaymentStatus(paymentStatusRes.error ? [] : (paymentStatusRes.data || []));
+      setDocumentRecords(documentRecordsRes.error ? [] : (documentRecordsRes.data || []));
+      // pei_pace_projections no tiene due_date — map para compatibilidad
+      setPaceProjection(
+        paceProjectionRes.error ? [] : (paceProjectionRes.data || []).map(p => ({
+          ...p,
+          due_date: p.projected_completion_date || null,
+          completion_date: p.projected_completion_date || null,
+          pillar_type: p.pillar_type || '',
+        }))
+      );
     } catch (err) {
       console.error('ParentDashboard loadData error:', err);
       toast({
@@ -658,12 +659,33 @@ export default function ParentDashboard() {
                       className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col"
                     >
                       <div className="p-6 border-b flex-1 bg-white border-slate-100">
-                        <h3 className="font-black text-2xl mb-2" style={{ color: '#193D6D' }}>
+                        <h3 className="font-black text-2xl mb-1" style={{ color: '#193D6D' }}>
                           {child.first_name} {child.last_name}
                         </h3>
 
-                        <p className="text-sm font-bold text-slate-500 uppercase mb-4 tracking-wider">
-                          Nivel (US): {child.us_grade_level || 'N/A'}
+                        {/* Ficha académica rápida */}
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {child.academic_year && (
+                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-bold border border-blue-100">
+                              {child.academic_year}
+                            </span>
+                          )}
+                          {child.modality && (
+                            <span className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-md text-xs font-bold border border-teal-100">
+                              {child.modality}
+                            </span>
+                          )}
+                          {child.hub_id && hubs.find(h => h.id === child.hub_id) && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs font-bold">
+                              {hubs.find(h => h.id === child.hub_id).name}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-sm font-bold text-slate-500 uppercase mb-3 tracking-wider">
+                          {child.grade_level ? `${child.grade_level}` : ''}
+                          {child.grade_level && child.us_grade_level ? ' · ' : ''}
+                          {child.us_grade_level || (!child.grade_level ? 'Sin grado asignado' : '')}
                         </p>
 
                         <div className="space-y-3">
@@ -800,6 +822,16 @@ export default function ParentDashboard() {
                             <span className="text-xs font-bold text-slate-700">Contrato</span>
                           </button>
                         )}
+
+                        {/* Placeholder — subida de evidencias (próximamente) */}
+                        <button
+                          disabled
+                          title="Próximamente: subida de evidencias académicas"
+                          className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-50 flex flex-col items-center gap-2 cursor-not-allowed"
+                        >
+                          <ExternalLink className="w-5 h-5 text-slate-400" />
+                          <span className="text-xs font-bold text-slate-400 text-center leading-tight">Evidencias<br/>Próx.</span>
+                        </button>
                       </div>
                     </div>
                   );
