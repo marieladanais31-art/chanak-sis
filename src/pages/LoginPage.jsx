@@ -95,7 +95,7 @@ const LoginPage = () => {
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-50">
         {/* ── Marcador de versión temporal — eliminar tras confirmar deploy ── */}
         <div className="mb-4 px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 text-xs font-bold text-center shadow-sm">
-          BUILD PRUEBA 13 — rutas corregidas
+          BUILD PRUEBA 14 — roles, configuración y portal familias
         </div>
         <Card className="w-full max-w-md bg-white border-slate-200 shadow-xl text-slate-800">
           <CardHeader className="text-center">

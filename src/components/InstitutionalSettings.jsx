@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 import { Save, Loader2, Building2, User, FileText, AlertCircle, Globe, Image as ImageIcon, Award, CalendarDays } from 'lucide-react';
 
 const MSA_STATUS_OPTIONS = [
@@ -43,6 +44,7 @@ function Field({ label, children }) {
 
 export default function InstitutionalSettings() {
   const { toast } = useToast();
+  const { profile: authProfile } = useAuth();
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [settingsId, setSettingsId] = useState(null);
@@ -123,6 +125,18 @@ export default function InstitutionalSettings() {
     e.preventDefault();
     setSaving(true);
     try {
+      // ── DIAGNÓSTICO: imprimir contexto completo antes de guardar ──────────────
+      const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser();
+      console.group('[InstitutionalSettings] Pre-save diagnostics');
+      console.log('auth.uid()       :', authUser?.id ?? '(no session)');
+      console.log('auth error       :', authErr?.message ?? 'none');
+      console.log('profile.id       :', authProfile?.id ?? '(undefined)');
+      console.log('profile.user_id  :', authProfile?.user_id ?? '(undefined)');
+      console.log('profile.role     :', authProfile?.role ?? '(undefined)');
+      console.log('settingsId (row) :', settingsId ?? '(no row yet → will INSERT)');
+      console.groupEnd();
+      // ─────────────────────────────────────────────────────────────────────────
+
       // Campos seguros a enviar (excluir campos internos de DB)
       const payload = {
         institution_name:      form.institution_name,
@@ -152,6 +166,8 @@ export default function InstitutionalSettings() {
 
       let savedId = settingsId;
 
+      console.log('[InstitutionalSettings] Payload a enviar:', JSON.stringify(payload, null, 2));
+
       if (settingsId) {
         // ── UPDATE ──
         const { error } = await supabase
@@ -160,12 +176,21 @@ export default function InstitutionalSettings() {
           .eq('id', settingsId);
 
         if (error) {
-          console.error('[InstitutionalSettings] UPDATE error:', error);
-          // Mostrar código específico para diagnóstico
-          const hint = error.code === '42501'
-            ? ' (RLS bloqueó el guardado — ejecutar migración fix_rls_functions_user_id)'
-            : ` (código: ${error.code})`;
-          throw new Error(error.message + hint);
+          console.error('[InstitutionalSettings] UPDATE error completo:', {
+            code:    error.code,
+            message: error.message,
+            details: error.details,
+            hint:    error.hint,
+          });
+          const parts = [
+            error.message,
+            error.code    ? `Código: ${error.code}` : null,
+            error.details ? `Detalles: ${error.details}` : null,
+            error.hint    ? `Hint: ${error.hint}` : null,
+            error.code === '42501' ? '→ RLS bloqueó el guardado. Verificar migración fix_rls_functions_user_id y que el rol del usuario sea admin/super_admin/director.' : null,
+            error.code === '42703' ? '→ Columna inexistente. Ejecutar migración 20260510_fase_cierre_operacional.sql para crear columnas nuevas.' : null,
+          ].filter(Boolean);
+          throw new Error(parts.join(' | '));
         }
       } else {
         // ── INSERT (primera vez) ──
@@ -176,11 +201,21 @@ export default function InstitutionalSettings() {
           .single();
 
         if (error) {
-          console.error('[InstitutionalSettings] INSERT error:', error);
-          const hint = error.code === '42501'
-            ? ' (RLS bloqueó el INSERT — ejecutar migración fix_rls_functions_user_id)'
-            : ` (código: ${error.code})`;
-          throw new Error(error.message + hint);
+          console.error('[InstitutionalSettings] INSERT error completo:', {
+            code:    error.code,
+            message: error.message,
+            details: error.details,
+            hint:    error.hint,
+          });
+          const parts = [
+            error.message,
+            error.code    ? `Código: ${error.code}` : null,
+            error.details ? `Detalles: ${error.details}` : null,
+            error.hint    ? `Hint: ${error.hint}` : null,
+            error.code === '42501' ? '→ RLS bloqueó el INSERT. Verificar migración fix_rls_functions_user_id.' : null,
+            error.code === '42703' ? '→ Columna inexistente. Ejecutar migración 20260510_fase_cierre_operacional.sql.' : null,
+          ].filter(Boolean);
+          throw new Error(parts.join(' | '));
         }
         savedId = inserted.id;
         setSettingsId(savedId);

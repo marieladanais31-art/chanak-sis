@@ -18,14 +18,157 @@ import {
   Hourglass,
   Scale,
   Printer,
-  ExternalLink
+  ExternalLink,
+  Link2,
+  Bell,
+  CalendarDays,
 } from 'lucide-react';
+import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import LegalDocuments from '@/pages/LegalDocuments';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
+
+/* ── Categorías: colores de badge ──────────────────────────────────────────── */
+const CAT_COLORS = {
+  LMS:        'bg-blue-50 text-blue-700 border-blue-100',
+  Drive:      'bg-amber-50 text-amber-700 border-amber-100',
+  ACEConnect: 'bg-purple-50 text-purple-700 border-purple-100',
+  Expediente: 'bg-teal-50 text-teal-700 border-teal-100',
+  Interno:    'bg-slate-100 text-slate-700 border-slate-200',
+  Otro:       'bg-gray-50 text-gray-700 border-gray-100',
+};
+
+/* ── Recursos / Links operativos ─────────────────────────────────────────── */
+function ParentRecursosPanel({ links }) {
+  if (!links || links.length === 0) {
+    return (
+      <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+        No hay recursos disponibles todavía.
+      </div>
+    );
+  }
+
+  /* Agrupar por categoría */
+  const grouped = links.reduce((acc, link) => {
+    const cat = link.category || 'Otro';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(link);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-6">
+      {Object.entries(grouped).map(([category, items]) => (
+        <div key={category}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className={`px-2.5 py-0.5 rounded-full border text-xs font-black ${CAT_COLORS[category] || CAT_COLORS.Otro}`}>
+              {category}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {items.map(link => (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-sm transition-all group"
+              >
+                <div>
+                  <p className="font-bold text-slate-800 group-hover:text-blue-700">{link.title}</p>
+                  {link.description && (
+                    <p className="text-xs text-slate-500 mt-0.5">{link.description}</p>
+                  )}
+                </div>
+                <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-blue-600 shrink-0 ml-4" />
+              </a>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Calendario escolar ──────────────────────────────────────────────────── */
+function ParentCalendarioPanel({ calendar }) {
+  if (!calendar) {
+    return (
+      <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+        Calendario escolar pendiente de configuración.
+      </div>
+    );
+  }
+
+  const fmt = (d) => {
+    if (!d) return 'N/A';
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  };
+
+  const periods = [
+    { label: 'Q1 — Primer Trimestre',   start: calendar.q1_start_date, end: calendar.q1_end_date },
+    { label: 'Q2 — Segundo Trimestre',  start: calendar.q2_start_date, end: calendar.q2_end_date },
+    { label: 'Q3 — Tercer Trimestre',   start: calendar.q3_start_date, end: calendar.q3_end_date },
+  ].filter(p => p.start || p.end);
+
+  return (
+    <div className="space-y-6">
+      {/* Resumen del año */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <CalendarDays className="w-5 h-5 text-blue-600" />
+          <h3 className="font-black text-slate-800 text-lg">{calendar.academic_year}</h3>
+          <span className="ml-auto px-2.5 py-0.5 bg-green-100 text-green-700 text-xs font-black rounded-full border border-green-200">
+            Activo
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-0.5">Inicio del año</p>
+            <p className="font-bold text-slate-800">{fmt(calendar.start_date)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-0.5">Fin del año</p>
+            <p className="font-bold text-slate-800">{fmt(calendar.end_date)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Trimestres */}
+      {periods.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {periods.map(p => (
+            <div key={p.label} className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="font-black text-slate-700 text-sm mb-3">{p.label}</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 text-xs uppercase font-bold tracking-wide">Inicio</span>
+                  <span className="font-bold text-slate-800">{fmt(p.start)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500 text-xs uppercase font-bold tracking-wide">Fin</span>
+                  <span className="font-bold text-slate-800">{fmt(p.end)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Notas / recesos */}
+      {calendar.break_notes && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <p className="text-xs font-black text-amber-700 uppercase tracking-wider mb-1">Notas / Recesos</p>
+          <p className="text-sm text-amber-800 whitespace-pre-line">{calendar.break_notes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ParentBoletinesPanel({ children }) {
   const [transcripts, setTranscripts] = React.useState([]);
@@ -300,6 +443,8 @@ export default function ParentDashboard() {
   const [children, setChildren] = useState([]);
   const [hubs, setHubs] = useState([]);
   const [pendingLink, setPendingLink] = useState(false);
+  const [operationalLinks, setOperationalLinks] = useState([]);
+  const [schoolCalendar, setSchoolCalendar] = useState(null);
 
   const [studentSubjects, setStudentSubjects] = useState([]);
   const [paymentStatus, setPaymentStatus] = useState([]);
@@ -420,6 +565,33 @@ export default function ParentDashboard() {
       if (familyError) throw familyError;
 
       const studentIds = familyData?.map((fd) => fd.student_id) || [];
+
+      // ── Links operativos y calendario (no fatales; tablas pueden no existir aún) ──
+      const orFilter = studentIds.length > 0
+        ? `student_id.is.null,student_id.in.(${studentIds.join(',')})`
+        : 'student_id.is.null';
+
+      const [linksRes, calRes] = await Promise.all([
+        supabase
+          .from('operational_links')
+          .select('id, title, description, category, url, visible_roles, student_id')
+          .eq('is_active', true)
+          .contains('visible_roles', ['parent'])
+          .or(orFilter)
+          .order('display_order', { ascending: true }),
+        supabase
+          .from('academic_calendars')
+          .select('academic_year, start_date, end_date, q1_start_date, q1_end_date, q2_start_date, q2_end_date, q3_start_date, q3_end_date, break_notes, status')
+          .eq('status', 'active')
+          .maybeSingle(),
+      ]);
+
+      setOperationalLinks(linksRes.error ? [] : (linksRes.data || []));
+      setSchoolCalendar(calRes.error ? null : (calRes.data || null));
+
+      if (linksRes.error) console.warn('[ParentDashboard] operational_links no disponible:', linksRes.error.message);
+      if (calRes.error)   console.warn('[ParentDashboard] academic_calendars no disponible:', calRes.error.message);
+      // ────────────────────────────────────────────────────────────────────────
 
       if (studentIds.length === 0) {
         setPendingLink(true);
@@ -606,12 +778,42 @@ export default function ParentDashboard() {
             >
               📁 Documentos
             </button>
+            <button
+              onClick={() => setActiveTab('recursos')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'recursos'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Link2 className="w-4 h-4" /> Recursos
+            </button>
+            <button
+              onClick={() => setActiveTab('alertas')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'alertas'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Bell className="w-4 h-4" /> Alertas
+            </button>
+            <button
+              onClick={() => setActiveTab('calendario')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'calendario'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" /> Calendario
+            </button>
           </div>
         </div>
       </div>
 
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {children.length === 0 ? (
+        {children.length === 0 && !['recursos', 'alertas', 'calendario'].includes(activeTab) ? (
           profile?.role === ROLES.PARENT ? (
             <div className="bg-white p-12 rounded-xl border border-slate-200 text-center shadow-sm max-w-2xl mx-auto">
               <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -634,6 +836,13 @@ export default function ParentDashboard() {
               </p>
             </div>
           )
+        ) : children.length === 0 ? (
+          /* Secciones globales accesibles aunque no haya hijos vinculados aún */
+          <div className="space-y-4">
+            {activeTab === 'recursos' && <ParentRecursosPanel links={operationalLinks} />}
+            {activeTab === 'alertas' && <SisAlertsDashboard compact={false} />}
+            {activeTab === 'calendario' && <ParentCalendarioPanel calendar={schoolCalendar} />}
+          </div>
         ) : (
           <>
             {activeTab === 'children' && (
@@ -889,6 +1098,39 @@ export default function ParentDashboard() {
 
             {activeTab === 'documentos' && (
               <ParentDocumentosPanel children={children} />
+            )}
+
+            {activeTab === 'recursos' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Link2 className="w-5 h-5 text-blue-600" />
+                  <h2 className="font-black text-xl text-slate-800">Recursos y accesos</h2>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                  Links y plataformas habilitados por administración para tu familia.
+                </p>
+                <ParentRecursosPanel links={operationalLinks} />
+              </div>
+            )}
+
+            {activeTab === 'alertas' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bell className="w-5 h-5 text-amber-500" />
+                  <h2 className="font-black text-xl text-slate-800">Alertas del portal</h2>
+                </div>
+                <SisAlertsDashboard compact={false} />
+              </div>
+            )}
+
+            {activeTab === 'calendario' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CalendarDays className="w-5 h-5 text-blue-600" />
+                  <h2 className="font-black text-xl text-slate-800">Calendario escolar</h2>
+                </div>
+                <ParentCalendarioPanel calendar={schoolCalendar} />
+              </div>
             )}
           </>
         )}
