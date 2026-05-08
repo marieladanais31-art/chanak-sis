@@ -1,15 +1,26 @@
 -- ══════════════════════════════════════════════════════════════════════════════
 -- Fase Cierre Operacional: enlaces, expediente digital, ajustes institucionales
 -- Ejecutar en Supabase SQL Editor. 100 % idempotente.
--- No borra datos. No modifica RLS existente.
+-- No borra datos. No modifica RLS de tablas existentes.
+-- No toca pagos, Stripe, DNS, SMTP ni autenticación.
 -- ══════════════════════════════════════════════════════════════════════════════
+--
+-- FUNCIONES HELPER REQUERIDAS (ya existen en la DB desde migraciones anteriores):
+--   public.get_current_user_role()   — rol del usuario autenticado
+--   public.is_tutor_of(uuid)         — verifica students.tutor_id = auth.uid()
+--   public.is_parent_of(uuid)        — verifica family_students.family_id
+--
+-- NOTA: public.is_coordinator_of(uuid) NO existe. La política de coordinator
+--   se limita a enlaces globales (student_id IS NULL) por diseño seguro.
+-- ══════════════════════════════════════════════════════════════════════════════
+
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- BLOQUE 1: Columnas en students (expediente digital)
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ALTER TABLE public.students
-  ADD COLUMN IF NOT EXISTS drive_folder_url         text,
+  ADD COLUMN IF NOT EXISTS drive_folder_url          text,
   ADD COLUMN IF NOT EXISTS expediente_visible_parent boolean NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS expediente_visible_tutor  boolean NOT NULL DEFAULT false;
 
@@ -23,10 +34,10 @@ CREATE INDEX IF NOT EXISTS idx_students_drive_folder
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ALTER TABLE public.institutional_settings
-  ADD COLUMN IF NOT EXISTS msa_status       text,
+  ADD COLUMN IF NOT EXISTS msa_status        text,
   ADD COLUMN IF NOT EXISTS active_school_year text,
-  ADD COLUMN IF NOT EXISTS primary_language  text DEFAULT 'es',
-  ADD COLUMN IF NOT EXISTS document_footer   text;
+  ADD COLUMN IF NOT EXISTS primary_language   text DEFAULT 'es',
+  ADD COLUMN IF NOT EXISTS document_footer    text;
 
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -58,7 +69,12 @@ CREATE INDEX IF NOT EXISTS idx_operational_links_active
 CREATE INDEX IF NOT EXISTS idx_operational_links_category
   ON public.operational_links (category);
 
--- CHECK constraint para categorías válidas
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 4: CHECK constraint para categorías válidas
+-- Patrón: DROP con EXCEPTION (idempotente) → ADD
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 DO $$ BEGIN
   ALTER TABLE public.operational_links
     DROP CONSTRAINT IF EXISTS operational_links_category_check;
@@ -67,10 +83,15 @@ END $$;
 
 ALTER TABLE public.operational_links
   ADD CONSTRAINT operational_links_category_check
-  CHECK (category IN ('LMS','Drive','ACEConnect','Expediente','Interno','Otro'));
+  CHECK (category IN ('LMS', 'Drive', 'ACEConnect', 'Expediente', 'Interno', 'Otro'));
 
--- Trigger para updated_at automático
-CREATE OR REPLACE FUNCTION public.set_updated_at()
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 5: Función y trigger updated_at ESPECÍFICOS para operational_links
+-- Se usa un nombre único para no sobrescribir ninguna función genérica existente.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE OR REPLACE FUNCTION public.set_operational_links_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
   NEW.updated_at = NOW();
@@ -78,42 +99,58 @@ BEGIN
 END;
 $$;
 
+-- Trigger idempotente: crea solo si no existe
 DO $$ BEGIN
   CREATE TRIGGER trg_operational_links_updated_at
     BEFORE UPDATE ON public.operational_links
-    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION public.set_operational_links_updated_at();
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
--- BLOQUE 4: RLS para operational_links
+-- BLOQUE 6: RLS para operational_links
+--
+-- Reglas de diseño:
+--   admin / super_admin → acceso total (CRUD)
+--   coordinator         → SELECT solo enlaces GLOBALES (student_id IS NULL)
+--                         Razón: is_coordinator_of() no existe; no se inventa.
+--   tutor / mentor      → SELECT enlaces globales + enlaces de sus estudiantes
+--                         (verificado con is_tutor_of que ya existe)
+--   parent / family     → SELECT enlaces globales + enlaces de sus hijos
+--                         (verificado con is_parent_of que ya existe)
+--   student             → SELECT solo enlaces globales marcados para estudiantes
+--
+-- DROP POLICY IF EXISTS + CREATE POLICY = patrón idempotente estándar.
+-- No toca políticas de ninguna otra tabla.
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ALTER TABLE public.operational_links ENABLE ROW LEVEL SECURITY;
 
--- Admin / super_admin: acceso total
-DROP POLICY IF EXISTS "op_links_admin_all"  ON public.operational_links;
+-- ── Admin / super_admin: acceso total ────────────────────────────────────────
+DROP POLICY IF EXISTS "op_links_admin_all" ON public.operational_links;
 CREATE POLICY "op_links_admin_all"
   ON public.operational_links
   FOR ALL
   TO authenticated
-  USING (public.get_current_user_role() IN ('admin', 'super_admin'))
+  USING     (public.get_current_user_role() IN ('admin', 'super_admin'))
   WITH CHECK (public.get_current_user_role() IN ('admin', 'super_admin'));
 
--- Coordinator: lectura de enlaces globales y de sus estudiantes
+-- ── Coordinator: solo enlaces globales (student_id IS NULL) ──────────────────
+-- is_coordinator_of() no existe en esta DB → restricción conservadora.
 DROP POLICY IF EXISTS "op_links_coordinator_read" ON public.operational_links;
 CREATE POLICY "op_links_coordinator_read"
   ON public.operational_links
   FOR SELECT
   TO authenticated
   USING (
-    is_active = true
+    is_active    = true
+    AND student_id IS NULL
     AND public.get_current_user_role() = 'coordinator'
     AND 'coordinator' = ANY(visible_roles)
   );
 
--- Tutor: lectura de enlaces globales o de estudiantes asignados
+-- ── Tutor / mentor: enlaces globales + enlaces de sus estudiantes asignados ──
 DROP POLICY IF EXISTS "op_links_tutor_read" ON public.operational_links;
 CREATE POLICY "op_links_tutor_read"
   ON public.operational_links
@@ -129,7 +166,7 @@ CREATE POLICY "op_links_tutor_read"
     )
   );
 
--- Parent: lectura de enlaces globales o de sus hijos
+-- ── Parent / family: enlaces globales + enlaces de sus hijos ─────────────────
 DROP POLICY IF EXISTS "op_links_parent_read" ON public.operational_links;
 CREATE POLICY "op_links_parent_read"
   ON public.operational_links
@@ -145,30 +182,36 @@ CREATE POLICY "op_links_parent_read"
     )
   );
 
--- Student: lectura de enlaces globales para estudiantes
+-- ── Student: solo enlaces globales marcados para estudiantes ─────────────────
 DROP POLICY IF EXISTS "op_links_student_read" ON public.operational_links;
 CREATE POLICY "op_links_student_read"
   ON public.operational_links
   FOR SELECT
   TO authenticated
   USING (
-    is_active = true
+    is_active  = true
+    AND student_id IS NULL
     AND public.get_current_user_role() = 'student'
     AND 'student' = ANY(visible_roles)
-    AND student_id IS NULL
   );
 
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
--- VERIFICACIÓN FINAL (solo lectura)
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- VERIFICACIÓN FINAL (solo lectura, no modifica nada)
+-- Debe devolver las columnas nuevas en las tres tablas.
+-- ━━━━━━:━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 SELECT * FROM (
+
   SELECT 'students' AS tabla, column_name, data_type, is_nullable
   FROM information_schema.columns
   WHERE table_schema = 'public'
     AND table_name   = 'students'
-    AND column_name  IN ('drive_folder_url','expediente_visible_parent','expediente_visible_tutor')
+    AND column_name  IN (
+      'drive_folder_url',
+      'expediente_visible_parent',
+      'expediente_visible_tutor'
+    )
 
   UNION ALL
 
@@ -176,7 +219,12 @@ SELECT * FROM (
   FROM information_schema.columns
   WHERE table_schema = 'public'
     AND table_name   = 'institutional_settings'
-    AND column_name  IN ('msa_status','active_school_year','primary_language','document_footer')
+    AND column_name  IN (
+      'msa_status',
+      'active_school_year',
+      'primary_language',
+      'document_footer'
+    )
 
   UNION ALL
 
@@ -184,5 +232,6 @@ SELECT * FROM (
   FROM information_schema.columns
   WHERE table_schema = 'public'
     AND table_name   = 'operational_links'
+
 ) q
 ORDER BY tabla, column_name;
