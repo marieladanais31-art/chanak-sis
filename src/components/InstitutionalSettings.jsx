@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Loader2, Building2, User, FileText, AlertCircle, Globe, Image as ImageIcon } from 'lucide-react';
+import { Save, Loader2, Building2, User, FileText, AlertCircle, Globe, Image as ImageIcon, Award, CalendarDays } from 'lucide-react';
+
+const MSA_STATUS_OPTIONS = [
+  { value: '',                          label: '— Sin estado —' },
+  { value: 'candidate',                 label: 'MSA Candidacy (Candidate)' },
+  { value: 'accreditation_in_progress', label: 'Accreditation In Progress' },
+  { value: 'accredited',                label: 'MSA Accredited' },
+  { value: 'not_applicable',            label: 'No aplica' },
+];
+
+const LANGUAGE_OPTIONS = [
+  { value: 'es', label: 'Español' },
+  { value: 'en', label: 'English' },
+  { value: 'es_en', label: 'Español / English (bilingüe)' },
+];
 
 const INPUT = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 text-sm bg-white';
 const LABEL = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider';
@@ -51,6 +65,10 @@ export default function InstitutionalSettings() {
     legal_text_es: 'Este documento es emitido por Chanak International Academy, institución registrada ante el Florida Department of Education (FLDOE #134620).',
     legal_text_en: 'This document is issued by Chanak International Academy, registered with the Florida Department of Education (FLDOE #134620).',
     apostille_text: '',
+    msa_status: '',
+    active_school_year: '2025-2026',
+    primary_language: 'es',
+    document_footer: '',
   });
 
   useEffect(() => { loadSettings(); }, []);
@@ -193,6 +211,36 @@ export default function InstitutionalSettings() {
         </div>
       </Section>
 
+      <Section icon={Award} title="Acreditación MSA y Año Escolar Activo">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Estado de Acreditación MSA-CESS">
+            <select value={form.msa_status} onChange={set('msa_status')} className={INPUT}>
+              {MSA_STATUS_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">Aparece en documentos oficiales y expedientes.</p>
+          </Field>
+          <Field label="Año Escolar Activo">
+            <input
+              type="text"
+              value={form.active_school_year}
+              onChange={set('active_school_year')}
+              className={INPUT}
+              placeholder="2025-2026"
+            />
+            <p className="text-xs text-slate-500 mt-1">Usado como año por defecto en nuevos documentos.</p>
+          </Field>
+          <Field label="Idioma principal de documentos">
+            <select value={form.primary_language} onChange={set('primary_language')} className={INPUT}>
+              {LANGUAGE_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </Section>
+
       <Section icon={Globe} title="Textos Legales para Documentos">
         <Field label="Texto Legal (Español)">
           <textarea rows={3} value={form.legal_text_es} onChange={set('legal_text_es')} className={INPUT + ' resize-none'} />
@@ -202,6 +250,16 @@ export default function InstitutionalSettings() {
         </Field>
         <Field label="Texto para Apostilla / Validación Internacional (opcional)">
           <textarea rows={3} value={form.apostille_text} onChange={set('apostille_text')} className={INPUT + ' resize-none'} placeholder="Texto adicional para trámites de apostilla..." />
+        </Field>
+        <Field label="Pie de página / Footer para todos los documentos (opcional)">
+          <textarea
+            rows={2}
+            value={form.document_footer}
+            onChange={set('document_footer')}
+            className={INPUT + ' resize-none'}
+            placeholder="p. ej.: Documento emitido bajo supervisión de Chanak Foundation 501(c)(3) · FLDOE #134620"
+          />
+          <p className="text-xs text-slate-500 mt-1">Aparece al pie de boletines, contratos y cartas.</p>
         </Field>
       </Section>
 

@@ -17,6 +17,8 @@ import AdminCartas from '@/pages/AdminCartas';
 import AdminAsignaciones from '@/pages/AdminAsignaciones';
 import InstitutionalSettings from '@/components/InstitutionalSettings';
 import AcademicCalendarManager from '@/components/AcademicCalendarManager';
+import SisAlertsDashboard from '@/components/SisAlertsDashboard';
+import AdminOperationalLinks from '@/components/AdminOperationalLinks';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, Users, Building2, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -81,6 +83,8 @@ export default function AdminPanel() {
       case 'config-institucional': return 'Configuración Institucional';
       case 'seguridad': return 'Seguridad y Accesos';
       case 'settings': return 'Configuración';
+      case 'alertas': return 'Alertas del Sistema';
+      case 'enlaces-operativos': return 'Recursos y Links Operativos';
       default: return 'Panel de Administración';
     }
   };
@@ -203,6 +207,8 @@ export default function AdminPanel() {
       case 'config-institucional': return <InstitutionalSettings />;
       case 'seguridad': return <AdminSeguridad />;
       case 'settings': return <AdminConfiguracion />;
+      case 'alertas': return <SisAlertsDashboard />;
+      case 'enlaces-operativos': return <AdminOperationalLinks />;
       default:
         return renderDashboard();
     }
