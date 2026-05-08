@@ -46,7 +46,8 @@ const AppContent = () => {
       <Route path="/tutor/*" element={<ProtectedRoute><TutorDashboard /></ProtectedRoute>} />
       <Route path="/student/*" element={<ProtectedRoute><StudentDashboard /></ProtectedRoute>} />
       
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Catch-all: cualquier ruta desconocida va directo al login */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 };
