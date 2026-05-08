@@ -201,13 +201,17 @@ BEGIN
      AND submission_status  IN ('submitted', 'revision_requested');
 
   -- Actualizar la materia
+  -- approval_status refleja la última acción del revisor para trazabilidad directa
   UPDATE public.student_subjects
      SET grade_submission_status = p_action,
+         approval_status         = p_action,
          grade_reviewed_by       = auth.uid(),
          grade_reviewed_at       = NOW(),
          grade_review_comment    = p_comment,
-         -- Si se aprueba, registrar también en approved_by_user_id para trazabilidad
-         approved_by_user_id     = CASE WHEN p_action = 'approved' THEN auth.uid() ELSE approved_by_user_id END
+         approved_by_user_id     = CASE
+                                     WHEN p_action = 'approved' THEN auth.uid()
+                                     ELSE approved_by_user_id
+                                   END
    WHERE id = p_student_subject_id;
 END;
 $$;
@@ -320,34 +324,36 @@ $$;
 -- FIN — Verificación rápida (solo lectura, no modifica nada)
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-SELECT
-  'student_grade_entries' AS tabla,
-  column_name,
-  data_type,
-  is_nullable
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND table_name   = 'student_grade_entries'
-  AND column_name  IN (
-    'submission_status','submitted_by','submitted_at',
-    'reviewed_by','reviewed_at','review_comment',
-    'entered_by','entered_by_role'
-  )
-ORDER BY column_name
+SELECT *
+FROM (
+  SELECT
+    'student_grade_entries' AS tabla,
+    column_name,
+    data_type,
+    is_nullable
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name   = 'student_grade_entries'
+    AND column_name  IN (
+      'submission_status','submitted_by','submitted_at',
+      'reviewed_by','reviewed_at','review_comment',
+      'entered_by','entered_by_role'
+    )
 
-UNION ALL
+  UNION ALL
 
-SELECT
-  'student_subjects' AS tabla,
-  column_name,
-  data_type,
-  is_nullable
-FROM information_schema.columns
-WHERE table_schema = 'public'
-  AND table_name   = 'student_subjects'
-  AND column_name  IN (
-    'grade_submission_status','grade_submitted_at','grade_reviewed_at',
-    'grade_review_comment','grade_submitted_by','grade_reviewed_by',
-    'approval_status','approved_by_user_id','submitted_at'
-  )
-ORDER BY column_name;
+  SELECT
+    'student_subjects' AS tabla,
+    column_name,
+    data_type,
+    is_nullable
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name   = 'student_subjects'
+    AND column_name  IN (
+      'grade_submission_status','grade_submitted_at','grade_reviewed_at',
+      'grade_review_comment','grade_submitted_by','grade_reviewed_by',
+      'approval_status','approved_by_user_id','submitted_at'
+    )
+) q
+ORDER BY tabla, column_name;
