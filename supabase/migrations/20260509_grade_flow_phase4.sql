@@ -1,49 +1,81 @@
 -- ══════════════════════════════════════════════════════════════════════════════
--- Phase 4: Flujo académico-documental — ajustes de esquema y RPCs
+-- Phase 4: Flujo académico-documental — esquema completamente idempotente
 -- ══════════════════════════════════════════════════════════════════════════════
--- Cambios:
---  1. Añadir 'revision_requested' al CHECK de grade_submission_status
---     (tanto en student_subjects como en student_grade_entries.submission_status)
---  2. Añadir entered_by + entered_by_role a student_grade_entries
---  3. Actualizar review_subject_grades para aceptar 'revision_requested'
---  4. Actualizar submit_subject_grades para capturar entered_by_role
+-- Ejecutar en Supabase SQL Editor.
+-- Seguro para ejecutar aunque algunas columnas ya existan o no existan.
+-- No borra datos. No modifica RLS.
+-- Orden de operaciones:
+--   1. ADD COLUMN IF NOT EXISTS (todas las columnas necesarias)
+--   2. DROP + ADD CONSTRAINT (CHECK actualizado con revision_requested)
+--   3. CREATE OR REPLACE FUNCTION (RPCs actualizados)
 -- ══════════════════════════════════════════════════════════════════════════════
 
--- ─── 1. student_subjects.grade_submission_status ─────────────────────────────
--- PostgreSQL no permite ALTER CONSTRAINT; hay que DROP + ADD.
--- La constraint fue creada con ADD COLUMN IF NOT EXISTS ... CHECK (...) en fase2,
--- por lo que su nombre auto-generado es: student_subjects_grade_submission_status_check
--- (si hay conflicto, Postgres añade sufijos _check1, etc.)
 
-DO $$
-BEGIN
-  -- Intentar borrar todas las variaciones posibles del nombre
-  ALTER TABLE public.student_subjects
-    DROP CONSTRAINT IF EXISTS student_subjects_grade_submission_status_check;
-  ALTER TABLE public.student_subjects
-    DROP CONSTRAINT IF EXISTS "student_subjects_grade_submission_status_check1";
-  ALTER TABLE public.student_subjects
-    DROP CONSTRAINT IF EXISTS student_subjects_grade_submission_status_check2;
-EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'No se pudo borrar constraint (ya no existe): %', SQLERRM;
-END $$;
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 1: Columnas en student_grade_entries
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ALTER TABLE public.student_grade_entries
+  ADD COLUMN IF NOT EXISTS submission_status  text        NOT NULL DEFAULT 'draft',
+  ADD COLUMN IF NOT EXISTS submitted_by       uuid        REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS submitted_at       timestamptz,
+  ADD COLUMN IF NOT EXISTS reviewed_by        uuid        REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS reviewed_at        timestamptz,
+  ADD COLUMN IF NOT EXISTS review_comment     text,
+  ADD COLUMN IF NOT EXISTS entered_by         uuid        REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS entered_by_role    text;
+
+CREATE INDEX IF NOT EXISTS idx_sge_submission_status
+  ON public.student_grade_entries (submission_status);
+
+CREATE INDEX IF NOT EXISTS idx_sge_entered_by_role
+  ON public.student_grade_entries (entered_by_role);
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 2: Columnas en student_subjects
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ALTER TABLE public.student_subjects
-  ADD CONSTRAINT student_subjects_grade_submission_status_check
-  CHECK (grade_submission_status IN (
-    'draft', 'submitted', 'approved', 'rejected', 'revision_requested'
-  ));
+  ADD COLUMN IF NOT EXISTS grade_submission_status  text        DEFAULT 'draft',
+  ADD COLUMN IF NOT EXISTS grade_submitted_at       timestamptz,
+  ADD COLUMN IF NOT EXISTS grade_reviewed_at        timestamptz,
+  ADD COLUMN IF NOT EXISTS grade_review_comment     text,
+  ADD COLUMN IF NOT EXISTS grade_submitted_by       uuid        REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS grade_reviewed_by        uuid        REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS approval_status          text,
+  ADD COLUMN IF NOT EXISTS approved_by_user_id      uuid        REFERENCES auth.users(id),
+  ADD COLUMN IF NOT EXISTS submitted_at             timestamptz;
 
--- ─── 2. student_grade_entries.submission_status ───────────────────────────────
+-- Rellenar NULL en grade_submission_status para filas pre-existentes
+UPDATE public.student_subjects
+  SET grade_submission_status = 'draft'
+  WHERE grade_submission_status IS NULL;
 
-DO $$
-BEGIN
+CREATE INDEX IF NOT EXISTS idx_student_subjects_grade_status
+  ON public.student_subjects (grade_submission_status);
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 3: CHECK constraints actualizados
+-- Primero eliminar TODAS las variaciones de nombre posibles, luego crear una.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+-- ── student_grade_entries.submission_status ───────────────────────────────────
+DO $$ BEGIN
   ALTER TABLE public.student_grade_entries
     DROP CONSTRAINT IF EXISTS student_grade_entries_submission_status_check;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
   ALTER TABLE public.student_grade_entries
     DROP CONSTRAINT IF EXISTS "student_grade_entries_submission_status_check1";
-EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'No se pudo borrar constraint (ya no existe): %', SQLERRM;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE public.student_grade_entries
+    DROP CONSTRAINT IF EXISTS "student_grade_entries_submission_status_check2";
+EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 ALTER TABLE public.student_grade_entries
@@ -52,22 +84,38 @@ ALTER TABLE public.student_grade_entries
     'draft', 'submitted', 'approved', 'rejected', 'revision_requested'
   ));
 
--- ─── 3. Nuevas columnas en student_grade_entries ──────────────────────────────
--- entered_by:      auth.uid() del usuario que creó la entrada (padre, tutor, admin)
--- entered_by_role: rol textual en el momento de la creación ('parent', 'tutor', etc.)
+-- ── student_subjects.grade_submission_status ──────────────────────────────────
+DO $$ BEGIN
+  ALTER TABLE public.student_subjects
+    DROP CONSTRAINT IF EXISTS student_subjects_grade_submission_status_check;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE public.student_subjects
+    DROP CONSTRAINT IF EXISTS "student_subjects_grade_submission_status_check1";
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE public.student_subjects
+    DROP CONSTRAINT IF EXISTS "student_subjects_grade_submission_status_check2";
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
-ALTER TABLE public.student_grade_entries
-  ADD COLUMN IF NOT EXISTS entered_by      uuid REFERENCES auth.users(id),
-  ADD COLUMN IF NOT EXISTS entered_by_role text;
+ALTER TABLE public.student_subjects
+  ADD CONSTRAINT student_subjects_grade_submission_status_check
+  CHECK (grade_submission_status IN (
+    'draft', 'submitted', 'approved', 'rejected', 'revision_requested'
+  ));
 
-CREATE INDEX IF NOT EXISTS idx_sge_entered_by_role
-  ON public.student_grade_entries (entered_by_role);
 
--- ─── 4. RPC: submit_subject_grades (actualizado) ─────────────────────────────
--- Novedad: Ahora también actualiza entered_by / entered_by_role en las entradas
--- que aún no tienen ese dato (retrocompatible).
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 4: RPC submit_subject_grades
+-- Envía notas a revisión. Rellena entered_by / entered_by_role si faltaba.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CREATE OR REPLACE FUNCTION public.submit_subject_grades(p_student_subject_id uuid)
+CREATE OR REPLACE FUNCTION public.submit_subject_grades(
+  p_student_subject_id uuid
+)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -79,13 +127,14 @@ BEGIN
   v_role := public.get_current_user_role();
 
   SELECT student_id INTO v_student_id
-  FROM public.student_subjects
-  WHERE id = p_student_subject_id;
+    FROM public.student_subjects
+   WHERE id = p_student_subject_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Materia no encontrada.';
   END IF;
 
+  -- Verificar permisos
   IF v_role = 'parent' AND NOT public.is_parent_of(v_student_id) THEN
     RAISE EXCEPTION 'Sin permisos para enviar notas de este estudiante.';
   END IF;
@@ -94,32 +143,31 @@ BEGIN
     RAISE EXCEPTION 'Sin permisos para enviar notas de este estudiante.';
   END IF;
 
-  -- Marcar entradas draft como submitted, rellenar auditoría si faltaba
+  -- Marcar entradas draft → submitted y rellenar auditoría
   UPDATE public.student_grade_entries
-  SET
-    submission_status = 'submitted',
-    submitted_by      = auth.uid(),
-    submitted_at      = NOW(),
-    entered_by        = COALESCE(entered_by, auth.uid()),
-    entered_by_role   = COALESCE(entered_by_role, v_role)
-  WHERE student_subject_id = p_student_subject_id
-    AND submission_status  = 'draft';
+     SET submission_status = 'submitted',
+         submitted_by      = auth.uid(),
+         submitted_at      = NOW(),
+         entered_by        = COALESCE(entered_by,      auth.uid()),
+         entered_by_role   = COALESCE(entered_by_role, v_role)
+   WHERE student_subject_id = p_student_subject_id
+     AND submission_status  = 'draft';
 
   -- Actualizar estado en la materia
   UPDATE public.student_subjects
-  SET
-    grade_submission_status = 'submitted',
-    grade_submitted_by      = auth.uid(),
-    grade_submitted_at      = NOW(),
-    grade_review_comment    = NULL
-  WHERE id = p_student_subject_id;
+     SET grade_submission_status = 'submitted',
+         grade_submitted_by      = auth.uid(),
+         grade_submitted_at      = NOW(),
+         grade_review_comment    = NULL
+   WHERE id = p_student_subject_id;
 END;
 $$;
 
--- ─── 5. RPC: review_subject_grades (actualizado) ─────────────────────────────
--- Novedad: acepta 'revision_requested' como acción válida (corrección solicitada
--- sin rechazo definitivo). Diferente de 'rejected': con revision_requested el
--- padre/tutor puede corregir y reenviar sin que el admin deba "reset" manualmente.
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 5: RPC review_subject_grades
+-- Aprueba / rechaza / solicita corrección.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE OR REPLACE FUNCTION public.review_subject_grades(
   p_student_subject_id uuid,
@@ -143,32 +191,36 @@ BEGIN
     RAISE EXCEPTION 'Acción inválida. Use "approved", "rejected" o "revision_requested".';
   END IF;
 
-  -- Actualizar entradas submitted
+  -- Actualizar entradas (submitted o revision_requested → nueva acción)
   UPDATE public.student_grade_entries
-  SET
-    submission_status = p_action,
-    reviewed_by       = auth.uid(),
-    reviewed_at       = NOW(),
-    review_comment    = p_comment
-  WHERE student_subject_id = p_student_subject_id
-    AND submission_status  IN ('submitted', 'revision_requested');
+     SET submission_status = p_action,
+         reviewed_by       = auth.uid(),
+         reviewed_at       = NOW(),
+         review_comment    = p_comment
+   WHERE student_subject_id = p_student_subject_id
+     AND submission_status  IN ('submitted', 'revision_requested');
 
   -- Actualizar la materia
   UPDATE public.student_subjects
-  SET
-    grade_submission_status = p_action,
-    grade_reviewed_by       = auth.uid(),
-    grade_reviewed_at       = NOW(),
-    grade_review_comment    = p_comment
-  WHERE id = p_student_subject_id;
+     SET grade_submission_status = p_action,
+         grade_reviewed_by       = auth.uid(),
+         grade_reviewed_at       = NOW(),
+         grade_review_comment    = p_comment,
+         -- Si se aprueba, registrar también en approved_by_user_id para trazabilidad
+         approved_by_user_id     = CASE WHEN p_action = 'approved' THEN auth.uid() ELSE approved_by_user_id END
+   WHERE id = p_student_subject_id;
 END;
 $$;
 
--- ─── 6. RPC: reset_subject_grades_to_draft (actualizado) ─────────────────────
--- Ahora también maneja revision_requested → draft.
--- (Sigue siendo necesario para admin que quiera forzar la corrección.)
 
-CREATE OR REPLACE FUNCTION public.reset_subject_grades_to_draft(p_student_subject_id uuid)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 6: RPC reset_subject_grades_to_draft
+-- Fuerza regreso a borrador (solo admin/coordinador).
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE OR REPLACE FUNCTION public.reset_subject_grades_to_draft(
+  p_student_subject_id uuid
+)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -183,32 +235,36 @@ BEGIN
   END IF;
 
   UPDATE public.student_grade_entries
-  SET
-    submission_status = 'draft',
-    submitted_by      = NULL,
-    submitted_at      = NULL,
-    reviewed_by       = NULL,
-    reviewed_at       = NULL,
-    review_comment    = NULL
-  WHERE student_subject_id = p_student_subject_id;
+     SET submission_status = 'draft',
+         submitted_by      = NULL,
+         submitted_at      = NULL,
+         reviewed_by       = NULL,
+         reviewed_at       = NULL,
+         review_comment    = NULL
+   WHERE student_subject_id = p_student_subject_id;
 
   UPDATE public.student_subjects
-  SET
-    grade_submission_status = 'draft',
-    grade_submitted_by      = NULL,
-    grade_submitted_at      = NULL,
-    grade_reviewed_by       = NULL,
-    grade_reviewed_at       = NULL,
-    grade_review_comment    = NULL
-  WHERE id = p_student_subject_id;
+     SET grade_submission_status = 'draft',
+         grade_submitted_by      = NULL,
+         grade_submitted_at      = NULL,
+         grade_reviewed_by       = NULL,
+         grade_reviewed_at       = NULL,
+         grade_review_comment    = NULL,
+         approved_by_user_id     = NULL
+   WHERE id = p_student_subject_id;
 END;
 $$;
 
--- ─── 7. RPC: resubmit_subject_grades ─────────────────────────────────────────
--- Permite al padre/tutor reenviar notas después de una 'revision_requested'.
--- Similar a submit_subject_grades pero acepta el estado revision_requested.
 
-CREATE OR REPLACE FUNCTION public.resubmit_subject_grades(p_student_subject_id uuid)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- BLOQUE 7: RPC resubmit_subject_grades  (NUEVO)
+-- Permite al padre/tutor reenviar tras revision_requested o rejected
+-- sin que el admin deba hacer reset manualmente.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CREATE OR REPLACE FUNCTION public.resubmit_subject_grades(
+  p_student_subject_id uuid
+)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -220,16 +276,17 @@ DECLARE
 BEGIN
   v_role := public.get_current_user_role();
 
-  SELECT student_id, grade_submission_status INTO v_student_id, v_status
-  FROM public.student_subjects
-  WHERE id = p_student_subject_id;
+  SELECT student_id, grade_submission_status
+    INTO v_student_id, v_status
+    FROM public.student_subjects
+   WHERE id = p_student_subject_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Materia no encontrada.';
   END IF;
 
   IF v_status NOT IN ('revision_requested', 'rejected', 'draft') THEN
-    RAISE EXCEPTION 'Las notas no están en estado editable.';
+    RAISE EXCEPTION 'Las notas no están en estado editable (estado actual: %).', v_status;
   END IF;
 
   IF v_role = 'parent' AND NOT public.is_parent_of(v_student_id) THEN
@@ -240,20 +297,57 @@ BEGIN
     RAISE EXCEPTION 'Sin permisos para reenviar notas de este estudiante.';
   END IF;
 
+  -- Marcar entradas editables → submitted
   UPDATE public.student_grade_entries
-  SET
-    submission_status = 'submitted',
-    submitted_by      = auth.uid(),
-    submitted_at      = NOW()
-  WHERE student_subject_id = p_student_subject_id
-    AND submission_status  IN ('draft', 'revision_requested', 'rejected');
+     SET submission_status = 'submitted',
+         submitted_by      = auth.uid(),
+         submitted_at      = NOW()
+   WHERE student_subject_id = p_student_subject_id
+     AND submission_status  IN ('draft', 'revision_requested', 'rejected');
 
+  -- Actualizar la materia
   UPDATE public.student_subjects
-  SET
-    grade_submission_status = 'submitted',
-    grade_submitted_by      = auth.uid(),
-    grade_submitted_at      = NOW(),
-    grade_review_comment    = NULL
-  WHERE id = p_student_subject_id;
+     SET grade_submission_status = 'submitted',
+         grade_submitted_by      = auth.uid(),
+         grade_submitted_at      = NOW(),
+         grade_review_comment    = NULL
+   WHERE id = p_student_subject_id;
 END;
 $$;
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- FIN — Verificación rápida (solo lectura, no modifica nada)
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SELECT
+  'student_grade_entries' AS tabla,
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name   = 'student_grade_entries'
+  AND column_name  IN (
+    'submission_status','submitted_by','submitted_at',
+    'reviewed_by','reviewed_at','review_comment',
+    'entered_by','entered_by_role'
+  )
+ORDER BY column_name
+
+UNION ALL
+
+SELECT
+  'student_subjects' AS tabla,
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name   = 'student_subjects'
+  AND column_name  IN (
+    'grade_submission_status','grade_submitted_at','grade_reviewed_at',
+    'grade_review_comment','grade_submitted_by','grade_reviewed_by',
+    'approval_status','approved_by_user_id','submitted_at'
+  )
+ORDER BY column_name;
