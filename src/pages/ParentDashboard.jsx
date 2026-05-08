@@ -1489,6 +1489,7 @@ export default function ParentDashboard() {
                 <GradeEntriesManager
                   studentSubject={selectedStudentSubjectForEntries}
                   canEdit={true}
+                  enteredByRole={profile?.role || 'parent'}
                   onEntriesChanged={handleEntriesChanged}
                 />
               </div>
