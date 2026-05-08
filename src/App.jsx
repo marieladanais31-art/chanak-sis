@@ -32,19 +32,33 @@ const AppContent = () => {
       {/* Alias legacy por compatibilidad con emails ya enviados */}
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       
-      {/* Root portal redirects based on role */}
+      {/* Root portal: redirige al dashboard según rol */}
       <Route path="/portal/*" element={<ProtectedRoute><RoleBasedRouter /></ProtectedRoute>} />
 
-      {/* Role-specific routes */}
-      <Route path="/admin/*" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
-      <Route path="/admin/pei-management" element={<ProtectedRoute requiredRole={['super_admin', 'admin']}><PeiManagement /></ProtectedRoute>} />
-      
-      <Route path="/coordinator/*" element={<ProtectedRoute><CoordinatorDashboard /></ProtectedRoute>} />
-      <Route path="/coordinator/pei-management" element={<ProtectedRoute requiredRole={['coordinator']}><PeiManagement /></ProtectedRoute>} />
-      
-      <Route path="/parent/*" element={<ProtectedRoute><ParentDashboard /></ProtectedRoute>} />
-      <Route path="/tutor/*" element={<ProtectedRoute><TutorDashboard /></ProtectedRoute>} />
-      <Route path="/student/*" element={<ProtectedRoute><StudentDashboard /></ProtectedRoute>} />
+      {/* ── Rutas de dashboard con requiredRole obligatorio ────────────────────
+          REGLA: cada ruta solo es accesible para su(s) rol(es) válido(s).
+          Aliases legacy (family, mentor, super_admin) incluidos explícitamente.
+          Sin requiredRole → cualquier usuario autenticado podría entrar. ── */}
+      <Route path="/admin/*"
+        element={<ProtectedRoute requiredRole={['super_admin', 'admin']}><AdminPanel /></ProtectedRoute>} />
+      <Route path="/admin/pei-management"
+        element={<ProtectedRoute requiredRole={['super_admin', 'admin']}><PeiManagement /></ProtectedRoute>} />
+
+      <Route path="/coordinator/*"
+        element={<ProtectedRoute requiredRole={['coordinator']}><CoordinatorDashboard /></ProtectedRoute>} />
+      <Route path="/coordinator/pei-management"
+        element={<ProtectedRoute requiredRole={['coordinator']}><PeiManagement /></ProtectedRoute>} />
+
+      {/* parent y family son el mismo dashboard */}
+      <Route path="/parent/*"
+        element={<ProtectedRoute requiredRole={['parent', 'family']}><ParentDashboard /></ProtectedRoute>} />
+
+      {/* tutor y mentor son el mismo dashboard */}
+      <Route path="/tutor/*"
+        element={<ProtectedRoute requiredRole={['tutor', 'mentor']}><TutorDashboard /></ProtectedRoute>} />
+
+      <Route path="/student/*"
+        element={<ProtectedRoute requiredRole={['student']}><StudentDashboard /></ProtectedRoute>} />
       
       {/* Catch-all: cualquier ruta desconocida va directo al login */}
       <Route path="*" element={<Navigate to="/login" replace />} />

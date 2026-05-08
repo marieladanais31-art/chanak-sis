@@ -4,6 +4,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import { Lock, Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
+import { getDashboardPath } from '@/lib/roleUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,41 +34,21 @@ const LoginPage = () => {
     }
 
     if (user && profile) {
-      console.log(`➡️ [LoginPage] Valid session. Role: ${profile.role}. Redirecting...`);
+      const dest = getDashboardPath(profile.role);
+      console.log(`➡️ [LoginPage] Sesión válida. Rol: "${profile.role}" → ${dest}`);
 
+      // Respetar la ruta de origen si existía y el usuario tiene acceso a ella
       const from = location.state?.from?.pathname;
-      if (from && from !== '/login') {
+      if (from && from !== '/login' && from !== '/') {
         navigate(from, { replace: true });
         return;
       }
 
-      switch (profile.role) {
-        case ROLES.SUPER_ADMIN:
-        case ROLES.ADMIN: 
-          navigate('/admin', { replace: true }); 
-          break;
-        case ROLES.COORDINATOR: 
-          navigate('/coordinator', { replace: true }); 
-          break;
-        case ROLES.TUTOR: 
-          navigate('/tutor', { replace: true }); 
-          break;
-        case ROLES.STUDENT: 
-          navigate('/student', { replace: true }); 
-          break;
-        case ROLES.PARENT:
-          navigate('/parent', { replace: true });
-          break;
-        case 'mentor':
-          navigate('/tutor', { replace: true });
-          break;
-        case 'family':
-          navigate('/parent', { replace: true });
-          break;
-        default:
-          console.warn(`⚠️ [LoginPage] Unknown role: ${profile.role}. Redirecting to home.`);
-          navigate('/', { replace: true });
-          break;
+      if (dest === '/login') {
+        // Rol desconocido: no generar bucle
+        console.warn(`⚠️ [LoginPage] Rol no reconocido: "${profile.role}"`);
+      } else {
+        navigate(dest, { replace: true });
       }
     }
   }, [isInitialized, authLoading, isPasswordRecovery, user, profile, navigate, location]);
