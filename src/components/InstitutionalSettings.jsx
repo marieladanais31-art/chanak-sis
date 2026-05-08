@@ -73,46 +73,152 @@ export default function InstitutionalSettings() {
 
   useEffect(() => { loadSettings(); }, []);
 
+  /** Carga la primera (y única) fila de configuración institucional */
   const loadSettings = async () => {
     setLoading(true);
     try {
+      // maybeSingle() nunca lanza error si hay 0 filas — devuelve data=null
       const { data, error } = await supabase
         .from('institutional_settings')
         .select('*')
+        .order('created_at', { ascending: true })
         .limit(1)
-        .single();
-      if (error && error.code !== 'PGRST116') throw error;
+        .maybeSingle();
+
+      if (error) {
+        console.error('[InstitutionalSettings] load error:', error);
+        throw new Error(error.message);
+      }
+
       if (data) {
         setSettingsId(data.id);
-        setForm(prev => ({ ...prev, ...Object.fromEntries(
-          Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
-        )}));
+        // Mezclar solo valores no nulos sobre los defaults del formulario
+        setForm(prev => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && k !== 'id' && k !== 'created_at' && k !== 'updated_at')
+          ),
+        }));
       }
+      // Si data es null: la fila no existe aún — el primer guardado hará INSERT
     } catch (err) {
       console.error('[InstitutionalSettings] load:', err);
-      toast({ title: 'Error', description: 'No se pudo cargar la configuración.', variant: 'destructive' });
+      toast({ title: 'Error al cargar', description: err.message || 'No se pudo cargar la configuración.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
+  /**
+   * Guarda la configuración:
+   * 1. Si ya existe la fila (settingsId) → UPDATE
+   * 2. Si no existe → INSERT
+   * 3. Vuelve a leer la fila después de guardar para refrescar el estado
+   *
+   * NOTA: si el guardado falla con error 42501 (RLS) significa que la DB
+   * tiene is_admin_or_director() usando `id` en lugar de `user_id`.
+   * Ejecutar la migración 20260510_fix_rls_functions_user_id.sql para resolverlo.
+   */
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form, updated_at: new Date().toISOString() };
+      // Campos seguros a enviar (excluir campos internos de DB)
+      const payload = {
+        institution_name:      form.institution_name,
+        legal_name:            form.legal_name     || null,
+        fldoe_registration:    form.fldoe_registration || null,
+        address:               form.address        || null,
+        city:                  form.city           || null,
+        state_province:        form.state_province || null,
+        country:               form.country        || null,
+        phone:                 form.phone          || null,
+        email:                 form.email          || null,
+        website:               form.website        || null,
+        director_name:         form.director_name  || null,
+        director_title:        form.director_title || null,
+        director_signature_url:form.director_signature_url || null,
+        logo_url:              form.logo_url       || null,
+        seal_url:              form.seal_url       || null,
+        legal_text_es:         form.legal_text_es  || null,
+        legal_text_en:         form.legal_text_en  || null,
+        apostille_text:        form.apostille_text || null,
+        msa_status:            form.msa_status     || null,
+        active_school_year:    form.active_school_year || null,
+        primary_language:      form.primary_language || 'es',
+        document_footer:       form.document_footer || null,
+        updated_at:            new Date().toISOString(),
+      };
+
+      let savedId = settingsId;
+
       if (settingsId) {
-        const { error } = await supabase.from('institutional_settings').update(payload).eq('id', settingsId);
-        if (error) throw error;
+        // ── UPDATE ──
+        const { error } = await supabase
+          .from('institutional_settings')
+          .update(payload)
+          .eq('id', settingsId);
+
+        if (error) {
+          console.error('[InstitutionalSettings] UPDATE error:', error);
+          // Mostrar código específico para diagnóstico
+          const hint = error.code === '42501'
+            ? ' (RLS bloqueó el guardado — ejecutar migración fix_rls_functions_user_id)'
+            : ` (código: ${error.code})`;
+          throw new Error(error.message + hint);
+        }
       } else {
-        const { data, error } = await supabase.from('institutional_settings').insert([payload]).select().single();
-        if (error) throw error;
-        setSettingsId(data.id);
+        // ── INSERT (primera vez) ──
+        const { data: inserted, error } = await supabase
+          .from('institutional_settings')
+          .insert([payload])
+          .select('id')
+          .single();
+
+        if (error) {
+          console.error('[InstitutionalSettings] INSERT error:', error);
+          const hint = error.code === '42501'
+            ? ' (RLS bloqueó el INSERT — ejecutar migración fix_rls_functions_user_id)'
+            : ` (código: ${error.code})`;
+          throw new Error(error.message + hint);
+        }
+        savedId = inserted.id;
+        setSettingsId(savedId);
       }
-      toast({ title: 'Configuración guardada', description: 'Los datos institucionales fueron actualizados.' });
+
+      // ── Re-leer la fila para confirmar que quedó guardada en DB ──
+      const { data: reloaded, error: reloadErr } = await supabase
+        .from('institutional_settings')
+        .select('*')
+        .eq('id', savedId)
+        .maybeSingle();
+
+      if (!reloadErr && reloaded) {
+        setForm(prev => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(reloaded).filter(([k, v]) => v !== null && v !== undefined && k !== 'id' && k !== 'created_at' && k !== 'updated_at')
+          ),
+        }));
+        toast({
+          title: '✓ Configuración guardada',
+          description: 'Los datos institucionales fueron actualizados correctamente.',
+        });
+      } else {
+        // Guardó en DB pero no se pudo releer (poco probable)
+        toast({
+          title: '✓ Guardado (sin confirmación de lectura)',
+          description: 'Los datos se enviaron a la DB pero no se pudo confirmar la lectura.',
+        });
+      }
+
     } catch (err) {
-      console.error('[InstitutionalSettings] save:', err);
-      toast({ title: 'Error', description: err.message || 'No se pudo guardar.', variant: 'destructive' });
+      console.error('[InstitutionalSettings] save error:', err);
+      toast({
+        title: 'Error al guardar',
+        description: err.message || 'No se pudo guardar la configuración.',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
