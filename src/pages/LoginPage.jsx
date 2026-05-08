@@ -226,9 +226,12 @@ const LoginPage = () => {
               </Button>
             </form>
           </CardContent>
-          <CardFooter className="flex justify-center border-t border-slate-100 p-6 bg-slate-50 rounded-b-xl">
+          <CardFooter className="flex flex-col items-center gap-1 border-t border-slate-100 p-6 bg-slate-50 rounded-b-xl">
             <p className="text-xs text-slate-500 text-center font-medium">
               Plataforma de acceso restringido para personal autorizado de Chanak Academy.
+            </p>
+            <p className="text-[10px] text-slate-300 font-mono tracking-tight select-none">
+              SIS v4 académico-documental
             </p>
           </CardFooter>
         </Card>
