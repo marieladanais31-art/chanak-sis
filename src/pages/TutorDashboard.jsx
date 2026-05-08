@@ -346,6 +346,7 @@ export default function TutorDashboard() {
                     <GradeEntriesManager
                       studentSubject={selectedStudentSubject}
                       canEdit={true}
+                      enteredByRole={profile?.role || 'tutor'}
                       onEntriesChanged={handleEntriesChanged}
                     />
                   </div>

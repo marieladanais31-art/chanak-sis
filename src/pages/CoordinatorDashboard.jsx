@@ -503,6 +503,7 @@ export default function CoordinatorDashboard() {
                 <GradeEntriesManager
                   studentSubject={selectedStudentSubject}
                   canEdit={true}
+                  enteredByRole={profile?.role || 'coordinator'}
                   onEntriesChanged={handleEntriesChanged}
                 />
               </div>
