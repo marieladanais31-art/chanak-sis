@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import PEIFormFull from '@/components/PEIFormFull';
-import AcademicAlerts from '@/components/AcademicAlerts';
+import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 
 export default function TutorDashboard() {
@@ -35,7 +35,7 @@ export default function TutorDashboard() {
     try {
       const { data, error } = await supabase
         .from('students')
-        .select('id, first_name, last_name, grade_level, us_grade_level')
+        .select('id, first_name, last_name, grade_level, us_grade_level, drive_folder_url, expediente_visible_tutor')
         .eq('tutor_id', profile.id);
       if (error) throw error;
       setStudents(data || []);
@@ -155,7 +155,7 @@ export default function TutorDashboard() {
         {/* Alertas tab */}
         {mainTab === 'alertas' && (
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <AcademicAlerts />
+            <SisAlertsDashboard />
           </div>
         )}
 
@@ -256,6 +256,17 @@ export default function TutorDashboard() {
                       Materias de {selectedStudent.first_name} {selectedStudent.last_name}
                     </h3>
                   </div>
+                  {selectedStudent.drive_folder_url && selectedStudent.expediente_visible_tutor && (
+                    <a
+                      href={selectedStudent.drive_folder_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11H7.83l4.88-4.88c.39-.39.39-1.03 0-1.42-.39-.39-1.02-.39-1.41 0l-6.59 6.59c-.39.39-.39 1.02 0 1.41l6.59 6.59c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41L7.83 13H19c.55 0 1-.45 1-1s-.45-1-1-1z"/></svg>
+                      Expediente en Drive
+                    </a>
+                  )}
                 </div>
 
                 <div className="flex border-b border-slate-200 bg-slate-50 overflow-x-auto">

@@ -8,7 +8,7 @@ import GradeEntriesManager from '@/components/GradeEntriesManager';
 import GradeReviewPanel from '@/components/GradeReviewPanel';
 import PEIFormFull from '@/components/PEIFormFull';
 import TranscriptGenerator from '@/components/TranscriptGenerator';
-import AcademicAlerts from '@/components/AcademicAlerts';
+import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 
 export default function CoordinatorDashboard() {
@@ -237,7 +237,7 @@ export default function CoordinatorDashboard() {
       {/* Alertas tab */}
       {mainTab === 'alertas' && (
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <AcademicAlerts targetRole="coordinator" />
+          <SisAlertsDashboard />
         </div>
       )}
 

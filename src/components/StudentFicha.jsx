@@ -36,6 +36,9 @@ const EMPTY = {
   student_status: 'active', admission_status: 'enrolled',
   admin_notes: '', medical_notes: '', special_educational_needs: '',
   documentary_notes: '', hub_id: '', tutor_id: '',
+  drive_folder_url: '',
+  expediente_visible_parent: false,
+  expediente_visible_tutor: false,
 };
 
 export default function StudentFicha({ studentId, onClose }) {
@@ -113,6 +116,9 @@ export default function StudentFicha({ studentId, onClose }) {
         documentary_notes: s.documentary_notes || '',
         hub_id: s.hub_id || '',
         tutor_id: s.tutor_id || '',
+        drive_folder_url: s.drive_folder_url || '',
+        expediente_visible_parent: s.expediente_visible_parent || false,
+        expediente_visible_tutor: s.expediente_visible_tutor || false,
       });
     }
     setHubs(hubsRes.data || []);
@@ -193,6 +199,9 @@ export default function StudentFicha({ studentId, onClose }) {
         documentary_notes: form.documentary_notes,
         hub_id: form.hub_id || null,
         tutor_id: form.tutor_id || null,
+        drive_folder_url: form.drive_folder_url || null,
+        expediente_visible_parent: form.expediente_visible_parent,
+        expediente_visible_tutor: form.expediente_visible_tutor,
       })
       .eq('id', studentId);
 
@@ -568,6 +577,54 @@ export default function StudentFicha({ studentId, onClose }) {
                 <label className={LABEL}>Notas documentales (documentos recibidos / pendientes)</label>
                 <textarea rows={3} className={INPUT} value={form.documentary_notes} onChange={set('documentary_notes')} />
               </div>
+
+              <hr className="border-slate-200" />
+              <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Expediente Digital (Google Drive)</p>
+              <div>
+                <label className={LABEL}>URL carpeta de Drive del estudiante</label>
+                <input
+                  type="url"
+                  className={INPUT}
+                  value={form.drive_folder_url}
+                  onChange={set('drive_folder_url')}
+                  placeholder="https://drive.google.com/drive/folders/..."
+                />
+                {form.drive_folder_url && (
+                  <a
+                    href={form.drive_folder_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 mt-1.5 text-xs text-blue-600 hover:underline font-medium"
+                  >
+                    Abrir carpeta en Drive ↗
+                  </a>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.expediente_visible_parent}
+                    onChange={e => setForm(prev => ({ ...prev, expediente_visible_parent: e.target.checked }))}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  <span className="text-sm font-bold text-slate-700">
+                    Visible para Padre / Familia
+                  </span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.expediente_visible_tutor}
+                    onChange={e => setForm(prev => ({ ...prev, expediente_visible_tutor: e.target.checked }))}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  <span className="text-sm font-bold text-slate-700">
+                    Visible para Tutor
+                  </span>
+                </label>
+              </div>
+
               <hr className="border-slate-200" />
               <p className="text-xs font-black text-slate-500 uppercase tracking-wider">Salud y Necesidades Educativas</p>
               <div>

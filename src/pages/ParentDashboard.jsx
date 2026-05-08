@@ -435,7 +435,7 @@ export default function ParentDashboard() {
       const [studentsRes, hubsRes] = await Promise.all([
         supabase
           .from('students')
-          .select('id, first_name, last_name, grade_level, us_grade_level, school_stage, modality, academic_year, hub_id, created_at')
+          .select('id, first_name, last_name, grade_level, us_grade_level, school_stage, modality, academic_year, hub_id, created_at, drive_folder_url, expediente_visible_parent')
           .in('id', studentIds)
           .order('last_name', { ascending: true }),
         supabase
@@ -687,6 +687,21 @@ export default function ParentDashboard() {
                           {child.grade_level && child.us_grade_level ? ' · ' : ''}
                           {child.us_grade_level || (!child.grade_level ? 'Sin grado asignado' : '')}
                         </p>
+
+                        {/* Expediente digital */}
+                        {child.drive_folder_url && child.expediente_visible_parent && (
+                          <a
+                            href={child.drive_folder_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold text-blue-700 hover:bg-blue-100 transition-colors mb-3"
+                          >
+                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M19 11H7.83l4.88-4.88c.39-.39.39-1.03 0-1.42-.39-.39-1.02-.39-1.41 0l-6.59 6.59c-.39.39-.39 1.02 0 1.41l6.59 6.59c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41L7.83 13H19c.55 0 1-.45 1-1s-.45-1-1-1z"/>
+                            </svg>
+                            Ver Expediente Digital en Drive ↗
+                          </a>
+                        )}
 
                         <div className="space-y-3">
                           {currentPaceRecord ? (

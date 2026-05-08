@@ -19,7 +19,9 @@ import {
   Building,
   Mail,
   Calendar,
-  CalendarDays
+  CalendarDays,
+  Bell,
+  Link2,
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -103,7 +105,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="estudiantes" icon={GraduationCap} label="Estudiantes" />
             <NavItem section="hubs" icon={Building2} label="Hubs" />
             <NavItem section="academico" icon={BookOpen} label="Académico" />
-            <NavItem section="pagos" icon={CreditCard} label="Pagos" />
+            <NavItem section="alertas" icon={Bell} label="Alertas del Sistema" />
             <NavItem section="pei" icon={FileText} label="PEI" />
             <NavItem section="contratos" icon={FileSignature} label="Contratos" />
             <NavItem section="users" icon={Users} label="Usuarios" />
@@ -112,9 +114,17 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="calendario" icon={CalendarDays} label="Calendario Escolar" />
             <NavItem section="cartas" icon={Mail} label="Cartas" />
             <NavItem section="revision-notas" icon={ClipboardList} label="Revisión de Notas" />
+            <NavItem section="enlaces-operativos" icon={Link2} label="Recursos / Links" />
             <NavItem section="seguridad" icon={Shield} label="Seguridad" />
             <NavItem section="settings" icon={Settings} label="Configuración" />
             <NavItem section="config-institucional" icon={Building} label="Inst. Config." />
+
+            {/* Pagos — módulo deshabilitado temporalmente */}
+            <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-300 cursor-not-allowed mb-1 select-none">
+              <CreditCard className="w-5 h-5 text-slate-200" />
+              <span>Pagos</span>
+              <span className="ml-auto text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-md">Próx.</span>
+            </div>
           </>
         )}
       </nav>
