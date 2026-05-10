@@ -468,7 +468,8 @@ export default function ParentDashboard() {
   useEffect(() => {
     if (!profile) return;
 
-    if (profile.role !== ROLES.PARENT) {
+    // Aceptar tanto 'parent' como 'family' — son el mismo dashboard
+    if (!['parent', 'family'].includes(profile.role)) {
       navigate('/login');
       return;
     }
@@ -557,14 +558,50 @@ export default function ParentDashboard() {
     setPendingLink(false);
 
     try {
-      const { data: familyData, error: familyError } = await supabase
-        .from('family_students')
-        .select('student_id')
-        .eq('family_id', profile.id);
+      // ── Relación familia→hijos ────────────────────────────────────────────────
+      // Intento 1: family_id = profile.id (UUID de la fila profiles)
+      // Intento 2: family_id = profile.user_id (auth.uid — perfiles modernos)
+      // Intento 3: parent_id = profile.id o profile.user_id (esquema alternativo)
+      // Esto cubre perfiles legacy donde profiles.id ≠ auth.uid().
+      let studentIds = [];
+      {
+        const primaryId  = profile.id;
+        const secondaryId = profile.user_id;
 
-      if (familyError) throw familyError;
+        const { data: fd1, error: e1 } = await supabase
+          .from('family_students')
+          .select('student_id')
+          .eq('family_id', primaryId);
 
-      const studentIds = familyData?.map((fd) => fd.student_id) || [];
+        if (!e1 && fd1 && fd1.length > 0) {
+          studentIds = fd1.map((r) => r.student_id);
+          console.log('[ParentDashboard] hijos por profile.id:', studentIds.length);
+        } else if (secondaryId && secondaryId !== primaryId) {
+          const { data: fd2, error: e2 } = await supabase
+            .from('family_students')
+            .select('student_id')
+            .eq('family_id', secondaryId);
+
+          if (!e2 && fd2 && fd2.length > 0) {
+            studentIds = fd2.map((r) => r.student_id);
+            console.log('[ParentDashboard] hijos por profile.user_id:', studentIds.length);
+          } else {
+            // Intentar con parent_id si existe la columna
+            const { data: fd3 } = await supabase
+              .from('family_students')
+              .select('student_id')
+              .eq('parent_id', primaryId);
+            if (fd3 && fd3.length > 0) {
+              studentIds = fd3.map((r) => r.student_id);
+              console.log('[ParentDashboard] hijos por parent_id:', studentIds.length);
+            } else {
+              console.warn('[ParentDashboard] No se encontraron hijos. profile.id:', primaryId, 'user_id:', secondaryId);
+              if (e1) console.error('[ParentDashboard] family_students error:', e1.message);
+            }
+          }
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────────
 
       // ── Links operativos y calendario (no fatales; tablas pueden no existir aún) ──
       const orFilter = studentIds.length > 0

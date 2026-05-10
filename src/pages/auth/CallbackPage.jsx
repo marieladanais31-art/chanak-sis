@@ -64,25 +64,44 @@ const CallbackPage = () => {
 
         if (code) {
           // ── Flujo PKCE: intercambiar código ──────────────────────────────
+          // NOTA: detectSessionInUrl:true puede hacer que el SDK consuma el código
+          // antes de que lleguemos aquí. En ese caso exchangeCodeForSession devuelve
+          // un error "invalid grant". Fallback: leer la sesión ya establecida.
           console.log('CALLBACK: exchanging PKCE code...');
+          let sessionData = null;
+          let amrMethods = [];
+
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
           if (error) {
-            console.error('CALLBACK: exchangeCodeForSession failed:', error.message);
-            // Si el flag de recovery ya estaba, igual redirigir a /auth/reset
-            // para que el usuario vea un mensaje de "enlace expirado"
-            if (isEarlyRecovery) {
-              console.log('RECOVERY DETECTED - redirecting to /auth/reset (session error)');
-              sessionStorage.setItem('passwordRecoveryInProgress', 'true');
-              setRedirectPath('/auth/reset');
+            console.warn('CALLBACK: exchangeCodeForSession failed:', error.message,
+              '— checking if SDK already established session...');
+            // El SDK con detectSessionInUrl:true pudo haber consumido el código.
+            // Esperar brevemente y leer la sesión activa.
+            await new Promise((r) => setTimeout(r, 300));
+            const { data: { session: existing } } = await supabase.auth.getSession();
+
+            if (existing?.user) {
+              console.log('CALLBACK: SDK already established session, using it');
+              sessionData = existing;
+              amrMethods = existing.user?.amr?.map?.((a) => a.method) ?? [];
+            } else {
+              // Error genuino — no hay sesión
+              console.error('CALLBACK: No session available after exchange failure');
+              if (isEarlyRecovery) {
+                sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+                setRedirectPath('/auth/reset');
+              } else {
+                setRedirectPath('/login');
+              }
               return;
             }
-            setRedirectPath('/login');
-            return;
+          } else {
+            sessionData = data.session;
+            amrMethods = data.session?.user?.amr?.map?.((a) => a.method) ?? [];
           }
 
           // ── DETECCIÓN DE RECOVERY: nivel 3 — AMR ────────────────────────
-          const amrMethods = data.session?.user?.amr?.map?.((a) => a.method) ?? [];
           const recoveryFromAmr =
             amrMethods.includes('otp') ||
             amrMethods.includes('recovery');
