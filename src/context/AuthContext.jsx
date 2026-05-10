@@ -184,6 +184,9 @@ export const AuthProvider = ({ children }) => {
   const initializeAuth = useCallback(async (currentSession) => {
     setLoading(true);
     setError(null);
+    // Limpiar el perfil anterior de inmediato para evitar estado cruzado durante
+    // el switch de usuario. ProtectedRoute muestra spinner mientras loading=true.
+    setProfile(null);
     try {
       if (!currentSession?.user) {
         setUser(null);
