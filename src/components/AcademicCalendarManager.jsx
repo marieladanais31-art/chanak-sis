@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
 import { CalendarDays, Plus, Save, Loader2, CheckCircle, Archive, FileEdit } from 'lucide-react';
 import { ACADEMIC_YEARS } from '@/lib/academicUtils';
 
@@ -36,6 +37,7 @@ function fmtDate(d) {
 
 export default function AcademicCalendarManager() {
   const { toast } = useToast();
+  const { profile: authProfile } = useAuth();
   const [calendars, setCalendars]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
@@ -96,6 +98,21 @@ export default function AcademicCalendarManager() {
     }
     setSaving(true);
 
+    // ── DIAGNÓSTICO pre-save (mismo patrón que InstitutionalSettings) ─────────
+    try {
+      const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser();
+      console.group('[CalendarManager] Pre-save diagnostics');
+      console.log('auth.uid()      :', authUser?.id ?? '(no session)');
+      console.log('auth error      :', authErr?.message ?? 'none');
+      console.log('profile.id      :', authProfile?.id ?? '(undefined)');
+      console.log('profile.user_id :', authProfile?.user_id ?? '(undefined)');
+      console.log('profile.role    :', authProfile?.role ?? '(undefined)');
+      console.log('editing (id)    :', editing ?? '(INSERT / upsert)');
+      console.log('academic_year   :', form.academic_year);
+      console.groupEnd();
+    } catch (_) { /* no bloquear el guardado si el diagnóstico falla */ }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const payload = {
       academic_year:  form.academic_year,
       start_date:     form.start_date     || null,
@@ -129,9 +146,27 @@ export default function AcademicCalendarManager() {
     setSaving(false);
 
     if (error) {
+      console.error('[CalendarManager] Save error completo:', {
+        code:    error.code,
+        message: error.message,
+        details: error.details,
+        hint:    error.hint,
+      });
+      const parts = [
+        error.message,
+        error.code    ? `Código: ${error.code}` : null,
+        error.details ? `Detalles: ${error.details}` : null,
+        error.hint    ? `Hint: ${error.hint}` : null,
+        error.code === '42501'
+          ? '→ RLS bloqueó el guardado. Verifica que get_current_user_role() y is_admin_or_director() estén actualizadas (migración 20260510_fix_rls_functions_user_id.sql).'
+          : null,
+        error.code === '42P10'
+          ? '→ No existe UNIQUE constraint en academic_year. Verifica migración 20260505_fase5c_academic_calendars.sql.'
+          : null,
+      ].filter(Boolean);
       toast({
         title: 'Error al guardar',
-        description: `${error.message}${error.code ? ` (${error.code})` : ''}`,
+        description: parts.join(' | '),
         variant: 'destructive',
       });
     } else {

@@ -22,6 +22,7 @@ import {
   CalendarDays,
   Bell,
   Link2,
+  Terminal,
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -118,6 +119,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="seguridad" icon={Shield} label="Seguridad" />
             <NavItem section="settings" icon={Settings} label="Configuración" />
             <NavItem section="config-institucional" icon={Building} label="Inst. Config." />
+            <NavItem section="diagnostico" icon={Terminal} label="Diagnóstico SIS" />
 
             {/* Pagos — módulo deshabilitado temporalmente */}
             <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-300 cursor-not-allowed mb-1 select-none">
