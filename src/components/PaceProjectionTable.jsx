@@ -9,8 +9,6 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, Loader2, Pencil, Trash2, X, CheckCircle2, AlertTriangle } from 'lucide-react';
 
-const SUBJECTS_DEFAULT = ['Math', 'English', 'Word Building', 'Science', 'Social Studies'];
-
 const INPUT = 'w-full p-1.5 border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 text-xs';
 
 const PACE_TYPE_LABELS = { advance: 'Avance', leveling: 'Nivelación' };
@@ -23,6 +21,7 @@ const EMPTY_FORM = {
 export default function PaceProjectionTable({ peiId, studentId, schoolYear, canEdit = false }) {
   const { toast } = useToast();
   const [paces, setPaces]         = useState([]);
+  const [subjects, setSubjects]   = useState([]);
   const [loading, setLoading]     = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing]     = useState(null);
@@ -33,19 +32,35 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
     if (!peiId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('pei_pace_projections')
-        .select('*')
-        .eq('pei_id', peiId)
-        .order('subject_name').order('quarter').order('pace_number');
-      if (error) throw error;
-      setPaces(data || []);
+      const [paceRes, subjectRes] = await Promise.all([
+        supabase
+          .from('pei_pace_projections')
+          .select('*')
+          .eq('pei_id', peiId)
+          .order('subject_name').order('quarter').order('pace_number'),
+        supabase
+          .from('student_subjects')
+          .select('id, subject_name, academic_block, grade_level, school_year')
+          .eq('student_id', studentId)
+          .eq('school_year', schoolYear || '')
+          .order('subject_name', { ascending: true }),
+      ]);
+      if (paceRes.error) throw paceRes.error;
+      if (subjectRes.error) throw subjectRes.error;
+      setPaces(paceRes.data || []);
+      const seen = new Set();
+      setSubjects((subjectRes.data || []).filter((subject) => {
+        const name = (subject.subject_name || '').trim();
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      }));
     } catch {
       toast({ title: 'Error', description: 'No se pudieron cargar los PACEs.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [peiId]);
+  }, [peiId, studentId, schoolYear]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -62,8 +77,12 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
       }
     });
 
-    // Asegurar que las materias default aparecen primero
-    const ordered = [...SUBJECTS_DEFAULT.filter(s => map[s]), ...Object.keys(map).filter(s => !SUBJECTS_DEFAULT.includes(s))];
+    subjects.forEach((subject) => {
+      const name = subject.subject_name;
+      if (!map[name]) map[name] = { Q1: [], Q2: [], Q3: [], lev: [] };
+    });
+    const subjectOrder = subjects.map((subject) => subject.subject_name);
+    const ordered = [...subjectOrder, ...Object.keys(map).filter((name) => !subjectOrder.includes(name))];
     return { map, ordered };
   };
 
@@ -345,7 +364,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
                     className={INPUT} placeholder="Math, English, Science…"
                   />
                   <datalist id="subj-list">
-                    {SUBJECTS_DEFAULT.map(s => <option key={s} value={s} />)}
+                    {subjects.map(s => <option key={s.id || s.subject_name} value={s.subject_name} />)}
                   </datalist>
                 </div>
                 <div>

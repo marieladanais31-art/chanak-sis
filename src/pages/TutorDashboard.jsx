@@ -126,7 +126,7 @@ export default function TutorDashboard() {
             studentId={peiModal.studentId}
             studentName={peiModal.studentName}
             peiId={peiModal.peiId}
-            canEdit={false}
+            canEdit={true}
             onClose={() => setPeiModal(null)}
           />
         </div>
@@ -181,14 +181,12 @@ export default function TutorDashboard() {
                         <td className="p-4 font-bold text-slate-800">{s.first_name} {s.last_name}</td>
                         <td className="p-4 text-slate-500 text-xs">{pei ? `${pei.school_year} · ${pei.status}` : 'Sin PEI'}</td>
                         <td className="p-4 text-right">
-                          {pei ? (
-                            <button
-                              onClick={() => setPeiModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, peiId: pei.id })}
-                              className="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg font-bold text-xs"
-                            >
-                              Ver PEI
-                            </button>
-                          ) : <span className="text-slate-400 text-xs">—</span>}
+                          <button
+                            onClick={() => setPeiModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, peiId: pei?.id || null })}
+                            className="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg font-bold text-xs"
+                          >
+                            {pei ? 'Ver / Editar PEI' : 'Crear PEI'}
+                          </button>
                         </td>
                       </tr>
                     );
