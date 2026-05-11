@@ -32,8 +32,8 @@ const T = {
     block:         'Bloque',
     paces:         'PACEs',
     credits:       'Créditos',
-    finalGrade:    'Nota Final',
-    statusLabel:   'Estado',
+    finalGrade:    'Nota /100',
+    statusLabel:   'Estado / Dominio',
     approved:      'Aprobado',
     failed:        'Reprobado',
     pending:       'Pendiente',
@@ -67,8 +67,8 @@ const T = {
     block:         'Block',
     paces:         'PACEs',
     credits:       'Credits',
-    finalGrade:    'Final Grade',
-    statusLabel:   'Status',
+    finalGrade:    'Grade /100',
+    statusLabel:   'Status / Mastery',
     approved:      'Passed',
     failed:        'Failed',
     pending:       'Pending',
@@ -95,6 +95,16 @@ function gradeStatusLabel(status, lang) {
   if (status === 'approved') return t.approved;
   if (status === 'failed')   return t.failed;
   return t.pending;
+}
+
+function masteryLabel(course, lang) {
+  if (course?.mastery_status === 'approved') return lang === 'es' ? 'Dominio aprobado' : 'Mastery approved';
+  if (course?.mastery_status === 'not_mastered') return lang === 'es' ? 'Dominio pendiente' : 'Mastery pending';
+  return gradeStatusLabel(course?.grade_status, lang);
+}
+
+function courseNote(course) {
+  return course?.qualitative_evaluation || course?.evaluation_note || '';
 }
 
 // ── Generador principal ───────────────────────────────────────────────────────
@@ -187,10 +197,10 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
   const courseRows = (courses || []).map(c => [
     c.subject_name || '—',
     c.academic_block || '—',
-    c.pace_numbers || '—',
+    c.pace_numbers || (c.mastery_status ? '0' : '—'),
     c.credits != null ? String(c.credits) : '0.5',
-    c.final_grade != null ? Number(c.final_grade).toFixed(1) : '—',
-    gradeStatusLabel(c.grade_status, lang),
+    c.final_grade != null ? `${Number(c.final_grade).toFixed(2)}/100` : (courseNote(c) || '—'),
+    masteryLabel(c, lang),
   ]);
 
   autoTable(doc, {
@@ -203,9 +213,9 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
     columnStyles: {
       0: { cellWidth: 55 },
       1: { cellWidth: 35 },
-      2: { cellWidth: 22 },
+      2: { cellWidth: 22, halign: 'center' },
       3: { cellWidth: 18, halign: 'center' },
-      4: { cellWidth: 20, halign: 'center' },
+      4: { cellWidth: 25, halign: 'center' },
       5: { cellWidth: 25, halign: 'center' },
     },
     margin: { left: 14, right: 14 },
