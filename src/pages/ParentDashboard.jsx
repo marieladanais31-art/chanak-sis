@@ -252,13 +252,13 @@ function ParentDocumentosPanel({ studentChildren }) {
     const ids = studentChildren.map(c => c.id);
     Promise.all([
       supabase.from('individualized_education_plans')
-        .select('id, student_id, school_year, quarter, status, issue_date')
+        .select('*')
         .in('student_id', ids).eq('status', 'published'),
       supabase.from('enrollment_contracts')
-        .select('id, student_id, school_year, status, program')
+        .select('*')
         .in('student_id', ids).in('status', ['sent', 'signed']),
       supabase.from('enrollment_letters')
-        .select('id, student_id, school_year, status, program, modality')
+        .select('*')
         .in('student_id', ids).eq('status', 'published'),
     ]).then(([peiRes, conRes, letRes]) => {
       setPeis(peiRes.data || []);

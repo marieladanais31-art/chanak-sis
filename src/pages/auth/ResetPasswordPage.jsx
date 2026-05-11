@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { KeyRound, Loader2, Eye, EyeOff, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 
@@ -32,6 +32,7 @@ export default function ResetPasswordPage() {
   const [formError,       setFormError]       = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const sessionCheckDone = useRef(false);
 
@@ -52,34 +53,52 @@ export default function ResetPasswordPage() {
       }
     });
 
-    // 2. Verificar si la sesión ya está activa (flujo PKCE vía /auth/callback).
+    // 2. Verificar si la sesión ya está activa (flujo PKCE vía /auth/callback o llegada directa).
     const checkSession = async () => {
       if (sessionCheckDone.current) return;
       sessionCheckDone.current = true;
 
-      // Esperar un poco para que el SDK procese el hash si llega directo con token
-      await new Promise((r) => setTimeout(r, 500));
+      const params = new URLSearchParams(location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const code = params.get('code');
+      const isRecoveryUrl =
+        params.get('type') === 'recovery' ||
+        hashParams.get('type') === 'recovery' ||
+        sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
+
+      if (isRecoveryUrl) sessionStorage.setItem('passwordRecoveryInProgress', 'true');
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) console.warn('[ResetPasswordPage] exchangeCodeForSession:', error.message);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      // Esperar un poco para que el SDK procese hash/código si llega directo con token.
+      await new Promise((r) => setTimeout(r, 700));
       if (cancelled) return;
 
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
 
       if (session?.user) {
-        console.log('✅ [ResetPasswordPage] Sesión activa encontrada. User:', session.user.id);
+        console.log('✅ [ResetPasswordPage] Sesión de recuperación lista. User:', session.user.id);
         setSessionReady(true);
-      } else {
-        // Esperar un segundo más por si el SDK necesita más tiempo
-        await new Promise((r) => setTimeout(r, 1000));
-        if (cancelled) return;
+        setSessionError(false);
+        return;
+      }
 
-        const { data: { session: s2 } } = await supabase.auth.getSession();
-        if (!cancelled) {
-          if (s2?.user) {
-            setSessionReady(true);
-          } else {
-            console.warn('⚠️ [ResetPasswordPage] Sin sesión válida. Enlace expirado o inválido.');
-            setSessionError(true);
-          }
+      await new Promise((r) => setTimeout(r, 1000));
+      if (cancelled) return;
+
+      const { data: { session: s2 } } = await supabase.auth.getSession();
+      if (!cancelled) {
+        if (s2?.user) {
+          setSessionReady(true);
+          setSessionError(false);
+        } else {
+          console.warn('⚠️ [ResetPasswordPage] Sin sesión válida. Enlace expirado o inválido.');
+          setSessionError(true);
         }
       }
     };
@@ -90,7 +109,7 @@ export default function ResetPasswordPage() {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [location.search]);
 
   // ─── Validación ────────────────────────────────────────────────────────────
   const validate = () => {

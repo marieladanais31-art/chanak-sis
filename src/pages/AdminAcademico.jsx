@@ -355,7 +355,7 @@ export default function AdminAcademico() {
               <GradeEntriesManager
                 studentSubject={selectedStudentSubject}
                 canEdit={true}
-                enteredByRole={profile?.role || 'admin'}
+                enteredByRole="admin"
                 onEntriesChanged={handleEntriesChanged}
               />
             </div>
