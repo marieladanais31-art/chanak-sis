@@ -5,8 +5,11 @@ import { generateTranscriptPDF } from '@/lib/transcriptPdf';
 import {
   ACTIVE_SCHOOL_YEAR,
   QUARTERS,
+  calculateAverageGrade,
   calculateHighSchoolCreditsFromPaces,
   getPaceStatus,
+  normalizeBlock,
+  normalizeNumericGrade,
 } from '@/lib/academicUtils';
 import {
   Download, Save, Loader2, Plus, Trash2, ChevronRight,
@@ -24,6 +27,27 @@ const STATUS_META = {
 };
 
 const GRADE_STATUS = ['pending', 'approved', 'failed'];
+
+const normalizeGradeEntryStatus = (status) => status || 'draft';
+
+const isValidReportArea = (subject) => {
+  const normalizedBlock = normalizeBlock(subject?.academic_block || subject?.pillar_type);
+  return normalizedBlock !== 'OTHER';
+};
+
+const buildCourseFromApprovedEntries = (subject, entries) => {
+  const average = calculateAverageGrade(entries);
+  const normalizedBlock = normalizeBlock(subject?.academic_block || subject?.pillar_type);
+
+  return {
+    subject_name: subject.subject_name || '',
+    academic_block: normalizedBlock === 'OTHER' ? (subject.academic_block || subject.pillar_type || '') : normalizedBlock,
+    pace_numbers: '',
+    credits: String(calculateHighSchoolCreditsFromPaces(0, subject.credit_value ?? 0.5)),
+    final_grade: average !== null ? String(average) : '',
+    grade_status: getPaceStatus(average),
+  };
+};
 
 
 const EMPTY_COURSE = {
@@ -110,33 +134,114 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
   const addCourse = () => setCourses(prev => [...prev, { ...EMPTY_COURSE }]);
   const removeCourse = (idx) => setCourses(prev => prev.filter((_, i) => i !== idx));
 
-  const importFromAcademico = async () => {
-    const { data, error } = await supabase
+  const loadApprovedPeriodCourses = async () => {
+    const { data: subjectsData, error: subjectsError } = await supabase
       .from('student_subjects')
-      .select('subject_name, academic_block, grade, credit_value, approval_status')
+      .select('id, student_id, subject_name, academic_block, pillar_type, credit_value, quarter, school_year, grade_submission_status')
       .eq('student_id', studentId)
       .eq('school_year', meta.school_year)
       .eq('quarter', meta.quarter)
-      .eq('approval_status', 'approved');
+      .eq('grade_submission_status', 'approved');
 
-    if (error) {
+    if (subjectsError) throw subjectsError;
+
+    const approvedSubjects = (subjectsData || []).filter(isValidReportArea);
+    if (approvedSubjects.length === 0) return [];
+
+    const subjectIds = approvedSubjects.map((subject) => subject.id);
+    const { data: entriesData, error: entriesError } = await supabase
+      .from('student_grade_entries')
+      .select('id, student_subject_id, score, submission_status')
+      .eq('student_id', studentId)
+      .eq('school_year', meta.school_year)
+      .eq('quarter', meta.quarter)
+      .in('student_subject_id', subjectIds)
+      .eq('submission_status', 'approved')
+      .not('score', 'is', null);
+
+    if (entriesError) throw entriesError;
+
+    const entriesBySubject = (entriesData || []).reduce((acc, entry) => {
+      if (normalizeGradeEntryStatus(entry.submission_status) !== 'approved') return acc;
+      if (!acc[entry.student_subject_id]) acc[entry.student_subject_id] = [];
+      acc[entry.student_subject_id].push(entry);
+      return acc;
+    }, {});
+
+    return approvedSubjects
+      .map((subject) => buildCourseFromApprovedEntries(subject, entriesBySubject[subject.id] || []))
+      .filter((course) => course.subject_name && course.final_grade !== '');
+  };
+
+  const getBlockingPeriodGradeEntries = async () => {
+    const { data: subjectsData, error: subjectsError } = await supabase
+      .from('student_subjects')
+      .select('id, subject_name, academic_block, pillar_type, grade_submission_status')
+      .eq('student_id', studentId)
+      .eq('school_year', meta.school_year)
+      .eq('quarter', meta.quarter);
+
+    if (subjectsError) throw subjectsError;
+
+    const periodSubjects = (subjectsData || []).filter(isValidReportArea);
+    if (periodSubjects.length === 0) return [];
+
+    const subjectIds = periodSubjects.map((subject) => subject.id);
+    const { data: entriesData, error: entriesError } = await supabase
+      .from('student_grade_entries')
+      .select('id, student_subject_id, assessment_name, submission_status')
+      .eq('student_id', studentId)
+      .eq('school_year', meta.school_year)
+      .eq('quarter', meta.quarter)
+      .in('student_subject_id', subjectIds)
+      .not('score', 'is', null);
+
+    if (entriesError) throw entriesError;
+
+    return (entriesData || []).filter((entry) => normalizeGradeEntryStatus(entry.submission_status) !== 'approved');
+  };
+
+  const saveCoursesForTranscript = async (tid, courseRows) => {
+    await supabase.from('transcript_courses').delete().eq('transcript_id', tid);
+
+    const coursePayload = courseRows
+      .filter(c => (c.subject_name || '').trim())
+      .map(c => {
+        const normalizedFinalGrade = c.final_grade !== '' && c.final_grade !== null && c.final_grade !== undefined
+          ? normalizeNumericGrade(c.final_grade)
+          : null;
+        return {
+          transcript_id: tid,
+          subject_name:  c.subject_name,
+          academic_block:c.academic_block || null,
+          pace_numbers:  c.pace_numbers || null,
+          credits:       calculateHighSchoolCreditsFromPaces(
+            String(c.pace_numbers || '').split(/[,;\s-]+/).filter(Boolean).length,
+            parseFloat(c.credits)
+          ) || 0,
+          final_grade:   normalizedFinalGrade,
+          grade_status:  c.grade_status || getPaceStatus(normalizedFinalGrade),
+        };
+      });
+
+    if (coursePayload.length > 0) {
+      const { error } = await supabase.from('transcript_courses').insert(coursePayload);
+      if (error) throw error;
+    }
+  };
+
+  const importFromAcademico = async () => {
+    try {
+      const imported = await loadApprovedPeriodCourses();
+      if (imported.length === 0) {
+        toast({ title: 'Sin notas aprobadas', description: `No hay notas aprobadas en student_grade_entries para ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
+        return;
+      }
+      setCourses(imported);
+      toast({ title: `${imported.length} materias importadas desde notas aprobadas` });
+    } catch (error) {
       toast({ title: 'Error al importar', description: error.message, variant: 'destructive' });
-      return;
     }
-    if (!data || data.length === 0) {
-      toast({ title: 'Sin materias aprobadas', description: `No hay materias con estado "Aprobado" en ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
-      return;
-    }
-    const imported = data.map(s => ({
-      subject_name: s.subject_name || '',
-      academic_block: s.academic_block || '',
-      pace_numbers: '',
-      credits: String(calculateHighSchoolCreditsFromPaces(0, s.credit_value ?? 0.5)),
-      final_grade: s.grade !== null && s.grade !== undefined ? String(s.grade) : '',
-      grade_status: getPaceStatus(s.grade),
-    }));
-    setCourses(imported);
-    toast({ title: `${imported.length} materias importadas desde Académico` });
   };
 
   const handleSave = async () => {
@@ -164,25 +269,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
       }
 
       // Upsert courses: delete all then re-insert (simplest strategy for small lists)
-      await supabase.from('transcript_courses').delete().eq('transcript_id', tid);
-      const coursePayload = courses
-        .filter(c => c.subject_name.trim())
-        .map(c => ({
-          transcript_id: tid,
-          subject_name:  c.subject_name,
-          academic_block:c.academic_block || null,
-          pace_numbers:  c.pace_numbers || null,
-          credits:       calculateHighSchoolCreditsFromPaces(
-            String(c.pace_numbers || '').split(/[,;\s-]+/).filter(Boolean).length,
-            parseFloat(c.credits)
-          ) || 0,
-          final_grade:   c.final_grade !== '' ? parseFloat(c.final_grade) : null,
-          grade_status:  c.grade_status || getPaceStatus(c.final_grade),
-        }));
-      if (coursePayload.length > 0) {
-        const { error } = await supabase.from('transcript_courses').insert(coursePayload);
-        if (error) throw error;
-      }
+      await saveCoursesForTranscript(tid, courses);
 
       toast({ title: 'Boletín guardado', description: 'Los cambios fueron guardados.' });
     } catch (err) {
@@ -201,6 +288,31 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     if (!nextStatus) return;
     setAdvancing(true);
     try {
+      if (nextStatus === 'published') {
+        const blockingEntries = await getBlockingPeriodGradeEntries();
+        if (blockingEntries.length > 0) {
+          toast({
+            title: 'No se puede publicar',
+            description: `Hay ${blockingEntries.length} nota(s) del periodo sin aprobar. Revisa todas las notas antes de publicar el boletín.`,
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        const approvedCourses = await loadApprovedPeriodCourses();
+        if (approvedCourses.length === 0) {
+          toast({
+            title: 'No se puede publicar',
+            description: 'El boletín necesita al menos una nota aprobada en student_grade_entries para este periodo.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
+        await saveCoursesForTranscript(transcriptId, approvedCourses);
+        setCourses(approvedCourses);
+      }
+
       const tsField = { in_review: 'reviewed_at', approved: 'approved_at', published: 'published_at' }[nextStatus];
       const patch = { status: nextStatus, updated_at: new Date().toISOString() };
       if (tsField) patch[tsField] = new Date().toISOString();
@@ -312,7 +424,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
                   onClick={importFromAcademico}
                   className="flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200"
                 >
-                  Importar desde Académico
+                  Importar notas aprobadas
                 </button>
                 <button onClick={addCourse} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
                   <Plus className="w-3.5 h-3.5" /> Agregar materia
