@@ -70,7 +70,7 @@ export default function AdminUserDirectory() {
 
     setResettingId(userId);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+      const redirectTo = `${window.location.origin}/auth/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(userEmail, { redirectTo });
       if (error) throw error;
       toast({ title: 'Correo enviado', description: `Enlace de recuperación enviado a ${userEmail}.` });

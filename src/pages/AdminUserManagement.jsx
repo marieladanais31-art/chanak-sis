@@ -199,7 +199,7 @@ export default function AdminUserManagement() {
     if (!selectedUser?.email) return;
     setSubmitting(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+      const redirectTo = `${window.location.origin}/auth/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(selectedUser.email, { redirectTo });
       if (error) throw error;
 

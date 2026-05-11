@@ -54,7 +54,7 @@ export default function AdminUsuarios() {
 
     setPasswordLoading(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+      const redirectTo = `${window.location.origin}/auth/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(
         selectedUserForPassword.email,
         { redirectTo }
