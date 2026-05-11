@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { gradeToTranscriptLetter, TRANSCRIPT_GRADING_SCALE } from '@/lib/academicUtils';
 
 const NAVY = [25, 61, 109];
 const TEAL = [32, 178, 170];
@@ -7,24 +8,15 @@ const LIGHT_GRAY = [245, 246, 248];
 const MID_GRAY = [180, 185, 195];
 const DARK = [30, 35, 50];
 
-const GRADING_SCALE = [
-  { range: '98 – 100', letter: 'A*', label: 'Excellent' },
-  { range: '96 – 97.9', letter: 'A',  label: 'Excellent' },
-  { range: '92 – 95.9', letter: 'B',  label: 'Very Good' },
-  { range: '88 – 91.9', letter: 'C',  label: 'Good' },
-  { range: '84 – 87.9', letter: 'D',  label: 'Fair' },
-  { range: '80 – 83.9', letter: 'E',  label: 'Satisfactory' },
-];
+const GRADING_SCALE = TRANSCRIPT_GRADING_SCALE.filter((grade) => grade.letter !== 'F')
+  .map((grade) => ({
+    range: `${grade.min} – ${grade.max}`,
+    letter: grade.letter,
+    label: 'ACE mastery',
+  }));
 
 function gradeToLetter(g) {
-  if (g === null || g === undefined) return '—';
-  if (g >= 98) return 'A*';
-  if (g >= 96) return 'A';
-  if (g >= 92) return 'B';
-  if (g >= 88) return 'C';
-  if (g >= 84) return 'D';
-  if (g >= 80) return 'E';
-  return 'F';
+  return gradeToTranscriptLetter(g);
 }
 
 function fmt(val) {

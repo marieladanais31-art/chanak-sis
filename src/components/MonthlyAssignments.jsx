@@ -132,7 +132,6 @@ export default function MonthlyAssignments({ studentId, studentName, schoolYear,
     if (score === null || score === undefined) return 'text-slate-400';
     if (score >= 96) return 'text-emerald-700 font-black';
     if (score >= 80) return 'text-blue-700 font-bold';
-    if (score >= 70) return 'text-amber-700 font-bold';
     return 'text-red-700 font-bold';
   };
 

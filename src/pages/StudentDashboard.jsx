@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { isPassingPaceScore } from '@/lib/academicUtils';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { LogOut, GraduationCap, Download, Activity, AlertCircle, CheckCircle2, Loader2, BookOpen } from 'lucide-react';
@@ -238,7 +239,7 @@ export default function StudentDashboard() {
                   </div>
                   <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-wider mb-1">Aprobados</p>
-                    <p className="text-2xl font-black text-emerald-900">{grades.filter(g => parseFloat(g.score)>=70).length}</p>
+                    <p className="text-2xl font-black text-emerald-900">{grades.filter((g) => isPassingPaceScore(g.score)).length}</p>
                   </div>
                   <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl text-center col-span-2">
                     <p className="text-[10px] font-black text-purple-600 uppercase tracking-wider mb-1">Promedio General</p>

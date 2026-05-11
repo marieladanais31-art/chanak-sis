@@ -1,5 +1,24 @@
-
 export const ACTIVE_SCHOOL_YEAR = '2025-2026';
+
+export const ACE_MASTERY_MINIMUM = 80;
+export const PACE_PASSING_SCORE = ACE_MASTERY_MINIMUM;
+export const BASE_GRADE_MIN = 0;
+export const BASE_GRADE_MAX = 100;
+export const HIGH_SCHOOL_FULL_CREDIT_PACES = 12;
+export const HIGH_SCHOOL_HALF_CREDIT_PACES = 6;
+
+export const TRANSCRIPT_GRADING_SCALE = [
+  { min: 98, max: 100, letter: 'A+' },
+  { min: 96, max: 97, letter: 'A' },
+  { min: 94, max: 95, letter: 'A-' },
+  { min: 92, max: 93, letter: 'B+' },
+  { min: 90, max: 91, letter: 'B' },
+  { min: 88, max: 89, letter: 'B-' },
+  { min: 86, max: 87, letter: 'C+' },
+  { min: 83, max: 85, letter: 'C' },
+  { min: 80, max: 82, letter: 'C-' },
+  { min: 0, max: 79, letter: 'F' },
+];
 
 export const ACADEMIC_YEARS = [
   '2023-2024',
@@ -107,7 +126,7 @@ export function normalizeNumericGrade(value) {
   const grade = Number(value);
   if (!Number.isFinite(grade)) return null;
 
-  return Math.min(100, Math.max(0, grade));
+  return Math.min(BASE_GRADE_MAX, Math.max(BASE_GRADE_MIN, grade));
 }
 
 export function calculateAverageGrade(entries) {
@@ -123,6 +142,39 @@ export function calculateAverageGrade(entries) {
   return Number((sum / validScores.length).toFixed(2));
 }
 
+export function isPassingPaceScore(score) {
+  const normalized = normalizeNumericGrade(score);
+  return normalized !== null && normalized >= PACE_PASSING_SCORE;
+}
+
+export function getPaceStatus(score) {
+  const normalized = normalizeNumericGrade(score);
+  if (normalized === null) return 'pending';
+  return isPassingPaceScore(normalized) ? 'approved' : 'failed';
+}
+
+export function calculateHighSchoolCreditsFromPaces(paceCount, courseCreditValue = null) {
+  const configuredCredit = Number(courseCreditValue);
+  if (Number.isFinite(configuredCredit) && configuredCredit > 0) {
+    return configuredCredit;
+  }
+
+  const count = Number(paceCount);
+  if (!Number.isFinite(count) || count <= 0) return 0;
+
+  if (count >= HIGH_SCHOOL_FULL_CREDIT_PACES) return 1;
+  if (count >= HIGH_SCHOOL_HALF_CREDIT_PACES) return 0.5;
+  return 0;
+}
+
+export function gradeToTranscriptLetter(grade) {
+  const normalized = normalizeNumericGrade(grade);
+  if (normalized === null) return '—';
+
+  const wholePercent = Math.floor(normalized);
+  return TRANSCRIPT_GRADING_SCALE.find((range) => wholePercent >= range.min && wholePercent <= range.max)?.letter || 'F';
+}
+
 export function formatSubjectGrade(subject) {
   const grade = normalizeNumericGrade(subject?.grade);
   if (grade === null) {
@@ -135,6 +187,10 @@ export function formatSubjectGrade(subject) {
   }
 
   return grade.toFixed(2);
+}
+
+export function getMasteryMinimum() {
+  return ACE_MASTERY_MINIMUM;
 }
 
 export function getRecommendedMinimum(blockName) {

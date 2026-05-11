@@ -1,3 +1,4 @@
+import { isPassingPaceScore } from '@/lib/academicUtils';
 
 export function calculatePACESProjection(studentStartDate, currentGrades) {
   try {
@@ -11,8 +12,8 @@ export function calculatePACESProjection(studentStartDate, currentGrades) {
     // Expected: 1 PACE per month (12 per year)
     const expectedTotalPACES = Math.max(1, monthsDiff);
     
-    // Count actual PACES (grades with score >= 70)
-    const actualPACES = currentGrades.filter(grade => parseFloat(grade.score) >= 70).length;
+    // Count approved PACES only (ACE mastery requires score >= 80).
+    const actualPACES = currentGrades.filter((grade) => isPassingPaceScore(grade.score)).length;
     
     // Calculate deficit
     const deficit = Math.max(0, expectedTotalPACES - actualPACES);
