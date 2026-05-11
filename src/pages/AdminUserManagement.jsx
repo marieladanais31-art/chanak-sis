@@ -84,7 +84,7 @@ export default function AdminUserManagement() {
   const [profiles, setProfiles] = useState([]);
   const [hubs, setHubs] = useState([]);
   const [students, setStudents] = useState([]);
-  const [familyLinks, setFamilyLinks] = useState([]);
+  const [familyStudents, setFamilyStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -118,7 +118,7 @@ export default function AdminUserManagement() {
       setProfiles(profilesRes.data || []);
       setHubs(hubsRes.data || []);
       setStudents(studentsRes.data || []);
-      setFamilyLinks(familyLinksRes.data || []);
+      setFamilyStudents(familyLinksRes.data || []);
     } catch (err) {
       console.error('[AdminUserManagement] loadData:', err);
       toast({ title: 'Error', description: err.message || 'No se pudieron cargar usuarios y asignaciones.', variant: 'destructive' });
@@ -128,6 +128,18 @@ export default function AdminUserManagement() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  const reloadFamilyStudents = async () => {
+    const { data, error } = await supabase
+      .from('family_students')
+      .select('family_id, student_id');
+    if (error) throw error;
+
+    const familyStudents = data || [];
+    setFamilyStudents(familyStudents);
+    console.log('[AdminUserManagement] family_students after save', familyStudents);
+    return familyStudents;
+  };
 
   const filteredProfiles = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -154,14 +166,14 @@ export default function AdminUserManagement() {
 
   const studentsByFamily = useMemo(() => {
     const map = new Map();
-    familyLinks.forEach((link) => {
+    familyStudents.forEach((link) => {
       if (!link.family_id || !link.student_id) return;
       const existing = map.get(link.family_id) || [];
       existing.push(link.student_id);
       map.set(link.family_id, existing);
     });
     return map;
-  }, [familyLinks]);
+  }, [familyStudents]);
 
   const resetCreateForm = () => {
     setCreateForm(EMPTY_CREATE);
@@ -217,6 +229,7 @@ export default function AdminUserManagement() {
   };
 
   const openEdit = (profile) => {
+    console.log('[AdminUserManagement] edit profile', profile);
     setSelectedUser(profile);
     setEditForm({
       firstName: profile.first_name || '',
@@ -256,29 +269,49 @@ export default function AdminUserManagement() {
   const syncFamilyStudents = async (profile, selectedIds) => {
     const desiredIds = uniqueIds(selectedIds);
 
-    console.log('[AdminUserManagement] saving parent links', profile.email, desiredIds);
+    console.log('[AdminUserManagement] selected student ids', desiredIds);
+    console.log('[AdminUserManagement] deleting family links for profile.id', profile.id);
 
     const { error: deleteError } = await supabase
       .from('family_students')
       .delete()
       .eq('family_id', profile.id);
     if (deleteError) throw deleteError;
-    console.log('[AdminUserManagement] deleted old family_students for', profile.id);
 
-    let insertedLinks = [];
+    let linksToInsert = [];
     if (desiredIds.length > 0) {
-      const rows = desiredIds.map((studentId) => ({
+      linksToInsert = desiredIds.map((studentId) => ({
         family_id: profile.id,
         student_id: studentId,
       }));
+      console.log('[AdminUserManagement] inserting family links', linksToInsert);
       const { data, error: insertError } = await supabase
         .from('family_students')
-        .insert(rows)
+        .insert(linksToInsert)
         .select('family_id, student_id');
       if (insertError) throw insertError;
-      insertedLinks = data || rows;
+      linksToInsert = data || linksToInsert;
+    } else {
+      console.log('[AdminUserManagement] inserting family links', linksToInsert);
     }
-    console.log('[AdminUserManagement] inserted family_students', insertedLinks);
+
+    try {
+      const { error: clearParentError } = await supabase
+        .from('students')
+        .update({ parent_id: null })
+        .eq('parent_id', profile.id);
+      if (clearParentError) throw clearParentError;
+
+      if (desiredIds.length > 0) {
+        const { error: parentError } = await supabase
+          .from('students')
+          .update({ parent_id: profile.id })
+          .in('id', desiredIds);
+        if (parentError) throw parentError;
+      }
+    } catch (compatError) {
+      console.error('[AdminUserManagement] students.parent_id compatibility update failed', compatError);
+    }
 
     const { count, error: countError } = await supabase
       .from('family_students')
@@ -286,6 +319,8 @@ export default function AdminUserManagement() {
       .eq('family_id', profile.id);
     if (countError) throw countError;
     console.log('[AdminUserManagement] parent count after save', profile.email, count || 0);
+
+    await reloadFamilyStudents();
   };
 
   const handleEditProfile = async (event) => {
@@ -301,6 +336,7 @@ export default function AdminUserManagement() {
     setSubmitting(true);
     try {
       const role = editForm.role;
+      console.log('[AdminUserManagement] selected role value', editForm.role);
       const profilePayload = {
         first_name: editForm.firstName.trim(),
         last_name: editForm.lastName.trim(),
@@ -318,13 +354,16 @@ export default function AdminUserManagement() {
       if (error) throw error;
 
       await syncTutorStudents(selectedUser.id, TUTOR_ROLES.includes(role) ? editForm.tutorStudentIds : []);
-      await syncFamilyStudents(selectedUser, FAMILY_ROLES.includes(role) ? editForm.familyStudentIds : []);
+      if (FAMILY_ROLES.includes(role) || FAMILY_ROLES.includes(selectedUser.role)) {
+        await syncFamilyStudents(selectedUser, FAMILY_ROLES.includes(role) ? editForm.familyStudentIds : []);
+      }
 
       toast({ title: 'Usuario actualizado', description: `Perfil y asignaciones de ${selectedUser.email} actualizados.` });
       setEditOpen(false);
       setSelectedUser(null);
       await loadData();
     } catch (err) {
+      console.log('[AdminUserManagement] save user error', err);
       console.error('[AdminUserManagement] editProfile:', err);
       toast({ title: 'Error al editar', description: err.message || 'No se pudo actualizar el usuario.', variant: 'destructive' });
     } finally {
@@ -365,7 +404,7 @@ export default function AdminUserManagement() {
       return `${count} estudiante${count === 1 ? '' : 's'}`;
     }
     if (FAMILY_ROLES.includes(profile.role)) {
-      const count = familyLinks.filter((link) => link.family_id === profile.id).length;
+      const count = familyStudents.filter((fs) => fs.family_id === profile.id).length;
       return `${count} hijo${count === 1 ? '' : 's'} vinculado${count === 1 ? '' : 's'}`;
     }
     return '—';
