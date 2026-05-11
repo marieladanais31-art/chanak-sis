@@ -17,7 +17,6 @@ import {
   X,
   Hourglass,
   Scale,
-  Printer,
   ExternalLink,
   Link2,
   Bell,
@@ -26,9 +25,8 @@ import {
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import LegalDocuments from '@/pages/LegalDocuments';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
-import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
+import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
 
 /* ── Categorías: colores de badge ──────────────────────────────────────────── */
@@ -170,14 +168,14 @@ function ParentCalendarioPanel({ calendar }) {
   );
 }
 
-function ParentBoletinesPanel({ children }) {
+function ParentBoletinesPanel({ studentChildren }) {
   const [transcripts, setTranscripts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [downloading, setDownloading] = React.useState(null);
 
   React.useEffect(() => {
-    if (!children || children.length === 0) { setLoading(false); return; }
-    const ids = children.map(c => c.id);
+    if (!studentChildren || studentChildren.length === 0) { setLoading(false); return; }
+    const ids = studentChildren.map(c => c.id);
     supabase
       .from('transcript_records')
       .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
@@ -185,12 +183,12 @@ function ParentBoletinesPanel({ children }) {
       .eq('status', 'published')
       .order('school_year', { ascending: false })
       .then(({ data }) => { setTranscripts(data || []); setLoading(false); });
-  }, [children]);
+  }, [studentChildren]);
 
   const handleDownload = async (tr) => {
     setDownloading(tr.id);
     try {
-      const child = children.find(c => c.id === tr.student_id);
+      const child = studentChildren.find(c => c.id === tr.student_id);
       const [coursesRes, settingsRes, creditsRes] = await Promise.all([
         supabase.from('transcript_courses').select('*').eq('transcript_id', tr.id),
         supabase.from('institutional_settings').select('*').limit(1).single(),
@@ -213,14 +211,14 @@ function ParentBoletinesPanel({ children }) {
 
   if (transcripts.length === 0) return (
     <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-      No hay boletines publicados disponibles en este momento.
+      No hay boletines publicados todavía.
     </div>
   );
 
   return (
     <div className="space-y-4">
       {transcripts.map(tr => {
-        const child = children.find(c => c.id === tr.student_id);
+        const child = studentChildren.find(c => c.id === tr.student_id);
         return (
           <div key={tr.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center justify-between">
             <div>
@@ -242,7 +240,7 @@ function ParentBoletinesPanel({ children }) {
   );
 }
 
-function ParentDocumentosPanel({ children }) {
+function ParentDocumentosPanel({ studentChildren }) {
   const [peis, setPeis]           = React.useState([]);
   const [contracts, setContracts] = React.useState([]);
   const [letters, setLetters]     = React.useState([]);
@@ -250,8 +248,8 @@ function ParentDocumentosPanel({ children }) {
   const [downloading, setDownloading] = React.useState(null);
 
   React.useEffect(() => {
-    if (!children || children.length === 0) { setLoading(false); return; }
-    const ids = children.map(c => c.id);
+    if (!studentChildren || studentChildren.length === 0) { setLoading(false); return; }
+    const ids = studentChildren.map(c => c.id);
     Promise.all([
       supabase.from('individualized_education_plans')
         .select('id, student_id, school_year, quarter, status, issue_date')
@@ -268,13 +266,13 @@ function ParentDocumentosPanel({ children }) {
       setLetters(letRes.data || []);
       setLoading(false);
     });
-  }, [children]);
+  }, [studentChildren]);
 
   const handleDownloadPei = async (pei) => {
     setDownloading(`pei-${pei.id}`);
     try {
       const { generatePeiPDF } = await import('@/lib/peiPdf');
-      const child = children.find(c => c.id === pei.student_id);
+      const child = studentChildren.find(c => c.id === pei.student_id);
       const [pacesRes, settingsRes] = await Promise.all([
         supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id),
         supabase.from('institutional_settings').select('*').limit(1).single(),
@@ -296,7 +294,7 @@ function ParentDocumentosPanel({ children }) {
     setDownloading(`con-${contract.id}`);
     try {
       const { generateContractPDF } = await import('@/lib/contractPdf');
-      const child = children.find(c => c.id === contract.student_id);
+      const child = studentChildren.find(c => c.id === contract.student_id);
       const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
       generateContractPDF({
         contract,
@@ -314,7 +312,7 @@ function ParentDocumentosPanel({ children }) {
     setDownloading(`let-${letter.id}`);
     try {
       const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
-      const child = children.find(c => c.id === letter.student_id);
+      const child = studentChildren.find(c => c.id === letter.student_id);
       const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
       generateEnrollmentLetterPDF({
         letter,
@@ -334,7 +332,7 @@ function ParentDocumentosPanel({ children }) {
 
   if (allEmpty) return (
     <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-      No hay documentos publicados disponibles en este momento.
+      No hay documentos oficiales publicados todavía.
     </div>
   );
 
@@ -369,12 +367,12 @@ function ParentDocumentosPanel({ children }) {
           </h3>
           <div className="space-y-3">
             {peis.map(pei => {
-              const child = children.find(c => c.id === pei.student_id);
+              const child = studentChildren.find(c => c.id === pei.student_id);
               return (
                 <DocRow key={pei.id}
                   icon={<FileText className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`PEI · ${pei.school_year} · Publicado`}
+                  subtitle={`PEI publicado · ${pei.school_year}`}
                   onDownload={() => handleDownloadPei(pei)}
                   dlKey={`pei-${pei.id}`}
                 />
@@ -391,12 +389,12 @@ function ParentDocumentosPanel({ children }) {
           </h3>
           <div className="space-y-3">
             {contracts.map(con => {
-              const child = children.find(c => c.id === con.student_id);
+              const child = studentChildren.find(c => c.id === con.student_id);
               return (
                 <DocRow key={con.id}
                   icon={<FileSignature className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`Contrato · ${con.school_year} · ${con.status === 'signed' ? 'Firmado' : 'Enviado'}`}
+                  subtitle={`Contrato ${con.status === 'signed' ? 'firmado' : 'enviado'} · ${con.school_year}`}
                   onDownload={() => handleDownloadContract(con)}
                   dlKey={`con-${con.id}`}
                 />
@@ -413,12 +411,12 @@ function ParentDocumentosPanel({ children }) {
           </h3>
           <div className="space-y-3">
             {letters.map(letter => {
-              const child = children.find(c => c.id === letter.student_id);
+              const child = studentChildren.find(c => c.id === letter.student_id);
               return (
                 <DocRow key={letter.id}
                   icon={<CheckCircle2 className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`Confirmación · ${letter.school_year} · ${letter.program || ''}`}
+                  subtitle={`Carta publicada · ${letter.school_year}${letter.program ? ` · ${letter.program}` : ''}`}
                   onDownload={() => handleDownloadLetter(letter)}
                   dlKey={`let-${letter.id}`}
                 />
@@ -448,13 +446,15 @@ export default function ParentDashboard() {
 
   const [studentSubjects, setStudentSubjects] = useState([]);
   const [paymentStatus, setPaymentStatus] = useState([]);
-  const [documentRecords, setDocumentRecords] = useState([]);
+  const [officialDocuments, setOfficialDocuments] = useState({
+    peis: [],
+    contracts: [],
+    letters: [],
+    transcripts: [],
+  });
   const [paceProjection, setPaceProjection] = useState([]);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [isBulletinModalOpen, setIsBulletinModalOpen] = useState(false);
-  const [isPeiModalOpen, setIsPeiModalOpen] = useState(false);
-  const [isEnrollmentModalOpen, setIsEnrollmentModalOpen] = useState(false);
 
   const [isGradeEntriesModalOpen, setIsGradeEntriesModalOpen] = useState(false);
   const [selectedStudentSubjectForEntries, setSelectedStudentSubjectForEntries] = useState(null);
@@ -462,8 +462,6 @@ export default function ParentDashboard() {
   const [selectedAcademicQuarter, setSelectedAcademicQuarter] = useState('Q1');
 
   const [selectedChildId, setSelectedChildId] = useState('');
-  const [selectedDocumentChildId, setSelectedDocumentChildId] = useState('');
-  const [legalSelectedChildId, setLegalSelectedChildId] = useState('');
 
   useEffect(() => {
     if (!profile) return;
@@ -477,17 +475,10 @@ export default function ParentDashboard() {
     loadData();
   }, [profile, navigate]);
 
-  const hasDocument = (childId, type) => {
-    return documentRecords.some(
-      (d) => d.student_id === childId && d.document_type?.toLowerCase() === type.toLowerCase()
-    );
-  };
-
-  const getPeiDocument = (childId) => {
-    return documentRecords.find(
-      (d) => d.student_id === childId && d.document_type === 'pei'
-    );
-  };
+  const hasOfficialPei = (childId) => officialDocuments.peis.some((d) => d.student_id === childId);
+  const hasOfficialEnrollmentLetter = (childId) => officialDocuments.letters.some((d) => d.student_id === childId);
+  const hasOfficialContract = (childId) => officialDocuments.contracts.some((d) => d.student_id === childId);
+  const hasOfficialTranscript = (childId) => officialDocuments.transcripts.some((d) => d.student_id === childId);
 
   const getChildById = (childId) => {
     return children.find((c) => c.id === childId);
@@ -635,7 +626,7 @@ export default function ParentDashboard() {
         setChildren([]);
         setStudentSubjects([]);
         setPaymentStatus([]);
-        setDocumentRecords([]);
+        setOfficialDocuments({ peis: [], contracts: [], letters: [], transcripts: [] });
         setPaceProjection([]);
         setIsLoading(false);
         return;
@@ -658,9 +649,6 @@ export default function ParentDashboard() {
       setChildren(loadedChildren);
       setHubs(hubsRes.data || []);
 
-      if (loadedChildren.length > 0) {
-        setLegalSelectedChildId(loadedChildren[0].id);
-      }
 
       // student_subjects — tabla real, lanzar error si falla
       const studentSubjectsRes = await supabase
@@ -675,15 +663,23 @@ export default function ParentDashboard() {
       if (studentSubjectsRes.error) throw studentSubjectsRes.error;
       setStudentSubjects(studentSubjectsRes.data || []);
 
-      // Tablas legacy / no implementadas — errores no fatales
-      const [paymentStatusRes, documentRecordsRes, paceProjectionRes] = await Promise.all([
+      // Tablas complementarias — errores no fatales. Documentos oficiales vienen de módulos Admin.
+      const [paymentStatusRes, paceProjectionRes, officialPeisRes, officialContractsRes, officialLettersRes, officialTranscriptsRes] = await Promise.all([
         supabase.from('payment_status').select('id, student_id, billing_month, due_date, due_amount, paid_amount, status').in('student_id', studentIds),
-        supabase.from('document_records').select('id, student_id, document_type, title, file_url, created_at, school_year').in('student_id', studentIds),
         supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
+        supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
+        supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed']),
+        supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
+        supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').in('student_id', studentIds).eq('status', 'published'),
       ]);
 
       setPaymentStatus(paymentStatusRes.error ? [] : (paymentStatusRes.data || []));
-      setDocumentRecords(documentRecordsRes.error ? [] : (documentRecordsRes.data || []));
+      setOfficialDocuments({
+        peis: officialPeisRes.error ? [] : (officialPeisRes.data || []),
+        contracts: officialContractsRes.error ? [] : (officialContractsRes.data || []),
+        letters: officialLettersRes.error ? [] : (officialLettersRes.data || []),
+        transcripts: officialTranscriptsRes.error ? [] : (officialTranscriptsRes.data || []),
+      });
       // pei_pace_projections no tiene due_date — map para compatibilidad
       setPaceProjection(
         paceProjectionRes.error ? [] : (paceProjectionRes.data || []).map(p => ({
@@ -786,14 +782,14 @@ export default function ParentDashboard() {
               <Users className="w-5 h-5" /> 👥 Mis Hijos
             </button>
             <button
-              onClick={() => setActiveTab('legal')}
+              onClick={() => setActiveTab('documentos')}
               className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'legal'
+                activeTab === 'documentos'
                   ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
-              <Scale className="w-5 h-5" /> 📋 Documentos Legales
+              <Scale className="w-5 h-5" /> 📋 Documentos Oficiales
             </button>
             <button
               onClick={() => setActiveTab('boletines')}
@@ -891,13 +887,10 @@ export default function ParentDashboard() {
 
                   const { hasPendingBalance, saldoPendiente } = getChildPaymentsStatus(child.id);
 
-                  const peiDoc = getPeiDocument(child.id);
-                  const hasEnrollment = documentRecords.some(
-                    (d) => d.student_id === child.id && d.document_type?.toLowerCase() === 'enrollment_confirmation'
-                  );
-                  const hasContract = documentRecords.some(
-                    (d) => d.student_id === child.id && d.document_type?.toLowerCase() === 'contract'
-                  );
+                  const hasPeiPublished = hasOfficialPei(child.id);
+                  const hasEnrollmentPublished = hasOfficialEnrollmentLetter(child.id);
+                  const hasContractOfficial = hasOfficialContract(child.id);
+                  const hasBulletinPublished = hasOfficialTranscript(child.id);
 
                   return (
                     <div
@@ -999,14 +992,19 @@ export default function ParentDashboard() {
 
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
-                          onClick={() => {
-                            setSelectedChildId(child.id);
-                            setIsBulletinModalOpen(true);
-                          }}
-                          className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                          onClick={() => hasBulletinPublished && setActiveTab('boletines')}
+                          disabled={!hasBulletinPublished}
+                          title={hasBulletinPublished ? 'Ver boletines oficiales publicados' : 'No hay boletines publicados todavía.'}
+                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
+                            hasBulletinPublished
+                              ? 'bg-white border-slate-200 hover:shadow-md'
+                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                          }`}
                         >
-                          <FileText className="w-5 h-5 group-hover:scale-110 transition-transform text-[#193D6D]" />
-                          <span className="text-xs font-bold text-slate-700">Boletín</span>
+                          <FileText className={`w-5 h-5 transition-transform ${hasBulletinPublished ? 'group-hover:scale-110 text-[#193D6D]' : 'text-slate-400'}`} />
+                          <span className={`text-xs font-bold text-center ${hasBulletinPublished ? 'text-slate-700' : 'text-slate-500'}`}>
+                            {hasBulletinPublished ? 'Boletines oficiales' : 'No hay boletines publicados todavía'}
+                          </span>
                         </button>
 
                         <button
@@ -1037,52 +1035,65 @@ export default function ParentDashboard() {
                           <span className="text-xs font-bold text-slate-700">Pagos</span>
                         </button>
 
-                        {peiDoc?.file_url ? (
-                          <button
-                            onClick={() => {
-                              setSelectedDocumentChildId(child.id);
-                              setIsPeiModalOpen(true);
-                            }}
-                            className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
-                          >
+                        <button
+                          onClick={() => hasPeiPublished && setActiveTab('documentos')}
+                          disabled={!hasPeiPublished}
+                          title={hasPeiPublished ? 'Ver PEI oficial publicado' : 'PEI pendiente'}
+                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
+                            hasPeiPublished
+                              ? 'bg-white border-slate-200 hover:shadow-md'
+                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                          }`}
+                        >
+                          {hasPeiPublished ? (
                             <Download className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />
-                            <span className="text-xs font-bold text-slate-700">Ver PEI</span>
-                          </button>
-                        ) : (
-                          <button
-                            disabled
-                            className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2 cursor-not-allowed"
-                          >
+                          ) : (
                             <Hourglass className="w-5 h-5 text-slate-400" />
-                            <span className="text-xs font-bold text-slate-500">PEI Pendiente</span>
-                          </button>
-                        )}
+                          )}
+                          <span className={`text-xs font-bold text-center ${hasPeiPublished ? 'text-slate-700' : 'text-slate-500'}`}>
+                            {hasPeiPublished ? 'PEI oficial' : 'PEI pendiente'}
+                          </span>
+                        </button>
 
-                        {hasEnrollment && (
-                          <button
-                            onClick={() => {
-                              setSelectedDocumentChildId(child.id);
-                              setIsEnrollmentModalOpen(true);
-                            }}
-                            className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
-                          >
+                        <button
+                          onClick={() => hasEnrollmentPublished && setActiveTab('documentos')}
+                          disabled={!hasEnrollmentPublished}
+                          title={hasEnrollmentPublished ? 'Ver carta oficial publicada' : 'Confirmación de matrícula pendiente'}
+                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
+                            hasEnrollmentPublished
+                              ? 'bg-white border-slate-200 hover:shadow-md'
+                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                          }`}
+                        >
+                          {hasEnrollmentPublished ? (
                             <FileSignature className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
-                            <span className="text-xs font-bold text-slate-700">Matrícula</span>
-                          </button>
-                        )}
+                          ) : (
+                            <Hourglass className="w-5 h-5 text-slate-400" />
+                          )}
+                          <span className={`text-xs font-bold text-center ${hasEnrollmentPublished ? 'text-slate-700' : 'text-slate-500'}`}>
+                            {hasEnrollmentPublished ? 'Carta de matrícula' : 'Confirmación de matrícula pendiente'}
+                          </span>
+                        </button>
 
-                        {hasContract && (
-                          <button
-                            onClick={() => {
-                              setLegalSelectedChildId(child.id);
-                              setActiveTab('legal');
-                            }}
-                            className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
-                          >
+                        <button
+                          onClick={() => hasContractOfficial && setActiveTab('documentos')}
+                          disabled={!hasContractOfficial}
+                          title={hasContractOfficial ? 'Ver contrato oficial enviado o firmado' : 'Contrato pendiente'}
+                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
+                            hasContractOfficial
+                              ? 'bg-white border-slate-200 hover:shadow-md'
+                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                          }`}
+                        >
+                          {hasContractOfficial ? (
                             <Scale className="w-5 h-5 text-[#193D6D] group-hover:scale-110 transition-transform" />
-                            <span className="text-xs font-bold text-slate-700">Contrato</span>
-                          </button>
-                        )}
+                          ) : (
+                            <Hourglass className="w-5 h-5 text-slate-400" />
+                          )}
+                          <span className={`text-xs font-bold text-center ${hasContractOfficial ? 'text-slate-700' : 'text-slate-500'}`}>
+                            {hasContractOfficial ? 'Contrato oficial' : 'Contrato pendiente'}
+                          </span>
+                        </button>
 
                         {/* Placeholder — subida de evidencias (próximamente) */}
                         <button
@@ -1101,40 +1112,26 @@ export default function ParentDashboard() {
             )}
 
             {activeTab === 'legal' && (
-              <div className="space-y-6">
-                {children.length > 1 && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                    <label className="font-bold text-slate-700">Seleccionar Estudiante:</label>
-                    <select
-                      value={legalSelectedChildId}
-                      onChange={(e) => setLegalSelectedChildId(e.target.value)}
-                      className="p-2 border border-slate-300 rounded-lg text-slate-800 font-medium outline-none transition-all"
-                    >
-                      {children.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.first_name} {c.last_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {legalSelectedChildId && (
-                  <LegalDocuments
-                    studentId={legalSelectedChildId}
-                    parentId={profile.id}
-                    parentName={profile.first_name}
-                  />
-                )}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-900">
+                <h2 className="font-black text-lg mb-2">Módulo legacy desactivado</h2>
+                <p className="text-sm font-medium">
+                  Los documentos oficiales ahora se gestionan desde Administración y se consultan en la pestaña Documentos Oficiales.
+                </p>
+                <button
+                  onClick={() => setActiveTab('documentos')}
+                  className="mt-4 px-4 py-2 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-bold text-sm transition-colors"
+                >
+                  Ir a Documentos Oficiales
+                </button>
               </div>
             )}
 
             {activeTab === 'boletines' && (
-              <ParentBoletinesPanel children={children} />
+              <ParentBoletinesPanel studentChildren={children} />
             )}
 
             {activeTab === 'documentos' && (
-              <ParentDocumentosPanel children={children} />
+              <ParentDocumentosPanel studentChildren={children} />
             )}
 
             {activeTab === 'recursos' && (
@@ -1221,457 +1218,6 @@ export default function ParentDashboard() {
                 <button
                   onClick={() => setIsPaymentModalOpen(false)}
                   className="w-full py-2.5 bg-slate-200 text-slate-800 rounded-lg font-bold hover:bg-slate-300 transition-colors shadow-sm"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Bulletin Modal */}
-      {isBulletinModalOpen && (() => {
-        const child = getChildById(selectedChildId);
-        const bulletinQuarter = selectedAcademicQuarter;
-        // El boletín solo muestra materias con notas aprobadas por admin/coordinador
-        const sortedSubjects = getChildSubjects(selectedChildId, bulletinQuarter, true);
-
-        const grouped = {};
-        BLOCK_ORDER.forEach((block) => {
-          grouped[block] = [];
-        });
-
-        sortedSubjects.forEach((s) => {
-          const block = normalizeBlock(s.academic_block);
-          if (!grouped[block]) grouped[block] = [];
-          grouped[block].push(s);
-        });
-
-        const coreGrades = grouped['Core A.C.E.']
-          .map((s) => parseFloat(s.grade))
-          .filter((g) => !isNaN(g) && g > 0);
-
-        const gpa =
-          coreGrades.length > 0
-            ? (coreGrades.reduce((a, b) => a + b, 0) / coreGrades.length).toFixed(2)
-            : 'N/A';
-
-        const totalCreditsEarned = sortedSubjects
-          .filter((s) => {
-            const status = (s.convalidation_status || s.approval_status || '').toLowerCase();
-            return status === 'approved' || status === 'convalidado';
-          })
-          .reduce((sum, s) => sum + (parseFloat(s.credit_value || s.credits) || 0), 0);
-
-        const totalCreditsInProgress = sortedSubjects
-          .filter((s) => {
-            const status = (s.convalidation_status || s.approval_status || '').toLowerCase();
-            return status === 'pending' || status === 'en proceso' || status === 'submitted' || !status;
-          })
-          .reduce((sum, s) => sum + (parseFloat(s.credit_value || s.credits) || 0), 0);
-
-        return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <style type="text/css" media="print">
-              {`
-                body * { visibility: hidden; }
-                #printable-bulletin, #printable-bulletin * { visibility: visible; }
-                #printable-bulletin { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-shadow: none; border: none; }
-                .print-hide { display: none !important; }
-                @page { margin: 10mm; }
-              `}
-            </style>
-
-            <div id="printable-bulletin" className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col relative print:bg-white print:max-h-none print:w-full">
-              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print-hide">
-                <h3 className="font-black text-lg text-[#193D6D]">Vista Previa del Boletín ({bulletinQuarter})</h3>
-                <button onClick={() => setIsBulletinModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-10 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible">
-                <div className="max-w-3xl mx-auto flex flex-col min-h-full">
-                  <div className="flex-1">
-                    <div className="text-center mb-8">
-                      <img src={localLogo || defaultLogo} alt="Logo" className="h-20 mx-auto mb-4 object-contain" />
-                      <h1 className="text-2xl font-black uppercase tracking-wider" style={{ color: '#193D6D' }}>
-                        BOLETÍN ACADÉMICO - {bulletinQuarter}
-                      </h1>
-                      <p className="text-slate-600 font-bold mt-1">Chanak International Academy</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-8 p-4 bg-slate-50 border border-slate-200 rounded-xl print:bg-transparent print:border-none print:p-0">
-                      <div>
-                        <p className="text-sm text-slate-500 uppercase font-bold tracking-wider mb-1">Estudiante</p>
-                        <p className="font-black text-lg text-slate-800">
-                          {child?.first_name} {child?.last_name}
-                        </p>
-                      </div>
-                      <div className="text-right print:text-left">
-                        <p className="text-sm text-slate-500 uppercase font-bold tracking-wider mb-1">Nivel (US) / Año</p>
-                        <p className="font-black text-lg text-slate-800">
-                          {child?.us_grade_level || 'N/A'} • {ACTIVE_SCHOOL_YEAR}
-                        </p>
-                      </div>
-                    </div>
-
-                    {sortedSubjects.length === 0 ? (
-                      <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl">
-                        <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-500 font-bold text-lg">Sin registros aprobados</p>
-                        <p className="text-sm text-slate-400 mt-1">
-                          No hay materias con notas aprobadas para {bulletinQuarter} — {ACTIVE_SCHOOL_YEAR}.
-                          Las notas aparecerán aquí una vez que el coordinador las apruebe.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-6">
-                        {BLOCK_ORDER.map((blockName) => {
-                          const blockSubjects = grouped[blockName];
-                          if (!blockSubjects || blockSubjects.length === 0) return null;
-
-                          return (
-                            <div key={blockName} className="rounded-xl border border-slate-200 overflow-hidden">
-                              <div className="bg-[#193D6D] px-4 py-2">
-                                <h4 className="font-bold text-white tracking-wider uppercase text-sm">{blockName}</h4>
-                              </div>
-                              <table className="w-full text-left border-collapse bg-white">
-                                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs uppercase tracking-wider">
-                                  <tr>
-                                    <th className="p-3 font-bold">Materia</th>
-                                    <th className="p-3 font-bold text-center w-32">Grade</th>
-                                    <th className="p-3 font-bold text-right w-40">Detalles</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                  {blockSubjects.map((sub, idx) => {
-                                    const isApproved =
-                                      (sub.convalidation_status || '').toLowerCase() === 'convalidado' ||
-                                      (sub.convalidation_status || '').toLowerCase() === 'approved';
-
-                                    const isLocalExt =
-                                      blockName === 'Extensión Local' ||
-                                      blockName === 'Local Validation / Foreign Language';
-
-                                    return (
-                                      <tr key={idx} className="hover:bg-slate-50">
-                                        <td className="p-3 font-bold text-slate-800">{sub.subject_name}</td>
-                                        <td className="p-3 text-center font-bold text-[#193D6D]">
-                                          {(() => {
-                                            const formattedGrade = formatSubjectGrade(sub);
-                                            if (formattedGrade === 'In Progress' || formattedGrade === '—') return formattedGrade;
-
-                                            return `${formattedGrade}${blockName === 'Core A.C.E.' || blockName === 'Core Credits' ? '%' : ''}`;
-                                          })()}
-                                        </td>
-                                        <td className="p-3 text-right">
-                                          {isLocalExt ? (
-                                            <span className={`text-xs font-bold ${isApproved ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                              {isApproved ? '🟢 Convalidado' : '🟡 Pendiente'}
-                                            </span>
-                                          ) : blockName === 'Electives' ? (
-                                            <span className="text-xs font-bold text-slate-600">
-                                              {sub.credit_value || sub.credits || 0} Créditos
-                                            </span>
-                                          ) : (
-                                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                              sub.approval_status === 'approved'
-                                                ? 'bg-emerald-100 text-emerald-800'
-                                                : 'bg-slate-100 text-slate-600'
-                                            }`}>
-                                              {sub.approval_status === 'approved' ? 'Aprobado' : 'Pendiente'}
-                                            </span>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        })}
-
-                        <div className="mt-8 p-6 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="text-center md:text-left">
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">GPA (Core)</p>
-                            <p className="text-3xl font-black text-[#193D6D] mt-1">{gpa}</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Credits Earned</p>
-                            <p className="text-3xl font-black text-emerald-600 mt-1">{totalCreditsEarned}</p>
-                          </div>
-                          <div className="text-center md:text-right">
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">Credits In Progress</p>
-                            <p className="text-3xl font-black text-amber-500 mt-1">{totalCreditsInProgress}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-20 pt-8 flex flex-col items-center pb-8">
-                    <div className="w-64 border-t-2 border-slate-800 mb-3"></div>
-                    <p className="font-serif text-xl font-bold text-slate-900 tracking-wide">Mariela Andrade</p>
-                    <p className="font-serif text-md italic text-slate-600 mb-1">Head of School</p>
-                    <p className="font-sans text-sm font-bold text-[#193D6D] uppercase tracking-widest">
-                      Chanak International Academy
-                    </p>
-                  </div>
-
-                  <div className="mt-auto border-t border-slate-200 text-center text-sm text-slate-500 pt-4">
-                    <p>Documento generado el {new Date().toLocaleDateString('es-ES')}</p>
-                    <p className="mt-1">Este boletín es un documento informativo parcial y no reemplaza el transcript oficial.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-3 print-hide">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 bg-[#193D6D] hover:bg-[#122e54] text-white rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Printer className="w-5 h-5" /> Imprimir / Guardar PDF
-                </button>
-                <button
-                  onClick={() => setIsBulletinModalOpen(false)}
-                  className="flex-1 py-3 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded-xl font-bold shadow-sm transition-colors"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* PEI Modal */}
-      {isPeiModalOpen && (() => {
-        const child = getChildById(selectedDocumentChildId);
-        const peiDoc = getPeiDocument(selectedDocumentChildId);
-
-        const isStorage = peiDoc?.file_url?.includes('storage');
-        const signatureName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : 'Mariela Andrade';
-        const signatureRole = profile?.role === 'coordinator' ? 'Coordinador Académico' : 'Academic Staff';
-
-        return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <style type="text/css" media="print">
-              {`
-                body * { visibility: hidden; }
-                #printable-pei, #printable-pei * { visibility: visible; }
-                #printable-pei { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-shadow: none; border: none; }
-                .print-hide { display: none !important; }
-              `}
-            </style>
-
-            <div id="printable-pei" className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col relative print:bg-white print:max-h-none print:w-full">
-              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print-hide">
-                <h3 className="font-black text-lg text-purple-700">Verificación PEI</h3>
-                <button onClick={() => setIsPeiModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-10 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible">
-                <div className="max-w-2xl mx-auto flex flex-col min-h-full">
-                  <div className="flex-1 space-y-8">
-                    <div className="text-center">
-                      <img src={localLogo || defaultLogo} alt="Logo" className="h-24 mx-auto mb-4 object-contain" />
-                      <h1 className="text-3xl font-black uppercase tracking-wider text-[#193D6D]">Chanak International Academy</h1>
-                      <h2 className="text-xl font-bold text-slate-600 mt-2">Plan Educativo Individualizado (PEI)</h2>
-                    </div>
-
-                    <div className="h-1 w-full bg-[#20B2AA] rounded-full print:bg-[#20B2AA] !important" style={{ printColorAdjust: 'exact' }}></div>
-
-                    <div className="text-justify space-y-6 text-lg text-slate-800 leading-relaxed font-serif">
-                      <p>
-                        Por medio de la presente, la dirección académica de Chanak International Academy certifica que:
-                      </p>
-
-                      <p className="text-xl text-center font-black text-[#193D6D] p-6 bg-slate-50 border border-slate-200 rounded-xl print:bg-transparent print:border-none">
-                        {child?.first_name} {child?.last_name}
-                      </p>
-
-                      <p>
-                        Cursando actualmente el nivel académico <strong>{child?.us_grade_level || 'N/A'} (US)</strong>, se encuentra amparado bajo un Plan Educativo Individualizado (PEI) activo y validado por nuestra institución para el año escolar lectivo <strong>2025-2026</strong>.
-                      </p>
-
-                      <p>
-                        El estudiante cumple con las normativas internacionales de educación en casa con currículo estructurado y adaptaciones pertinentes según su perfil vocacional y objetivos a largo plazo.
-                      </p>
-                    </div>
-
-                    <div className="mt-8 p-6 bg-slate-50 border border-slate-200 rounded-xl print-hide">
-                      <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-purple-600" /> Documento Oficial
-                      </h4>
-                      {peiDoc?.file_url ? (
-                        <div className="flex items-center justify-between p-4 bg-white border border-emerald-200 rounded-lg shadow-sm">
-                          <div>
-                            <p className="font-bold text-emerald-700">PEI Oficial Disponible</p>
-                            <p className="text-sm text-slate-500">El documento ha sido cargado y está listo para descarga o visualización.</p>
-                          </div>
-                          <a
-                            href={peiDoc.file_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-sm transition-colors"
-                          >
-                            {isStorage ? (
-                              <>
-                                <Download className="w-5 h-5" /> Descargar PDF
-                              </>
-                            ) : (
-                              <>
-                                <ExternalLink className="w-5 h-5" /> Abrir Enlace
-                              </>
-                            )}
-                          </a>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg shadow-sm">
-                          <Hourglass className="w-6 h-6 text-amber-600 shrink-0" />
-                          <div>
-                            <p className="font-bold text-amber-800">Documento oficial en proceso</p>
-                            <p className="text-sm text-amber-700">El PEI certificado está siendo generado o validado por coordinación académica.</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-24 pt-8 flex flex-col items-center pb-8">
-                    <div className="w-64 border-t-2 border-slate-800 mb-3"></div>
-                    <p className="font-serif text-xl font-bold text-slate-900 tracking-wide">{signatureName || 'Mariela Andrade'}</p>
-                    <p className="font-serif text-md italic text-slate-600 mb-1">{signatureRole}</p>
-                    <p className="font-sans text-sm font-bold text-[#193D6D] uppercase tracking-widest">Chanak International Academy</p>
-                  </div>
-
-                  <div className="mt-auto border-t border-slate-200 text-center text-sm text-slate-500 pt-4">
-                    <p>Documento emitido el {formatDate(new Date())}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-3 print-hide">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Printer className="w-5 h-5" /> Imprimir PEI
-                </button>
-                <button
-                  onClick={() => setIsPeiModalOpen(false)}
-                  className="flex-1 py-3 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded-xl font-bold shadow-sm transition-colors"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Enrollment Confirmation Modal */}
-      {isEnrollmentModalOpen && (() => {
-        const child = getChildById(selectedDocumentChildId);
-
-        return (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <style type="text/css" media="print">
-              {`
-                body * { visibility: hidden; }
-                #printable-enrollment, #printable-enrollment * { visibility: visible; }
-                #printable-enrollment { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-shadow: none; border: none; }
-                .print-hide { display: none !important; }
-              `}
-            </style>
-
-            <div id="printable-enrollment" className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col relative print:bg-white print:max-h-none print:w-full">
-              <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print-hide">
-                <h3 className="font-black text-lg text-emerald-700">Documento de Matrícula</h3>
-                <button onClick={() => setIsEnrollmentModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-10 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible">
-                <div className="max-w-3xl mx-auto flex flex-col min-h-full">
-                  <div className="flex-1 space-y-8">
-                    <div className="text-center">
-                      <img src={localLogo || defaultLogo} alt="Logo" className="h-24 mx-auto mb-4 object-contain" />
-                      <h1 className="text-3xl font-black uppercase tracking-wider text-[#193D6D]">Chanak International Academy</h1>
-                      <p className="text-sm font-bold text-[#20B2AA] tracking-widest uppercase mt-1">FLDOE #134620</p>
-                      <h2 className="text-2xl font-bold text-slate-800 mt-6 border-b-2 border-slate-200 inline-block pb-2">
-                        CONFIRMACIÓN OFICIAL DE MATRÍCULA
-                      </h2>
-                    </div>
-
-                    <div className="text-justify space-y-6 text-lg text-slate-800 leading-relaxed font-serif mt-10">
-                      <p>A quien corresponda:</p>
-                      <p>
-                        Por medio de la presente, la dirección académica de <strong>Chanak International Academy</strong> certifica formal y oficialmente que el estudiante mencionado a continuación se encuentra debidamente registrado y matriculado en nuestra institución para el año escolar lectivo <strong>2025-2026</strong>.
-                      </p>
-                    </div>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 mt-8 mb-8 print:bg-transparent print:border-none print:p-0">
-                      <div className="grid grid-cols-2 gap-y-4 gap-x-8">
-                        <div>
-                          <p className="text-sm text-slate-500 uppercase font-bold tracking-wider">Nombre del Estudiante</p>
-                          <p className="font-black text-xl text-[#193D6D]">{child?.first_name} {child?.last_name}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 uppercase font-bold tracking-wider">Nivel Académico (US)</p>
-                          <p className="font-black text-xl text-slate-800">{child?.us_grade_level || 'N/A'}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 uppercase font-bold tracking-wider">Año Escolar</p>
-                          <p className="font-black text-xl text-slate-800">2025-2026</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-slate-500 uppercase font-bold tracking-wider">Fecha de Emisión</p>
-                          <p className="font-black text-xl text-slate-800">{formatDate(new Date())}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-justify space-y-6 text-lg text-slate-800 leading-relaxed font-serif">
-                      <p>
-                        Esta certificación acredita el registro formal bajo la normativa internacional correspondiente. El estudiante cursa su plan de estudios mediante nuestro programa oficial, cumpliendo con los estándares académicos requeridos.
-                      </p>
-                      <p>
-                        Se expide la presente confirmación para los fines legales e institucionales que los interesados consideren pertinentes.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-24 pt-8 flex flex-col items-center pb-8">
-                    <div className="w-64 border-t-2 border-slate-800 mb-3"></div>
-                    <p className="font-serif text-xl font-bold text-slate-900 tracking-wide">Mariela Andrade</p>
-                    <p className="font-serif text-md italic text-slate-600 mb-1">Directora Académica</p>
-                    <p className="font-sans text-sm font-bold text-[#193D6D] uppercase tracking-widest">Chanak International Academy</p>
-                  </div>
-
-                  <div className="mt-auto border-t border-slate-200 text-center text-sm text-slate-500 pt-4">
-                    <p>Chanak International Academy - EIN 36-5154011</p>
-                    <p>Documento generado el {new Date().toLocaleDateString('es-ES')}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-3 print-hide">
-                <button
-                  onClick={() => window.print()}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-colors"
-                >
-                  <Printer className="w-5 h-5" /> Imprimir Matrícula
-                </button>
-                <button
-                  onClick={() => setIsEnrollmentModalOpen(false)}
-                  className="flex-1 py-3 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded-xl font-bold shadow-sm transition-colors"
                 >
                   Cerrar
                 </button>
