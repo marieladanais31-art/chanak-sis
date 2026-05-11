@@ -28,31 +28,54 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
+function errorResponse(message: string, status: number, details?: Record<string, unknown>) {
+  console.error('[admin-create-user]', message, details || {});
+  return jsonResponse({ success: false, error: message, details: details || null }, status);
+}
+
+function isExistingEmailError(error: { message?: string; code?: string; status?: number } | null | undefined) {
+  const message = (error?.message || '').toLowerCase();
+  return error?.status === 422 && (
+    message.includes('already')
+    || message.includes('registered')
+    || message.includes('exists')
+    || message.includes('duplicate')
+  );
+}
+
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length > 0))] : [];
 }
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
-  if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
+  if (req.method !== 'POST') return errorResponse('Method not allowed. Use POST for admin-create-user.', 405);
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return jsonResponse({ error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.' }, 500);
+  if (!supabaseUrl) {
+    return errorResponse('Missing SUPABASE_URL environment variable.', 500);
+  }
+
+  if (!serviceRoleKey) {
+    return errorResponse('Missing SUPABASE_SERVICE_ROLE_KEY environment variable.', 500);
   }
 
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace('Bearer ', '').trim();
-  if (!token) return jsonResponse({ error: 'Missing authorization token.' }, 401);
+  if (!token) return errorResponse('Caller has no active session. Missing authorization token.', 401);
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
   const { data: callerData, error: callerError } = await admin.auth.getUser(token);
-  if (callerError || !callerData.user) return jsonResponse({ error: 'Invalid authorization token.' }, 401);
+  if (callerError || !callerData.user) {
+    return errorResponse('Caller has no active session or the session token is invalid.', 401, {
+      caller_error: callerError?.message || null,
+    });
+  }
 
   const { data: callerProfile, error: callerProfileError } = await admin
     .from('profiles')
@@ -61,9 +84,14 @@ serve(async (req) => {
     .limit(1)
     .maybeSingle();
 
-  if (callerProfileError) return jsonResponse({ error: callerProfileError.message }, 500);
+  if (callerProfileError) {
+    return errorResponse('Could not verify caller profile role.', 500, { profile_error: callerProfileError.message });
+  }
   if (!callerProfile || !ADMIN_ROLES.has(callerProfile.role)) {
-    return jsonResponse({ error: 'Only admin and super_admin can create SIS users.' }, 403);
+    return errorResponse('Caller is not admin or super_admin. Only admin and super_admin can create SIS users.', 403, {
+      caller_id: callerData.user.id,
+      caller_role: callerProfile?.role || null,
+    });
   }
 
   const payload = await req.json();
@@ -77,11 +105,28 @@ serve(async (req) => {
   const tutorStudentIds = asStringArray(payload.tutor_student_ids);
   const familyStudentIds = asStringArray(payload.family_student_ids);
 
-  if (!email) return jsonResponse({ error: 'Email is required.' }, 400);
-  if (!password || password.length < 8) return jsonResponse({ error: 'Temporary password must be at least 8 characters.' }, 400);
-  if (!firstName) return jsonResponse({ error: 'First name is required.' }, 400);
-  if (!lastName) return jsonResponse({ error: 'Last name is required.' }, 400);
-  if (!CANONICAL_ROLES.has(role)) return jsonResponse({ error: 'Invalid role.' }, 400);
+  if (!email) return errorResponse('Email is required.', 400);
+  if (!password || password.length < 8) return errorResponse('Temporary password must be at least 8 characters.', 400);
+  if (!firstName) return errorResponse('First name is required.', 400);
+  if (!lastName) return errorResponse('Last name is required.', 400);
+  if (!CANONICAL_ROLES.has(role)) return errorResponse('Invalid role.', 400, { role });
+
+  const { data: existingProfile, error: existingProfileError } = await admin
+    .from('profiles')
+    .select('id, email')
+    .eq('email', email)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingProfileError) {
+    return errorResponse('Error checking whether email already exists in profiles.', 500, {
+      profile_error: existingProfileError.message,
+    });
+  }
+
+  if (existingProfile) {
+    return errorResponse('Email already exists.', 409, { email, existing_profile_id: existingProfile.id });
+  }
 
   const fullName = [firstName, lastName].filter(Boolean).join(' ');
 
@@ -98,7 +143,20 @@ serve(async (req) => {
   });
 
   if (createError || !authData.user) {
-    return jsonResponse({ error: createError?.message || 'Auth user was not created.' }, 400);
+    if (isExistingEmailError(createError)) {
+      return errorResponse('Email already exists.', 409, {
+        email,
+        auth_error: createError?.message || 'Auth user was not created.',
+        auth_error_code: createError?.code || null,
+        auth_error_status: createError?.status || null,
+      });
+    }
+
+    return errorResponse('Error creating auth user.', 400, {
+      auth_error: createError?.message || 'Auth user was not created.',
+      auth_error_code: createError?.code || null,
+      auth_error_status: createError?.status || null,
+    });
   }
 
   const userId = authData.user.id;
@@ -121,7 +179,10 @@ serve(async (req) => {
     .upsert(profilePayload, { onConflict: 'id' });
 
   if (profileError) {
-    return jsonResponse({ error: `Auth created, but profile upsert failed: ${profileError.message}` }, 500);
+    return errorResponse('Error creating/upserting profile after auth user creation.', 500, {
+      user_id: userId,
+      profile_error: profileError.message,
+    });
   }
 
   if (TUTOR_ROLES.has(role) && tutorStudentIds.length > 0) {
