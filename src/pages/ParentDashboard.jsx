@@ -18,6 +18,7 @@ import {
   Hourglass,
   Scale,
   ExternalLink,
+  FileUp,
   Link2,
   Bell,
   CalendarDays,
@@ -26,6 +27,7 @@ import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
+import ParentEvidencePanel from '@/components/ParentEvidencePanel';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
 
@@ -812,6 +814,16 @@ export default function ParentDashboard() {
               📁 Documentos
             </button>
             <button
+              onClick={() => setActiveTab('evidencias')}
+              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'evidencias'
+                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <FileUp className="w-4 h-4" /> Evidencias
+            </button>
+            <button
               onClick={() => setActiveTab('recursos')}
               className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
                 activeTab === 'recursos'
@@ -1095,14 +1107,16 @@ export default function ParentDashboard() {
                           </span>
                         </button>
 
-                        {/* Placeholder — subida de evidencias (próximamente) */}
                         <button
-                          disabled
-                          title="Próximamente: subida de evidencias académicas"
-                          className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-50 flex flex-col items-center gap-2 cursor-not-allowed"
+                          onClick={() => {
+                            setSelectedChildId(child.id);
+                            setActiveTab('evidencias');
+                          }}
+                          title="Reportar evidencias académicas para revisión Chanak"
+                          className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
                         >
-                          <ExternalLink className="w-5 h-5 text-slate-400" />
-                          <span className="text-xs font-bold text-slate-400 text-center leading-tight">Evidencias<br/>Próx.</span>
+                          <FileUp className="w-5 h-5 text-[#193D6D] group-hover:scale-110 transition-transform" />
+                          <span className="text-xs font-bold text-slate-700 text-center leading-tight">Evidencias</span>
                         </button>
                       </div>
                     </div>
@@ -1132,6 +1146,14 @@ export default function ParentDashboard() {
 
             {activeTab === 'documentos' && (
               <ParentDocumentosPanel studentChildren={children} />
+            )}
+
+            {activeTab === 'evidencias' && (
+              <ParentEvidencePanel
+                studentChildren={children}
+                studentSubjects={studentSubjects}
+                initialStudentId={selectedChildId}
+              />
             )}
 
             {activeTab === 'recursos' && (
