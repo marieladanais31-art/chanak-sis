@@ -3,23 +3,19 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, AlertTriangle, CheckCircle } from 'lucide-react';
 import { generateAnnualTranscriptPDF } from '@/lib/annualTranscriptPdf';
+import { gradeToTranscriptLetter, TRANSCRIPT_GRADING_SCALE } from '@/lib/academicUtils';
 
 const NAVY = '#193D6D';
 
-const GRADING = [
-  { min: 98, letter: 'A*', color: 'text-emerald-700 font-black' },
-  { min: 96, letter: 'A',  color: 'text-emerald-700 font-black' },
-  { min: 92, letter: 'B',  color: 'text-blue-700 font-bold' },
-  { min: 88, letter: 'C',  color: 'text-blue-600 font-bold' },
-  { min: 84, letter: 'D',  color: 'text-amber-700 font-bold' },
-  { min: 80, letter: 'E',  color: 'text-amber-600 font-bold' },
-  { min: 0,  letter: 'F',  color: 'text-red-700 font-bold' },
-];
+const GRADING = TRANSCRIPT_GRADING_SCALE.map((grade) => ({
+  ...grade,
+  color: grade.letter === 'F' ? 'text-red-700 font-bold' : 'text-blue-700 font-bold',
+}));
 
 function gradeInfo(val) {
   if (val === null || val === undefined) return { letter: '—', color: 'text-slate-400' };
-  const n = Number(val);
-  return GRADING.find(g => n >= g.min) || GRADING[GRADING.length - 1];
+  const letter = gradeToTranscriptLetter(val);
+  return GRADING.find(g => g.letter === letter) || GRADING[GRADING.length - 1];
 }
 
 function fmt(val) {
@@ -378,18 +374,10 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
           <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
             <p className="text-xs font-black text-slate-600 uppercase tracking-wider mb-3">Escala de calificaciones</p>
             <div className="flex flex-wrap gap-3">
-              {[
-                { range: '98–100', letter: 'A*', desc: 'Excellent' },
-                { range: '96–97.9', letter: 'A', desc: 'Excellent' },
-                { range: '92–95.9', letter: 'B', desc: 'Very Good' },
-                { range: '88–91.9', letter: 'C', desc: 'Good' },
-                { range: '84–87.9', letter: 'D', desc: 'Fair' },
-                { range: '80–83.9', letter: 'E', desc: 'Satisfactory' },
-              ].map(g => (
+              {TRANSCRIPT_GRADING_SCALE.filter(g => g.letter !== 'F').map(g => (
                 <div key={g.letter} className="bg-white rounded-lg px-3 py-2 border border-slate-200 text-center min-w-[80px]">
                   <p className="font-black text-blue-700">{g.letter}</p>
-                  <p className="text-[10px] text-slate-500">{g.range}</p>
-                  <p className="text-[9px] text-slate-400 font-medium">{g.desc}</p>
+                  <p className="text-[10px] text-slate-500">{g.min}–{g.max}</p>
                 </div>
               ))}
             </div>

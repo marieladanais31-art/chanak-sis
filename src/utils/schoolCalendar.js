@@ -1,3 +1,4 @@
+import { isPassingPaceScore } from '@/lib/academicUtils';
 
 export const SCHOOL_YEAR = {
   START_MONTH: 8, // September
@@ -39,7 +40,7 @@ export function calculateTrimestralPACES(studentStartDate, currentGrades, target
 
     const actualPACES = currentGrades.filter(g => {
       const q = isValidQuarter(g.quarter) ? g.quarter : 'Q1';
-      return parseFloat(g.score) >= 70 && q === evalQuarter;
+      return isPassingPaceScore(g.score) && q === evalQuarter;
     }).length;
 
     const deficit = expectedPACESPerQuarter - actualPACES;
