@@ -42,8 +42,9 @@ export default function AdminSeguridad() {
     
     try {
       // Using safe client-side auth method as required
+      const redirectTo = `${window.location.origin}/auth/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo,
       });
       
       if (error) {

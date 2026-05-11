@@ -112,8 +112,9 @@ const AdminUsers = () => {
 
     setSendingInviteFor(user.id);
     try {
+      const redirectTo = `${window.location.origin}/auth/reset`;
       const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: 'https://sis.chanakacademy.org/auth/callback'
+        redirectTo
       });
 
       if (error) {

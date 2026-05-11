@@ -35,8 +35,7 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setSent(false);
 
-    // La URL de callback apunta a /auth/callback para que CallbackPage procese el token
-    const redirectTo = `${window.location.origin}/auth/callback?type=recovery`;
+    const redirectTo = `${window.location.origin}/auth/reset`;
     console.log('FORGOT redirectTo:', redirectTo);
 
     // Marcar recovery en curso ANTES de enviar el email.
