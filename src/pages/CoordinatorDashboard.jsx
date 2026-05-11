@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList, LogOut } from 'lucide-react';
+import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList, LogOut, FileCheck2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import GradeReviewPanel from '@/components/GradeReviewPanel';
+import EvidenceReviewPanel from '@/components/EvidenceReviewPanel';
 import PEIFormFull from '@/components/PEIFormFull';
 import TranscriptGenerator from '@/components/TranscriptGenerator';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
@@ -324,6 +325,7 @@ export default function CoordinatorDashboard() {
         {[
           { id: 'notas',     label: 'Notas',           icon: BookOpen },
           { id: 'revision',  label: 'Revisar Notas',   icon: ClipboardList },
+          { id: 'evidencias', label: 'Evidencias', icon: FileCheck2 },
           { id: 'pei',       label: 'PEI',              icon: FileText },
           { id: 'boletines', label: 'Boletines',        icon: ScrollText },
           { id: 'alertas',   label: 'Alertas',          icon: AlertTriangle },
@@ -358,6 +360,14 @@ export default function CoordinatorDashboard() {
             </p>
           </div>
           <GradeReviewPanel hubId={profile?.role === 'coordinator' ? profile?.hub_id : null} />
+        </div>
+      )}
+
+
+      {/* Evidencias tab */}
+      {mainTab === 'evidencias' && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          <EvidenceReviewPanel hubId={profile?.role === 'coordinator' ? profile?.hub_id : null} />
         </div>
       )}
 

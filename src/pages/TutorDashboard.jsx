@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
-import { LogOut, Users, BookOpen, Loader2, X, CalendarDays, FileText, AlertTriangle } from 'lucide-react';
+import { LogOut, Users, BookOpen, Loader2, X, CalendarDays, FileText, AlertTriangle, FileCheck2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import PEIFormFull from '@/components/PEIFormFull';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
+import EvidenceReviewPanel from '@/components/EvidenceReviewPanel';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 
 export default function TutorDashboard() {
@@ -15,7 +16,7 @@ export default function TutorDashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'pei' | 'alertas'
+  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'evidencias' | 'pei' | 'alertas'
   const [peiModal, setPeiModal] = useState(null); // { studentId, studentName, peiId }
   const [peis, setPeis] = useState([]);
   const [students, setStudents] = useState([]);
@@ -136,8 +137,9 @@ export default function TutorDashboard() {
         {/* Tab switcher */}
         <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
           {[
-            { id: 'notas',   label: 'Mis Estudiantes', icon: Users },
-            { id: 'pei',     label: 'PEI',             icon: FileText },
+            { id: 'notas',      label: 'Mis Estudiantes', icon: Users },
+            { id: 'evidencias', label: 'Evidencias',      icon: FileCheck2 },
+            { id: 'pei',        label: 'PEI',             icon: FileText },
             { id: 'alertas', label: 'Alertas',          icon: AlertTriangle },
           ].map(({ id, label, icon: Icon }) => (
             <button
@@ -156,6 +158,14 @@ export default function TutorDashboard() {
         {mainTab === 'alertas' && (
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <SisAlertsDashboard />
+          </div>
+        )}
+
+
+        {/* Evidencias tab */}
+        {mainTab === 'evidencias' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <EvidenceReviewPanel tutorId={profile?.id} />
           </div>
         )}
 
