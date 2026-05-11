@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList } from 'lucide-react';
+import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +31,25 @@ export default function CoordinatorDashboard() {
   const [trModal, setTrModal]   = useState(null);   // { studentId, studentName, transcriptId }
   const [peis, setPeis]         = useState([]);
   const [transcripts, setTranscripts] = useState([]);
+  const [logoError, setLogoError] = useState(false);
+  const [localLogo, setLocalLogo] = useState(() => localStorage.getItem('app_logo'));
+
+  const defaultLogo =
+    'https://horizons-cdn.hostinger.com/fecf9528-708e-4a5b-9228-805062d89fe9/d9778ccb909ddc8597ac3c64740796e6.png';
+  const displayName = profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || profile?.email || 'Coordinador';
+  const displayRole = profile?.role ? profile.role.replace('_', ' ').toUpperCase() : 'COORDINATOR';
+  const isCoordinator = profile?.role === ROLES.COORDINATOR;
+  const coordinatorHasHub = Boolean(profile?.hub_id);
+
+  useEffect(() => {
+    const updateLogo = () => {
+      setLocalLogo(localStorage.getItem('app_logo'));
+      setLogoError(false);
+    };
+
+    window.addEventListener('logo-updated', updateLogo);
+    return () => window.removeEventListener('logo-updated', updateLogo);
+  }, []);
 
   useEffect(() => {
     if (!profile) return;
@@ -55,24 +74,65 @@ export default function CoordinatorDashboard() {
   const loadStudents = async () => {
     setLoading(true);
     try {
-      // Hub filter: coordinators only see their hub; admins see all
-      const isCoordinatorOnly = profile?.role === ROLES.COORDINATOR;
-      const hubFilter = isCoordinatorOnly && profile?.hub_id;
+      if (isCoordinator && !coordinatorHasHub) {
+        setStudents([]);
+        setSelectedStudent('');
+        setPeis([]);
+        setTranscripts([]);
+        return;
+      }
 
-      let studQuery = supabase.from('students').select('id, first_name, last_name, grade_level, us_grade_level').order('first_name');
-      if (hubFilter) studQuery = studQuery.eq('hub_id', profile.hub_id);
+      let studQuery = supabase
+        .from('students')
+        .select('id, first_name, last_name, grade_level, us_grade_level, hub_id')
+        .order('first_name');
 
-      const [studRes, peiRes, trRes] = await Promise.all([
-        studQuery,
-        supabase.from('individualized_education_plans').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
-        supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').order('updated_at', { ascending: false }),
+      if (isCoordinator) {
+        studQuery = studQuery.eq('hub_id', profile.hub_id);
+      }
+
+      const { data: studentData, error: studentError } = await studQuery;
+      if (studentError) throw studentError;
+
+      const loadedStudents = studentData || [];
+      setStudents(loadedStudents);
+      setSelectedStudent((current) => (current && loadedStudents.some((student) => student.id === current) ? current : ''));
+
+      const studentIds = loadedStudents.map((student) => student.id);
+      if (studentIds.length === 0) {
+        setPeis([]);
+        setTranscripts([]);
+        return;
+      }
+
+      const [peiRes, trRes] = await Promise.all([
+        supabase
+          .from('individualized_education_plans')
+          .select('id, student_id, school_year, quarter, status')
+          .in('student_id', studentIds)
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('transcript_records')
+          .select('id, student_id, school_year, quarter, status')
+          .in('student_id', studentIds)
+          .order('updated_at', { ascending: false }),
       ]);
-      if (studRes.error) throw studRes.error;
-      setStudents(studRes.data || []);
-      setPeis(peiRes.data || []);
-      setTranscripts(trRes.data || []);
+
+      if (peiRes.error) {
+        console.warn('[CoordinatorDashboard] Error loading PEI records:', peiRes.error);
+      }
+      if (trRes.error) {
+        console.warn('[CoordinatorDashboard] Error loading transcript records:', trRes.error);
+      }
+
+      setPeis(peiRes.error ? [] : peiRes.data || []);
+      setTranscripts(trRes.error ? [] : trRes.data || []);
     } catch (err) {
       console.error('[CoordinatorDashboard] Error loading students:', err);
+      setStudents([]);
+      setSelectedStudent('');
+      setPeis([]);
+      setTranscripts([]);
       toast({ title: 'Error', description: 'Error al cargar estudiantes.', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -178,6 +238,11 @@ export default function CoordinatorDashboard() {
     );
   }
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/login', { replace: true });
+  };
+
   const getPei = (studentId) => peis.find(p => p.student_id === studentId);
   const getTr  = (studentId) => transcripts.find(t => t.student_id === studentId);
 
@@ -208,10 +273,51 @@ export default function CoordinatorDashboard() {
         </div>
       )}
 
-      <div>
-        <h2 className="text-2xl font-bold text-slate-800">Panel del Coordinador</h2>
-        <p className="text-sm text-slate-500 font-medium">Gestión académica integral</p>
-      </div>
+      <header className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-4">
+          {!logoError ? (
+            <img
+              src={localLogo || defaultLogo}
+              alt="Chanak Academy"
+              onError={() => setLogoError(true)}
+              className="w-14 h-14 object-contain shrink-0"
+            />
+          ) : (
+            <div className="w-12 h-12 bg-blue-900 rounded-xl flex items-center justify-center text-white font-black text-lg shrink-0">
+              CA
+            </div>
+          )}
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">Panel del Coordinador</h2>
+            <p className="text-sm text-slate-500 font-medium">Gestión académica integral</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="text-left sm:text-right">
+            <p className="text-sm font-black text-slate-800">{displayName}</p>
+            <p className="text-xs font-bold text-blue-700 uppercase tracking-widest">{displayRole}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-sm font-bold transition-colors border border-red-100 hover:border-red-600"
+          >
+            <LogOut className="w-4 h-4" />
+            Cerrar Sesión
+          </button>
+        </div>
+      </header>
+
+      {isCoordinator && !coordinatorHasHub && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-xl p-5 flex items-start gap-3 shadow-sm">
+          <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-black">Coordinador sin hub asignado</p>
+            <p className="text-sm mt-1">Solicita a administración que asigne un hub a tu perfil para ver estudiantes.</p>
+          </div>
+        </div>
+      )}
 
       {/* Main tabs */}
       <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
