@@ -36,13 +36,18 @@ async function findStudentByColumn(column, value, { caseInsensitive = false } = 
 }
 
 async function findLinkedStudent(profile, user) {
+  if (profile?.role !== 'student') return null;
+
+  const studentByProfileId = await findStudentByColumn('profile_id', profile.id);
+  console.log('[StudentDashboard] student by profile_id', studentByProfileId);
+  if (studentByProfileId) return studentByProfileId;
+
   const profileEmail = normalizeEmail(profile?.email || user?.email);
   const authUserId = profile?.user_id || user?.id;
   const lookupSteps = [
-    { column: 'profile_id', value: profile?.id },
-    { column: 'user_id', value: authUserId },
     { column: 'email', value: profileEmail, caseInsensitive: true },
     { column: 'student_email', value: profileEmail, caseInsensitive: true },
+    { column: 'user_id', value: authUserId },
   ];
 
   for (const step of lookupSteps) {
@@ -75,6 +80,7 @@ export default function StudentDashboard() {
       setLoading(true);
       try {
         console.log(`👨‍🎓 Inicializando StudentDashboard para perfil: ${profile.id}`);
+        console.log('[StudentDashboard] auth profile', profile);
         const sData = await findLinkedStudent(profile, user);
         setStudent(sData);
 
