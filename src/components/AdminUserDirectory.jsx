@@ -4,8 +4,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { Link2, Users, Loader2, X, AlertCircle, Lock, UserPlus } from 'lucide-react';
-import CreateUserForm from './CreateUserForm';
+import { Link2, Users, Loader2, X, AlertCircle, Lock } from 'lucide-react';
 
 export default function AdminUserDirectory() {
   const { toast } = useToast();
@@ -24,8 +23,6 @@ export default function AdminUserDirectory() {
   const [linkData, setLinkData] = useState({ student_id: '', family_id: '', hub_id: '' });
   const [linking, setLinking] = useState(false);
 
-  // Create User Modal State
-  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -132,9 +129,9 @@ export default function AdminUserDirectory() {
           <h2 className="text-2xl font-bold text-slate-800">Directorio de Usuarios</h2>
         </div>
         {userRole === 'super_admin' && (
-          <Button onClick={() => setShowCreateModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-            <UserPlus className="w-4 h-4 mr-2" /> Crear Usuario
-          </Button>
+          <div className="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+            Crear usuarios: usa Administración → Usuarios
+          </div>
         )}
       </div>
 
@@ -144,26 +141,6 @@ export default function AdminUserDirectory() {
         </div>
       )}
 
-      {/* Create User Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b border-slate-100 bg-slate-50 sticky top-0 z-10">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-indigo-600" /> Crear Nuevo Usuario
-              </h3>
-              <Button variant="ghost" size="sm" onClick={() => setShowCreateModal(false)}><X className="w-4 h-4" /></Button>
-            </div>
-            
-            <div className="p-6">
-              <CreateUserForm 
-                onSuccess={() => { setShowCreateModal(false); fetchData(); }} 
-                onCancel={() => setShowCreateModal(false)} 
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Link Student Modal */}
       {showLinkModal && (
