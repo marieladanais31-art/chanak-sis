@@ -105,7 +105,7 @@ export default function AdminUserManagement() {
         supabase.from('organizations').select('id, name').order('name'),
         supabase
           .from('students')
-          .select('id, first_name, last_name, full_name, grade_level, us_grade_level, hub_id, tutor_id, parent_id')
+          .select('id, first_name, last_name, full_name, grade_level, us_grade_level, hub_id, tutor_id')
           .order('first_name', { ascending: true }),
         supabase.from('family_students').select('family_id, student_id'),
       ]);
@@ -253,37 +253,39 @@ export default function AdminUserManagement() {
     }
   };
 
-  const syncFamilyStudents = async (profileId, selectedIds) => {
+  const syncFamilyStudents = async (profile, selectedIds) => {
     const desiredIds = uniqueIds(selectedIds);
+
+    console.log('[AdminUserManagement] saving parent links', profile.email, desiredIds);
 
     const { error: deleteError } = await supabase
       .from('family_students')
       .delete()
-      .eq('family_id', profileId);
+      .eq('family_id', profile.id);
     if (deleteError) throw deleteError;
+    console.log('[AdminUserManagement] deleted old family_students for', profile.id);
 
+    let insertedLinks = [];
     if (desiredIds.length > 0) {
-      const rows = desiredIds.map((studentId) => ({ family_id: profileId, student_id: studentId }));
-      const { error: insertError } = await supabase.from('family_students').insert(rows);
+      const rows = desiredIds.map((studentId) => ({
+        family_id: profile.id,
+        student_id: studentId,
+      }));
+      const { data, error: insertError } = await supabase
+        .from('family_students')
+        .insert(rows)
+        .select('family_id, student_id');
       if (insertError) throw insertError;
-
-      const { error: parentError } = await supabase
-        .from('students')
-        .update({ parent_id: profileId })
-        .in('id', desiredIds);
-      if (parentError) throw parentError;
+      insertedLinks = data || rows;
     }
+    console.log('[AdminUserManagement] inserted family_students', insertedLinks);
 
-    const currentIds = studentsByFamily.get(profileId) || [];
-    const idsToClear = currentIds.filter((id) => !desiredIds.includes(id));
-    if (idsToClear.length > 0) {
-      const { error: clearParentError } = await supabase
-        .from('students')
-        .update({ parent_id: null })
-        .in('id', idsToClear)
-        .eq('parent_id', profileId);
-      if (clearParentError) throw clearParentError;
-    }
+    const { count, error: countError } = await supabase
+      .from('family_students')
+      .select('student_id', { count: 'exact', head: true })
+      .eq('family_id', profile.id);
+    if (countError) throw countError;
+    console.log('[AdminUserManagement] parent count after save', profile.email, count || 0);
   };
 
   const handleEditProfile = async (event) => {
@@ -316,7 +318,7 @@ export default function AdminUserManagement() {
       if (error) throw error;
 
       await syncTutorStudents(selectedUser.id, TUTOR_ROLES.includes(role) ? editForm.tutorStudentIds : []);
-      await syncFamilyStudents(selectedUser.id, FAMILY_ROLES.includes(role) ? editForm.familyStudentIds : []);
+      await syncFamilyStudents(selectedUser, FAMILY_ROLES.includes(role) ? editForm.familyStudentIds : []);
 
       toast({ title: 'Usuario actualizado', description: `Perfil y asignaciones de ${selectedUser.email} actualizados.` });
       setEditOpen(false);
@@ -363,7 +365,7 @@ export default function AdminUserManagement() {
       return `${count} estudiante${count === 1 ? '' : 's'}`;
     }
     if (FAMILY_ROLES.includes(profile.role)) {
-      const count = (studentsByFamily.get(profile.id) || []).length;
+      const count = familyLinks.filter((link) => link.family_id === profile.id).length;
       return `${count} hijo${count === 1 ? '' : 's'} vinculado${count === 1 ? '' : 's'}`;
     }
     return '—';
