@@ -3,8 +3,9 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS } from '@/lib/academicUtils';
+import { buildReportCoursesFromApprovedGrades, summarizeReportReadiness } from '@/lib/reportCardGrades';
 import {
-  Download, Save, Loader2, Plus, Trash2, ChevronRight,
+  Download, Save, Loader2, ChevronRight,
   FileText, CheckCircle, Send, Eye, AlertCircle, X
 } from 'lucide-react';
 
@@ -18,19 +19,10 @@ const STATUS_META = {
   published: { label: 'Publicado',   color: 'bg-green-100 text-green-800', next: null,         nextLabel: null,               icon: Send },
 };
 
-const GRADE_STATUS = ['pending', 'approved', 'failed'];
-
-const SUBJECT_LIST = [
-  'Math', 'English', 'Word Building', 'Science', 'Social Studies',
-  'Spanish Language', 'History & Geography Local', 'World History',
-  'World Geography', 'American History',
-  'Life Skills', 'Physical Education', 'Arts',
-  '— Manual (escribir) —',
-];
-
 const EMPTY_COURSE = {
   subject_name: '', academic_block: '', pace_numbers: '',
   credits: '0.5', final_grade: '', grade_status: 'pending',
+  assessment_count: 0, qualitative_evaluation: '', evaluation_note: '', mastery_status: null,
 };
 
 /**
@@ -51,6 +43,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
   const [transcriptId, setTranscriptId] = useState(initId || null);
   const [settings, setSettings]         = useState(null);
   const [creditsSummary, setCreditsSummary] = useState([]);
+  const [readiness, setReadiness] = useState({ hasApprovedGrades: false, allPeriodGradesApproved: false, approvedCount: 0, pendingCount: 0, totalCount: 0 });
 
   const [meta, setMeta] = useState({
     school_year: ACTIVE_SCHOOL_YEAR,
@@ -105,45 +98,60 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
 
   const setMetaField = (field) => (e) => setMeta(prev => ({ ...prev, [field]: e.target.value }));
 
-  const setCourseField = (idx, field) => (e) => {
-    setCourses(prev => prev.map((c, i) => i === idx ? { ...c, [field]: e.target.value } : c));
+
+  const loadApprovedGradeCourses = async ({ notify = true } = {}) => {
+    const [subjectsRes, entriesRes] = await Promise.all([
+      supabase
+        .from('student_subjects')
+        .select('id, student_id, subject_name, academic_block, pillar_type, category, credit_value, credits, quarter, school_year')
+        .eq('student_id', studentId)
+        .eq('school_year', meta.school_year)
+        .eq('quarter', meta.quarter),
+      supabase
+        .from('student_grade_entries')
+        .select('id, student_subject_id, student_id, quarter, school_year, assessment_name, score, submission_status, review_comment, date_recorded')
+        .eq('student_id', studentId)
+        .eq('school_year', meta.school_year)
+        .eq('quarter', meta.quarter),
+    ]);
+
+    if (subjectsRes.error) throw subjectsRes.error;
+    if (entriesRes.error) throw entriesRes.error;
+
+    const nextReadiness = summarizeReportReadiness(entriesRes.data || []);
+    const imported = buildReportCoursesFromApprovedGrades(subjectsRes.data || [], entriesRes.data || []);
+
+    setReadiness(nextReadiness);
+    setCourses(imported.length > 0 ? imported : [{ ...EMPTY_COURSE }]);
+
+    if (notify) {
+      if (imported.length === 0) {
+        toast({ title: 'Sin notas aprobadas', description: `No hay student_grade_entries aprobadas en ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
+      } else {
+        toast({ title: `${imported.length} materias importadas`, description: 'Boletín alimentado solo con notas aprobadas.' });
+      }
+    }
+
+    return { imported, readiness: nextReadiness };
   };
 
-  const addCourse = () => setCourses(prev => [...prev, { ...EMPTY_COURSE }]);
-  const removeCourse = (idx) => setCourses(prev => prev.filter((_, i) => i !== idx));
-
   const importFromAcademico = async () => {
-    const { data, error } = await supabase
-      .from('student_subjects')
-      .select('subject_name, academic_block, grade, credit_value, approval_status')
-      .eq('student_id', studentId)
-      .eq('school_year', meta.school_year)
-      .eq('quarter', meta.quarter)
-      .eq('approval_status', 'approved');
-
-    if (error) {
+    try {
+      await loadApprovedGradeCourses();
+    } catch (error) {
       toast({ title: 'Error al importar', description: error.message, variant: 'destructive' });
-      return;
     }
-    if (!data || data.length === 0) {
-      toast({ title: 'Sin materias aprobadas', description: `No hay materias con estado "Aprobado" en ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
-      return;
-    }
-    const imported = data.map(s => ({
-      subject_name: s.subject_name || '',
-      academic_block: s.academic_block || '',
-      pace_numbers: '',
-      credits: String(s.credit_value ?? 0.5),
-      final_grade: s.grade !== null && s.grade !== undefined ? String(s.grade) : '',
-      grade_status: 'approved',
-    }));
-    setCourses(imported);
-    toast({ title: `${imported.length} materias importadas desde Académico` });
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      const { imported } = await loadApprovedGradeCourses({ notify: false });
+      if (imported.length === 0) {
+        toast({ title: 'Sin notas aprobadas', description: 'El boletín solo puede generarse con student_grade_entries aprobadas.', variant: 'destructive' });
+        return;
+      }
+      const coursesToSave = imported;
       let tid = transcriptId;
       const trPayload = {
         student_id: studentId,
@@ -167,7 +175,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
 
       // Upsert courses: delete all then re-insert (simplest strategy for small lists)
       await supabase.from('transcript_courses').delete().eq('transcript_id', tid);
-      const coursePayload = courses
+      const coursePayload = coursesToSave
         .filter(c => c.subject_name.trim())
         .map(c => ({
           transcript_id: tid,
@@ -177,6 +185,12 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
           credits:       parseFloat(c.credits) || 0.5,
           final_grade:   c.final_grade !== '' ? parseFloat(c.final_grade) : null,
           grade_status:  c.grade_status || 'pending',
+          subject_category: c.subject_category || 'core_ace',
+          is_local_subject: Boolean(c.is_local_subject),
+          assessment_count: Number(c.assessment_count) || 0,
+          qualitative_evaluation: c.qualitative_evaluation || null,
+          evaluation_note: c.evaluation_note || null,
+          mastery_status: c.mastery_status || null,
         }));
       if (coursePayload.length > 0) {
         const { error } = await supabase.from('transcript_courses').insert(coursePayload);
@@ -200,6 +214,17 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     if (!nextStatus) return;
     setAdvancing(true);
     try {
+      if (nextStatus === 'published') {
+        const { readiness: latestReadiness } = await loadApprovedGradeCourses({ notify: false });
+        if (!latestReadiness.hasApprovedGrades || !latestReadiness.allPeriodGradesApproved) {
+          toast({
+            title: 'No se puede publicar',
+            description: `Todas las notas del periodo deben estar aprobadas. Aprobadas: ${latestReadiness.approvedCount}. Pendientes/no aprobadas: ${latestReadiness.pendingCount}.`,
+            variant: 'destructive',
+          });
+          return;
+        }
+      }
       const tsField = { in_review: 'reviewed_at', approved: 'approved_at', published: 'published_at' }[nextStatus];
       const patch = { status: nextStatus, updated_at: new Date().toISOString() };
       if (tsField) patch[tsField] = new Date().toISOString();
@@ -313,87 +338,55 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
                 >
                   Importar desde Académico
                 </button>
-                <button onClick={addCourse} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
-                  <Plus className="w-3.5 h-3.5" /> Agregar materia
-                </button>
               </div>
             )}
           </div>
+          <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+            Fuente oficial: materias desde <strong>student_subjects</strong> y notas desde <strong>student_grade_entries</strong> con estado aprobado. Aprobadas: {readiness.approvedCount} · Pendientes/no aprobadas: {readiness.pendingCount}.
+          </div>
           <div className="space-y-2">
-            {courses.map((course, idx) => {
-              const isManual = !SUBJECT_LIST.slice(0, -1).includes(course.subject_name);
-              return (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-xl p-2 border border-slate-200">
-                {isManual ? (
-                  <input
-                    className="col-span-3 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
-                    placeholder="Nombre de la materia"
-                    value={course.subject_name}
-                    onChange={setCourseField(idx, 'subject_name')}
-                    disabled={isReadOnly}
-                  />
-                ) : (
-                  <select
-                    className="col-span-3 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
-                    value={course.subject_name}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setCourseField(idx, 'subject_name')({ target: { value: val === '— Manual (escribir) —' ? '' : val } });
-                    }}
-                    disabled={isReadOnly}
-                  >
-                    <option value="">— Seleccionar —</option>
-                    {SUBJECT_LIST.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                )}
+            {courses.map((course, idx) => (
+              <div key={course.student_subject_id || idx} className="grid grid-cols-12 gap-2 items-center bg-slate-50 rounded-xl p-2 border border-slate-200">
                 <input
-                  className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                  className="col-span-3 p-2 border border-slate-300 rounded-lg text-xs bg-slate-50 outline-none"
+                  placeholder="Materia"
+                  value={course.subject_name}
+                  disabled
+                />
+                <input
+                  className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-slate-50 outline-none"
                   placeholder="Bloque"
-                  value={course.academic_block}
-                  onChange={setCourseField(idx, 'academic_block')}
-                  disabled={isReadOnly}
+                  value={course.academic_block || ''}
+                  disabled
                 />
                 <input
-                  className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
+                  className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-slate-50 outline-none"
                   placeholder="PACEs"
-                  value={course.pace_numbers}
-                  onChange={setCourseField(idx, 'pace_numbers')}
-                  disabled={isReadOnly}
+                  value={course.pace_numbers || ''}
+                  disabled
                 />
                 <input
-                  className="col-span-1 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400 text-center"
+                  className="col-span-1 p-2 border border-slate-300 rounded-lg text-xs bg-slate-50 outline-none text-center"
                   placeholder="Cred"
-                  type="number" step="0.5" min="0"
                   value={course.credits}
-                  onChange={setCourseField(idx, 'credits')}
-                  disabled={isReadOnly}
+                  disabled
                 />
                 <input
-                  className="col-span-1 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400 text-center"
-                  placeholder="Nota"
-                  type="number" step="0.1" min="0" max="100"
-                  value={course.final_grade}
-                  onChange={setCourseField(idx, 'final_grade')}
-                  disabled={isReadOnly}
+                  className="col-span-1 p-2 border border-slate-300 rounded-lg text-xs bg-slate-50 outline-none text-center"
+                  placeholder="/100"
+                  value={course.final_grade !== '' ? `${Number(course.final_grade).toFixed(2)}` : '—'}
+                  disabled
                 />
-                <select
-                  className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
-                  value={course.grade_status}
-                  onChange={setCourseField(idx, 'grade_status')}
-                  disabled={isReadOnly}
-                >
-                  <option value="pending">Pendiente</option>
-                  <option value="approved">Aprobado</option>
-                  <option value="failed">Reprobado</option>
-                </select>
-                {!isReadOnly && (
-                  <button onClick={() => removeCourse(idx)} className="col-span-1 flex justify-center text-red-400 hover:text-red-600">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <input
+                  className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-slate-50 outline-none"
+                  value={course.mastery_status === 'approved' ? 'Dominio aprobado' : course.mastery_status === 'not_mastered' ? 'Dominio pendiente' : (course.qualitative_evaluation || course.grade_status)}
+                  disabled
+                />
+                <span className="col-span-1 text-center text-[10px] font-bold text-slate-500">
+                  {course.assessment_count || 0} nota{Number(course.assessment_count || 0) === 1 ? '' : 's'}
+                </span>
               </div>
-              );
-            })}
+            ))}
           </div>
         </div>
 
