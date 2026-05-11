@@ -12,6 +12,7 @@ import AdminContratos from '@/pages/AdminContratos';
 import AdminSeguridad from '@/pages/AdminSeguridad';
 import AdminConfiguracion from '@/pages/AdminConfiguracion';
 import GradeReviewPanel from '@/components/GradeReviewPanel';
+import EvidenceReviewPanel from '@/components/EvidenceReviewPanel';
 import AdminBoletines from '@/pages/AdminBoletines';
 import AdminCartas from '@/pages/AdminCartas';
 import AdminAsignaciones from '@/pages/AdminAsignaciones';
@@ -201,7 +202,12 @@ export default function AdminPanel() {
       case 'pei': return <AdminPEI />;
       case 'contratos': return <AdminContratos />;
       case 'users': return <AdminUserManagement />;
-      case 'revision-notas': return <GradeReviewPanel />;
+      case 'revision-notas': return (
+        <div className="space-y-8">
+          <EvidenceReviewPanel />
+          <GradeReviewPanel />
+        </div>
+      );
       case 'boletines': return <AdminBoletines />;
       case 'asignaciones': return <AdminAsignaciones />;
       case 'calendario': return <AcademicCalendarManager />;
