@@ -78,6 +78,45 @@ function uniqueIds(ids) {
   return [...new Set((ids || []).filter(Boolean))];
 }
 
+function serializeErrorDetail(value) {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) return value.message;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (_err) {
+    return String(value);
+  }
+}
+
+async function getFunctionErrorDetails(data, error) {
+  const details = [];
+
+  if (error) {
+    details.push(error.message || serializeErrorDetail(error));
+
+    const response = error.context;
+    if (response && typeof response.clone === 'function') {
+      try {
+        const body = await response.clone().json();
+        details.push(serializeErrorDetail(body));
+      } catch (_jsonError) {
+        try {
+          const text = await response.clone().text();
+          if (text) details.push(text);
+        } catch (_textError) {
+          // Keep the original Functions error when the response body cannot be read.
+        }
+      }
+    }
+  }
+
+  if (data?.error) details.push(data.error);
+  if (data?.details) details.push(serializeErrorDetail(data.details));
+
+  return [...new Set(details.filter(Boolean))].join(' | ');
+}
+
 export default function AdminUserManagement() {
   const { toast } = useToast();
 
@@ -213,16 +252,20 @@ export default function AdminUserManagement() {
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const functionErrorDetails = await getFunctionErrorDetails(data, error);
+      if (functionErrorDetails) {
+        console.error('[AdminUserManagement] admin-create-user failed:', { data, error, details: functionErrorDetails });
+        throw new Error(functionErrorDetails);
+      }
 
       toast({ title: 'Usuario creado', description: `${createForm.email} fue creado con perfil y asignaciones.` });
       setCreateOpen(false);
       resetCreateForm();
       await loadData();
     } catch (err) {
-      console.error('[AdminUserManagement] createUser:', err);
-      toast({ title: 'Error al crear usuario', description: err.message || 'No se pudo crear el usuario.', variant: 'destructive' });
+      const message = err.message || serializeErrorDetail(err) || 'No se pudo crear el usuario.';
+      console.error('[AdminUserManagement] createUser:', err, { fullError: serializeErrorDetail(err) });
+      toast({ title: 'Error al crear usuario', description: message, variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
