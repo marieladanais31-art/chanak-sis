@@ -6,8 +6,56 @@ import { LogOut, GraduationCap, Download, Activity, AlertCircle, CheckCircle2, L
 import { useNavigate } from 'react-router-dom';
 import { calculateTrimestralPACES, QUARTERS, getQuarterName, isValidQuarter } from '@/utils/schoolCalendar';
 
+const MISSING_STUDENT_COLUMN_CODES = new Set(['42703', 'PGRST204']);
+
+const isMissingStudentColumnError = (error) => (
+  MISSING_STUDENT_COLUMN_CODES.has(error?.code) ||
+  /column .* does not exist/i.test(error?.message || '') ||
+  /Could not find .* column/i.test(error?.message || '')
+);
+
+const normalizeEmail = (email) => (email || '').trim().toLowerCase();
+
+async function findStudentByColumn(column, value, { caseInsensitive = false } = {}) {
+  if (!value) return null;
+
+  let query = supabase.from('students').select('*').limit(1);
+  query = caseInsensitive ? query.ilike(column, value) : query.eq(column, value);
+
+  const { data, error } = await query;
+  if (error) {
+    if (isMissingStudentColumnError(error)) {
+      console.info(`ℹ️ StudentDashboard: columna students.${column} no disponible; se omite esta estrategia.`);
+      return null;
+    }
+    throw error;
+  }
+
+  return data?.[0] || null;
+}
+
+async function findLinkedStudent(profile, user) {
+  const profileEmail = normalizeEmail(profile?.email || user?.email);
+  const authUserId = profile?.user_id || user?.id;
+  const lookupSteps = [
+    { column: 'profile_id', value: profile?.id },
+    { column: 'user_id', value: authUserId },
+    { column: 'email', value: profileEmail, caseInsensitive: true },
+    { column: 'student_email', value: profileEmail, caseInsensitive: true },
+  ];
+
+  for (const step of lookupSteps) {
+    const found = await findStudentByColumn(step.column, step.value, {
+      caseInsensitive: step.caseInsensitive,
+    });
+    if (found) return found;
+  }
+
+  return null;
+}
+
 export default function StudentDashboard() {
-  const { profile, logout } = useAuth();
+  const { profile, user, logout } = useAuth();
   const navigate = useNavigate();
   
   const [student, setStudent] = useState(null);
@@ -18,33 +66,48 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     const loadData = async () => {
-      if (!profile?.id) return;
+      if (!profile?.id) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
-        console.log(`👨‍🎓 Inicializando StudentDashboard para ID: ${profile.id}`);
-        const { data: sData, error: sError } = await supabase.from('students').select('*').eq('user_id', profile.id).single();
-        if (sError) throw sError;
+        console.log(`👨‍🎓 Inicializando StudentDashboard para perfil: ${profile.id}`);
+        const sData = await findLinkedStudent(profile, user);
         setStudent(sData);
 
         if (sData) {
-          const { data: gData } = await supabase.from('student_grades').select('*').eq('student_id', sData.id);
+          const { data: gData, error: gError } = await supabase
+            .from('student_grades')
+            .select('*')
+            .eq('student_id', sData.id);
+          if (gError) throw gError;
+
           const validatedGrades = (gData || []).map(g => ({
             ...g,
             quarter: isValidQuarter(g.quarter) ? g.quarter : QUARTERS.Q1
           }));
           setGrades(validatedGrades);
+        } else {
+          setGrades([]);
         }
 
-        const { data: subData } = await supabase.from('subjects').select('*');
+        const { data: subData, error: subError } = await supabase.from('subjects').select('*');
+        if (subError) throw subError;
         setSubjects(subData || []);
 
       } catch (err) {
         console.error("❌ Error loading student data:", err);
+        setStudent(null);
+        setGrades([]);
+        setSubjects([]);
       } finally {
         setLoading(false);
       }
     };
     loadData();
-  }, [profile]);
+  }, [profile, user]);
 
   const handleLogout = async () => {
     await logout();
@@ -56,8 +119,8 @@ export default function StudentDashboard() {
   if (!student) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
       <AlertCircle className="w-16 h-16 text-slate-400 mb-4" />
-      <h2 className="text-xl font-bold text-slate-700">No se encontró perfil de estudiante asociado.</h2>
-      <button onClick={handleLogout} className="mt-6 px-6 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 transition-colors">Cerrar Sesión</button>
+      <h2 className="text-xl font-bold text-slate-700">Estudiante no vinculado. Contacte a administración.</h2>
+      <button onClick={handleLogout} className="mt-6 px-6 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 transition-colors">Cerrar sesión</button>
     </div>
   );
 
@@ -107,7 +170,7 @@ export default function StudentDashboard() {
             </div>
           </div>
           <button onClick={handleLogout} className="flex items-center gap-2 bg-sky-700 hover:bg-sky-800 px-4 py-2 rounded-lg transition-colors font-semibold">
-            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Cerrar Sesión</span>
+            <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Cerrar sesión</span>
           </button>
         </div>
       </header>
