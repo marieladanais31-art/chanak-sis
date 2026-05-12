@@ -8,11 +8,13 @@ import {
   calculateAverageGrade,
   calculateHighSchoolCreditsFromPaces,
   getPaceStatus,
+  isPassingPaceScore,
   normalizeBlock,
   normalizeNumericGrade,
+  shouldShowOfficialCredits,
 } from '@/lib/academicUtils';
 import {
-  Download, Save, Loader2, Plus, Trash2, ChevronRight,
+  Download, Save, Loader2, Trash2, ChevronRight,
   FileText, CheckCircle, Send, Eye, AlertCircle, X
 } from 'lucide-react';
 
@@ -26,8 +28,6 @@ const STATUS_META = {
   published: { label: 'Publicado',   color: 'bg-green-100 text-green-800', next: null,         nextLabel: null,               icon: Send },
 };
 
-const GRADE_STATUS = ['pending', 'approved', 'failed'];
-
 const normalizeGradeEntryStatus = (status) => status || 'draft';
 
 const isValidReportArea = (subject) => {
@@ -35,17 +35,38 @@ const isValidReportArea = (subject) => {
   return normalizedBlock !== 'OTHER';
 };
 
-const buildCourseFromApprovedEntries = (subject, entries) => {
+const getSubjectCategory = (subject) => {
+  const normalizedBlock = normalizeBlock(subject?.academic_block || subject?.pillar_type);
+  if (normalizedBlock === 'Extensión Local' || normalizedBlock === 'Local Validation / Foreign Language') return 'local_extension';
+  if (normalizedBlock === 'Life Skills' || normalizedBlock === 'Life Skills & Leadership') return 'life_skills';
+  return 'core_ace';
+};
+
+const extractPaceNumbers = (entries) => entries
+  .map((entry) => String(entry.assessment_name || '').match(/PACE\s*#?\s*(\d+)/i)?.[1])
+  .filter(Boolean);
+
+const buildCourseFromApprovedEntries = (subject, entries, student) => {
   const average = calculateAverageGrade(entries);
   const normalizedBlock = normalizeBlock(subject?.academic_block || subject?.pillar_type);
+  const academicBlock = normalizedBlock === 'OTHER' ? (subject.academic_block || subject.pillar_type || '') : normalizedBlock;
+  const subjectCategory = getSubjectCategory(subject);
+  const completedPaces = subjectCategory === 'core_ace'
+    ? entries.filter((entry) => isPassingPaceScore(entry.score)).length
+    : 0;
+  const paceNumbers = extractPaceNumbers(entries);
+  const showCredits = shouldShowOfficialCredits(student, { allowMiddleSchoolCredits: Boolean(subject.allow_middle_school_credit) });
 
   return {
+    student_subject_id: subject.id,
     subject_name: subject.subject_name || '',
-    academic_block: normalizedBlock === 'OTHER' ? (subject.academic_block || subject.pillar_type || '') : normalizedBlock,
-    pace_numbers: '',
-    credits: String(calculateHighSchoolCreditsFromPaces(0, subject.credit_value ?? 0.5)),
+    academic_block: academicBlock,
+    pace_numbers: paceNumbers.length > 0 ? paceNumbers.join(', ') : String(completedPaces || ''),
+    credits: showCredits ? String(calculateHighSchoolCreditsFromPaces(completedPaces, subject.credit_value, { allowConfiguredCredit: false })) : '0',
     final_grade: average !== null ? String(average) : '',
     grade_status: getPaceStatus(average),
+    subject_category: subjectCategory,
+    is_local_subject: subjectCategory === 'local_extension',
   };
 };
 
@@ -72,6 +93,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
 
   const [transcriptId, setTranscriptId] = useState(initId || null);
   const [settings, setSettings]         = useState(null);
+  const [student, setStudent]           = useState(null);
   const [creditsSummary, setCreditsSummary] = useState([]);
 
   const [meta, setMeta] = useState({
@@ -86,12 +108,14 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
 
   const loadData = useCallback(async () => {
     // Load institutional settings + credits summary in parallel
-    const [settingsRes, creditsRes] = await Promise.all([
+    const [settingsRes, creditsRes, studentRes] = await Promise.all([
       supabase.from('institutional_settings').select('*').limit(1).single(),
       supabase.from('student_credits_summary').select('*').eq('student_id', studentId),
+      supabase.from('students').select('*').eq('id', studentId).single(),
     ]);
     if (settingsRes.data) setSettings(settingsRes.data);
     if (creditsRes.data) setCreditsSummary(creditsRes.data);
+    if (studentRes.data) setStudent(studentRes.data);
 
     if (!initId) { setLoading(false); return; }
 
@@ -131,7 +155,6 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     setCourses(prev => prev.map((c, i) => i === idx ? { ...c, [field]: e.target.value } : c));
   };
 
-  const addCourse = () => setCourses(prev => [...prev, { ...EMPTY_COURSE }]);
   const removeCourse = (idx) => setCourses(prev => prev.filter((_, i) => i !== idx));
 
   const loadApprovedPeriodCourses = async () => {
@@ -140,8 +163,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
       .select('id, student_id, subject_name, academic_block, pillar_type, credit_value, quarter, school_year, grade_submission_status')
       .eq('student_id', studentId)
       .eq('school_year', meta.school_year)
-      .eq('quarter', meta.quarter)
-      .eq('grade_submission_status', 'approved');
+      .eq('quarter', meta.quarter);
 
     if (subjectsError) throw subjectsError;
 
@@ -151,7 +173,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     const subjectIds = approvedSubjects.map((subject) => subject.id);
     const { data: entriesData, error: entriesError } = await supabase
       .from('student_grade_entries')
-      .select('id, student_subject_id, score, submission_status')
+      .select('id, student_subject_id, assessment_name, score, submission_status')
       .eq('student_id', studentId)
       .eq('school_year', meta.school_year)
       .eq('quarter', meta.quarter)
@@ -169,7 +191,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     }, {});
 
     return approvedSubjects
-      .map((subject) => buildCourseFromApprovedEntries(subject, entriesBySubject[subject.id] || []))
+      .map((subject) => buildCourseFromApprovedEntries(subject, entriesBySubject[subject.id] || [], student))
       .filter((course) => course.subject_name && course.final_grade !== '');
   };
 
@@ -201,6 +223,25 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     return (entriesData || []).filter((entry) => normalizeGradeEntryStatus(entry.submission_status) !== 'approved');
   };
 
+
+  const getBlockingPendingEvidence = async () => {
+    const { data, error } = await supabase
+      .from('academic_evidence_submissions')
+      .select('id, subject_name, review_status')
+      .eq('student_id', studentId)
+      .eq('school_year', meta.school_year)
+      .eq('quarter', meta.quarter)
+      .in('review_status', ['pending_review', 'submitted']);
+
+    if (error) {
+      // La tabla de evidencias es complementaria; si no existe en un entorno, las notas oficiales siguen mandando.
+      if (error.code === '42P01' || error.code === '42703') return [];
+      throw error;
+    }
+
+    return data || [];
+  };
+
   const saveCoursesForTranscript = async (tid, courseRows) => {
     await supabase.from('transcript_courses').delete().eq('transcript_id', tid);
 
@@ -212,15 +253,15 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
           : null;
         return {
           transcript_id: tid,
+          student_subject_id: c.student_subject_id || null,
           subject_name:  c.subject_name,
           academic_block:c.academic_block || null,
           pace_numbers:  c.pace_numbers || null,
-          credits:       calculateHighSchoolCreditsFromPaces(
-            String(c.pace_numbers || '').split(/[,;\s-]+/).filter(Boolean).length,
-            parseFloat(c.credits)
-          ) || 0,
+          credits:       shouldShowOfficialCredits(student) ? (parseFloat(c.credits) || 0) : 0,
           final_grade:   normalizedFinalGrade,
           grade_status:  c.grade_status || getPaceStatus(normalizedFinalGrade),
+          subject_category: c.subject_category || 'core_ace',
+          is_local_subject: Boolean(c.is_local_subject),
         };
       });
 
@@ -247,7 +288,14 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
   const handleSave = async () => {
     setSaving(true);
     try {
+      const approvedCourses = await loadApprovedPeriodCourses();
+      if (approvedCourses.length === 0) {
+        toast({ title: 'Sin notas aprobadas', description: `No hay notas aprobadas en student_grade_entries para ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
+        return;
+      }
+
       let tid = transcriptId;
+      const totalCredits = approvedCourses.reduce((sum, course) => sum + (parseFloat(course.credits) || 0), 0);
       const trPayload = {
         student_id: studentId,
         school_year: meta.school_year,
@@ -255,6 +303,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         language: meta.language,
         gpa: meta.gpa !== '' ? parseFloat(meta.gpa) : null,
         academic_observations: meta.academic_observations || null,
+        total_credits: totalCredits,
         updated_at: new Date().toISOString(),
       };
 
@@ -268,10 +317,10 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         setTranscriptId(tid);
       }
 
-      // Upsert courses: delete all then re-insert (simplest strategy for small lists)
-      await saveCoursesForTranscript(tid, courses);
+      await saveCoursesForTranscript(tid, approvedCourses);
+      setCourses(approvedCourses);
 
-      toast({ title: 'Boletín guardado', description: 'Los cambios fueron guardados.' });
+      toast({ title: 'Boletín guardado', description: 'Se generó exclusivamente desde notas aprobadas.' });
     } catch (err) {
       toast({ title: 'Error', description: err.message || 'No se pudo guardar.', variant: 'destructive' });
     } finally {
@@ -288,8 +337,20 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     if (!nextStatus) return;
     setAdvancing(true);
     try {
+      let publishedCourses = null;
       if (nextStatus === 'published') {
-        const blockingEntries = await getBlockingPeriodGradeEntries();
+        const [blockingEntries, pendingEvidence] = await Promise.all([
+          getBlockingPeriodGradeEntries(),
+          getBlockingPendingEvidence(),
+        ]);
+        if (pendingEvidence.length > 0) {
+          toast({
+            title: 'No se puede publicar',
+            description: `Hay ${pendingEvidence.length} evidencia(s) del periodo pendientes de revisión.`,
+            variant: 'destructive',
+          });
+          return;
+        }
         if (blockingEntries.length > 0) {
           toast({
             title: 'No se puede publicar',
@@ -310,11 +371,15 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         }
 
         await saveCoursesForTranscript(transcriptId, approvedCourses);
+        publishedCourses = approvedCourses;
         setCourses(approvedCourses);
       }
 
       const tsField = { in_review: 'reviewed_at', approved: 'approved_at', published: 'published_at' }[nextStatus];
       const patch = { status: nextStatus, updated_at: new Date().toISOString() };
+      if (nextStatus === 'published') {
+        patch.total_credits = (publishedCourses || courses).reduce((sum, course) => sum + (parseFloat(course.credits) || 0), 0);
+      }
       if (tsField) patch[tsField] = new Date().toISOString();
       const { error } = await supabase.from('transcript_records').update(patch).eq('id', transcriptId);
       if (error) throw error;
@@ -426,9 +491,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
                 >
                   Importar notas aprobadas
                 </button>
-                <button onClick={addCourse} className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800">
-                  <Plus className="w-3.5 h-3.5" /> Agregar materia
-                </button>
+
               </div>
             )}
           </div>
@@ -451,7 +514,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
                 />
                 <input
                   className="col-span-2 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400"
-                  placeholder="PACEs"
+                  placeholder="PACEs completados"
                   value={course.pace_numbers}
                   onChange={setCourseField(idx, 'pace_numbers')}
                   disabled={isReadOnly}
@@ -462,7 +525,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
                   type="number" step="0.5" min="0"
                   value={course.credits}
                   onChange={setCourseField(idx, 'credits')}
-                  disabled={isReadOnly}
+                  disabled={true}
                 />
                 <input
                   className="col-span-1 p-2 border border-slate-300 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-blue-400 text-center"

@@ -8,6 +8,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { shouldShowOfficialCredits } from '@/lib/academicUtils';
 
 // ── Paleta institucional ──────────────────────────────────────────────────────
 const NAVY  = [25, 61, 109];   // #193D6D
@@ -34,8 +35,8 @@ const T = {
     credits:       'Créditos',
     finalGrade:    'Nota Final',
     statusLabel:   'Estado',
-    approved:      'Aprobado',
-    failed:        'Reprobado',
+    approved:      'Dominio alcanzado',
+    failed:        'No aprobado / requiere repetición',
     pending:       'Pendiente',
     creditsSummary:'Resumen de Créditos',
     creditsQuarter:'Créditos del Trimestre',
@@ -69,8 +70,8 @@ const T = {
     credits:       'Credits',
     finalGrade:    'Final Grade',
     statusLabel:   'Status',
-    approved:      'Passed',
-    failed:        'Failed',
+    approved:      'Mastery achieved',
+    failed:        'Not passed / repeat required',
     pending:       'Pending',
     creditsSummary:'Credit Summary',
     creditsQuarter:'Quarter Credits',
@@ -116,6 +117,7 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
     year: 'numeric', month: 'long', day: 'numeric',
   });
   const refNumber = `${settings?.fldoe_registration || '134620'}-${now.getFullYear()}-${(student?.id || '000000').substring(0, 6).toUpperCase()}`;
+  const showCredits = shouldShowOfficialCredits(student, { allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits) });
 
   // ── Encabezado azul ─────────────────────────────────────────────────────────
   doc.setFillColor(...NAVY);
@@ -184,72 +186,96 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
   doc.text(t.coursework, 14, y);
   y += 3;
 
-  const courseRows = (courses || []).map(c => [
-    c.subject_name || '—',
-    c.academic_block || '—',
-    c.pace_numbers || '—',
-    c.credits != null ? String(c.credits) : '0.5',
-    c.final_grade != null ? Number(c.final_grade).toFixed(1) : '—',
-    gradeStatusLabel(c.grade_status, lang),
-  ]);
+  const courseRows = (courses || []).map(c => {
+    const base = [
+      c.subject_name || '—',
+      c.academic_block || '—',
+      c.pace_numbers || '—',
+    ];
+    if (showCredits) base.push(c.credits != null ? String(c.credits) : '0');
+    base.push(
+      c.final_grade != null ? `${Number(c.final_grade).toFixed(1)} / 100` : '—',
+      gradeStatusLabel(c.grade_status, lang),
+    );
+    return base;
+  });
+  const courseHead = showCredits
+    ? [t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]
+    : [t.subject, t.block, t.paces, t.finalGrade, t.statusLabel];
+  const emptyCourseRow = courseHead.map(() => '—');
 
   autoTable(doc, {
     startY: y,
-    head: [[t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]],
-    body: courseRows.length > 0 ? courseRows : [['—', '—', '—', '—', '—', '—']],
+    head: [courseHead],
+    body: courseRows.length > 0 ? courseRows : [emptyCourseRow],
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: LGRAY },
     columnStyles: {
-      0: { cellWidth: 55 },
-      1: { cellWidth: 35 },
+      0: { cellWidth: showCredits ? 55 : 65 },
+      1: { cellWidth: showCredits ? 35 : 42 },
       2: { cellWidth: 22 },
-      3: { cellWidth: 18, halign: 'center' },
-      4: { cellWidth: 20, halign: 'center' },
+      3: { cellWidth: showCredits ? 18 : 28, halign: 'center' },
+      4: { cellWidth: showCredits ? 20 : 35, halign: 'center' },
       5: { cellWidth: 25, halign: 'center' },
     },
     margin: { left: 14, right: 14 },
   });
   y = doc.lastAutoTable.finalY + 8;
 
-  // ── Resumen de créditos ─────────────────────────────────────────────────────
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...NAVY);
-  doc.text(t.creditsSummary, 14, y);
-  y += 3;
-
-  const totalThisQuarter = (courses || []).reduce((sum, c) => {
-    if (c.grade_status === 'approved') return sum + (parseFloat(c.credits) || 0);
-    return sum;
-  }, 0);
-
-  const totalThisYear = creditsSummary
-    .filter(cs => cs.school_year === transcript?.school_year)
-    .reduce((sum, cs) => sum + (parseFloat(cs.credits_earned) || 0), 0) + totalThisQuarter;
-
-  const totalCumul = creditsSummary
-    .reduce((sum, cs) => sum + (parseFloat(cs.credits_earned) || 0), 0) + totalThisQuarter;
-
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
 
-  autoTable(doc, {
-    startY: y,
-    body: [
-      [t.creditsQuarter, totalThisQuarter.toFixed(2)],
-      [t.creditsYear,    totalThisYear.toFixed(2)],
-      [t.creditsCumul,   totalCumul.toFixed(2)],
-      [t.gpa,            gpaVal],
-    ],
-    theme: 'plain',
-    styles: { fontSize: 9, cellPadding: 1.5 },
-    columnStyles: {
-      0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
-      1: { fontStyle: 'bold', textColor: [...NAVY], halign: 'right' },
-    },
-    margin: { left: 14, right: 14 },
-  });
-  y = doc.lastAutoTable.finalY + 8;
+  if (showCredits) {
+    // ── Resumen de créditos ─────────────────────────────────────────────────────
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...NAVY);
+    doc.text(t.creditsSummary, 14, y);
+    y += 3;
+
+    const totalThisQuarter = (courses || []).reduce((sum, c) => {
+      if (c.grade_status === 'approved') return sum + (parseFloat(c.credits) || 0);
+      return sum;
+    }, 0);
+
+    const totalThisYear = creditsSummary
+      .filter(cs => cs.school_year === transcript?.school_year)
+      .reduce((sum, cs) => sum + (parseFloat(cs.credits_earned) || 0), 0) + totalThisQuarter;
+
+    const totalCumul = creditsSummary
+      .reduce((sum, cs) => sum + (parseFloat(cs.credits_earned) || 0), 0) + totalThisQuarter;
+
+    autoTable(doc, {
+      startY: y,
+      body: [
+        [t.creditsQuarter, totalThisQuarter.toFixed(2)],
+        [t.creditsYear,    totalThisYear.toFixed(2)],
+        [t.creditsCumul,   totalCumul.toFixed(2)],
+        [t.gpa,            gpaVal],
+      ],
+      theme: 'plain',
+      styles: { fontSize: 9, cellPadding: 1.5 },
+      columnStyles: {
+        0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
+        1: { fontStyle: 'bold', textColor: [...NAVY], halign: 'right' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  } else {
+    autoTable(doc, {
+      startY: y,
+      body: [[t.gpa, gpaVal]],
+      theme: 'plain',
+      styles: { fontSize: 9, cellPadding: 1.5 },
+      columnStyles: {
+        0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
+        1: { fontStyle: 'bold', textColor: [...NAVY], halign: 'right' },
+      },
+      margin: { left: 14, right: 14 },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
 
   // ── Observaciones ───────────────────────────────────────────────────────────
   if (transcript?.academic_observations) {

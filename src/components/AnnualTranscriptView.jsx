@@ -3,7 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, AlertTriangle, CheckCircle } from 'lucide-react';
 import { generateAnnualTranscriptPDF } from '@/lib/annualTranscriptPdf';
-import { gradeToTranscriptLetter, TRANSCRIPT_GRADING_SCALE } from '@/lib/academicUtils';
+import { getStudentSchoolStage, gradeToTranscriptLetter, TRANSCRIPT_GRADING_SCALE } from '@/lib/academicUtils';
 
 const NAVY = '#193D6D';
 
@@ -23,29 +23,14 @@ function fmt(val) {
   return Number(val).toFixed(2);
 }
 
-const HS_GRADE_KEYWORDS = ['9th','10th','11th','12th','9.º','10.º','11.º','12.º','Grade 9','Grade 10','Grade 11','Grade 12'];
-
-function detectHighSchool(student) {
-  if (!student) return false;
-  if (student.school_stage === 'high_school') return true;
-  if (student.school_stage === 'elementary' || student.school_stage === 'middle_school') return false;
-  const gl = student.us_grade_level || student.grade_level || '';
-  return HS_GRADE_KEYWORDS.some(kw => gl.includes(kw));
-}
-
 const HS_YEAR_NAMES = { 9: 'Freshman', 10: 'Sophomore', 11: 'Junior', 12: 'Senior' };
 
-function gradeNumFromLevel(gl) {
-  const s = (gl || '').toLowerCase();
-  if (s.includes('9th') || s.includes('freshman') || s.includes('grade 9') || s === '9') return 9;
-  if (s.includes('10th') || s.includes('sophomore') || s.includes('grade 10') || s === '10') return 10;
-  if (s.includes('11th') || s.includes('junior') || s.includes('grade 11') || s === '11') return 11;
-  if (s.includes('12th') || s.includes('senior') || s.includes('grade 12') || s === '12') return 12;
-  return null;
+function detectHighSchool(student) {
+  return getStudentSchoolStage(student) === 'high_school';
 }
 
 function buildHsYearNames(yearData, student) {
-  const currentGrade = gradeNumFromLevel(student?.us_grade_level || student?.grade_level);
+  const currentGrade = Number(String(student?.us_grade_level || student?.grade_level || '').match(/\d{1,2}/)?.[0]);
   if (!currentGrade) return {};
   const n = yearData.length;
   const result = {};
@@ -76,9 +61,10 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
       supabase.from('students').select('*').eq('id', studentId).single(),
       supabase
         .from('transcript_records')
-        .select('id, school_year, quarter, status, grade_level: grade_level')
+        .select('id, school_year, quarter, status')
         .eq('student_id', studentId)
         .in('quarter', ['Q1', 'Q2', 'Q3'])
+        .eq('status', 'published')
         .order('school_year')
         .order('quarter'),
       supabase.from('institutional_settings').select('*').limit(1).single(),
@@ -104,7 +90,7 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
       // Group by school_year
       const byYear = {};
       trRes.data.forEach(tr => {
-        if (!byYear[tr.school_year]) byYear[tr.school_year] = { school_year: tr.school_year, records: [], grade_level: tr.grade_level };
+        if (!byYear[tr.school_year]) byYear[tr.school_year] = { school_year: tr.school_year, records: [], grade_level: studentRes.data?.grade_level || studentRes.data?.us_grade_level || null };
         byYear[tr.school_year].records.push({
           id: tr.id,
           quarter: tr.quarter,
@@ -331,7 +317,16 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
                         </td>
                         {isHighSchool && (
                           <td className="px-3 py-2.5 text-center border-l border-slate-200 text-slate-600 text-sm font-bold">
-                            {allVals.length ? (allVals.length * 0.5).toFixed(1) : '—'}
+                            {(() => {
+                              const credits = yearGrades.reduce((sum, yg) => {
+                                return sum + Object.keys(yg.qGrades).reduce((inner, q) => {
+                                  const record = yearData.find((_, idx) => yearGrades[idx] === yg);
+                                  const subjectRow = record?.records.find((r) => r.quarter === q)?.subjects.find((sub) => sub.subject_name === subject);
+                                  return inner + (Number(subjectRow?.credits) || 0);
+                                }, 0);
+                              }, 0);
+                              return credits > 0 ? credits.toFixed(1) : '—';
+                            })()}
                           </td>
                         )}
                       </tr>
