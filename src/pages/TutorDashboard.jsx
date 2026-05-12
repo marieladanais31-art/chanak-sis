@@ -139,7 +139,7 @@ export default function TutorDashboard() {
           {[
             { id: 'notas',      label: 'Mis Estudiantes', icon: Users },
             { id: 'evidencias', label: 'Evidencias',      icon: FileCheck2 },
-            { id: 'pei',        label: 'PEI',             icon: FileText },
+            { id: 'pei',        label: 'PEI / PACEs',      icon: FileText },
             { id: 'alertas', label: 'Alertas',          icon: AlertTriangle },
           ].map(({ id, label, icon: Icon }) => (
             <button
@@ -195,7 +195,7 @@ export default function TutorDashboard() {
                             onClick={() => setPeiModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, peiId: pei?.id || null })}
                             className="px-3 py-1.5 bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 rounded-lg font-bold text-xs"
                           >
-                            {pei ? 'Ver / Editar PEI' : 'Crear PEI'}
+                            {pei ? 'Ver / Editar PEI y PACEs' : 'Crear PEI'}
                           </button>
                         </td>
                       </tr>

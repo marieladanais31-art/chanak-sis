@@ -3,14 +3,14 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import {
   AlertTriangle, Clock, FileText, CheckCircle, RefreshCw,
-  Loader2, Bell, ClipboardList, ScrollText, User, BookOpen,
+  Loader2, Bell, ClipboardList, ScrollText, User, PlusCircle,
 } from 'lucide-react';
 
 /* ── severity meta ────────────────────────────────────────────── */
 const SEV = {
-  high:   { color: 'bg-red-50 text-red-800 border-red-200',       dot: 'bg-red-500',    label: 'Alta' },
-  medium: { color: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500',  label: 'Media' },
-  low:    { color: 'bg-blue-50 text-blue-800 border-blue-200',    dot: 'bg-blue-400',   label: 'Baja' },
+  high:   { color: 'bg-red-50 text-red-800 border-red-200',       dot: 'bg-red-500',    label: 'Alta', db: 'critical' },
+  medium: { color: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500',  label: 'Media', db: 'warning' },
+  low:    { color: 'bg-blue-50 text-blue-800 border-blue-200',    dot: 'bg-blue-400',   label: 'Baja', db: 'info' },
 };
 
 const TYPE_ICON = {
@@ -48,11 +48,64 @@ export default function SisAlertsDashboard({ studentId, maxItems, compact = fals
   const role = profile?.role || 'admin';
 
   const [alerts, setAlerts]       = useState([]);
+  const [students, setStudents]   = useState([]);
   const [loading, setLoading]     = useState(true);
+  const [savingAlert, setSavingAlert] = useState(false);
   const [severityFilter, setSev]  = useState('all');
+  const [alertForm, setAlertForm] = useState({ student_id: '', message: '', severity: 'medium', target_role: 'parent' });
 
   const today        = new Date().toISOString().split('T')[0];
   const reviewCutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+
+
+  const canCreateAlert = ['admin', 'super_admin', 'coordinator', 'tutor', 'mentor'].includes(role);
+
+  const loadScopedStudents = useCallback(async () => {
+    if (!canCreateAlert) return;
+
+    let q = supabase
+      .from('students')
+      .select('id, first_name, last_name, hub_id, tutor_id')
+      .order('first_name', { ascending: true });
+
+    if (studentId) q = q.eq('id', studentId);
+    if (role === 'tutor' || role === 'mentor') q = q.eq('tutor_id', profile?.id);
+    if (role === 'coordinator' && profile?.hub_id) q = q.eq('hub_id', profile.hub_id);
+    if (role === 'coordinator' && !profile?.hub_id) {
+      setStudents([]);
+      return;
+    }
+
+    const { data, error } = await q;
+    if (!error) setStudents(data || []);
+  }, [canCreateAlert, profile?.hub_id, profile?.id, role, studentId]);
+
+  const createManualAlert = async (event) => {
+    event.preventDefault();
+    const message = alertForm.message.trim();
+    if (!alertForm.student_id || !message) return;
+
+    setSavingAlert(true);
+    try {
+      const { error } = await supabase.from('academic_alerts').insert([{
+        student_id: alertForm.student_id,
+        alert_type: 'grade_missing',
+        message,
+        severity: SEV[alertForm.severity]?.db || 'warning',
+        status: 'active',
+        target_role: alertForm.target_role,
+        context_type: 'grade',
+      }]);
+      if (error) throw error;
+
+      setAlertForm((prev) => ({ ...prev, message: '' }));
+      await buildAlerts();
+    } catch (err) {
+      console.error('[SisAlertsDashboard] create alert error:', err);
+    } finally {
+      setSavingAlert(false);
+    }
+  };
 
   const buildAlerts = useCallback(async () => {
     setLoading(true);
@@ -178,15 +231,43 @@ export default function SisAlertsDashboard({ studentId, maxItems, compact = fals
         });
       }
 
-      /* ── 6. Estudiantes sin tutor asignado (admin / coordinator) ── */
+      /* ── 6. Alertas manuales activas creadas por staff académico ── */
+      if (['admin', 'super_admin', 'coordinator', 'tutor', 'mentor', 'parent', 'family'].includes(role)) {
+        let q = supabase
+          .from('academic_alerts')
+          .select('id, student_id, alert_type, message, severity, target_role, created_at, students(first_name, last_name)')
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (studentId) q = q.eq('student_id', studentId);
+
+        const { data } = await q;
+        (data || []).forEach(a => {
+          const s = a.students;
+          const severityMap = { critical: 'high', warning: 'medium', info: 'low' };
+          derived.push({
+            id:          `manual-${a.id}`,
+            type:        a.alert_type || 'general',
+            severity:    severityMap[a.severity] || 'low',
+            title:       'Alerta académica',
+            description: `${s ? `${s.first_name} ${s.last_name} — ` : ''}${a.message}`,
+            roles: [a.target_role || 'admin'],
+          });
+        });
+      }
+
+      /* ── 7. Estudiantes sin tutor asignado (admin / coordinator) ── */
       if (['admin', 'super_admin', 'coordinator'].includes(role) && !studentId) {
-        const { data } = await supabase
+        let q = supabase
           .from('students')
-          .select('id, first_name, last_name, student_status')
+          .select('id, first_name, last_name, student_status, hub_id')
           .eq('student_status', 'active')
           .is('tutor_id', null)
           .limit(20);
+        if (role === 'coordinator' && profile?.hub_id) q = q.eq('hub_id', profile.hub_id);
+        if (role === 'coordinator' && !profile?.hub_id) q = q.is('hub_id', null).limit(0);
 
+        const { data } = await q;
         (data || []).forEach(s => {
           derived.push({
             id:          `no-tutor-${s.id}`,
@@ -208,9 +289,10 @@ export default function SisAlertsDashboard({ studentId, maxItems, compact = fals
       setAlerts(derived);
       setLoading(false);
     }
-  }, [role, studentId, today, reviewCutoff]);
+  }, [profile?.hub_id, role, studentId, today, reviewCutoff]);
 
   useEffect(() => { buildAlerts(); }, [buildAlerts]);
+  useEffect(() => { loadScopedStudents(); }, [loadScopedStudents]);
 
   /* ── filter ── */
   const filtered = alerts.filter(a => severityFilter === 'all' || a.severity === severityFilter);
@@ -259,6 +341,62 @@ export default function SisAlertsDashboard({ studentId, maxItems, compact = fals
             </button>
           </div>
         </div>
+      )}
+
+      {canCreateAlert && !compact && (
+        <form onSubmit={createManualAlert} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-black text-slate-800">
+            <PlusCircle className="w-4 h-4 text-blue-600" /> Crear alerta académica
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-[1.2fr_2fr_.8fr_.9fr_auto] gap-3">
+            <select
+              value={alertForm.student_id}
+              onChange={(event) => setAlertForm((prev) => ({ ...prev, student_id: event.target.value }))}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+              required
+            >
+              <option value="">Estudiante…</option>
+              {students.map((student) => (
+                <option key={student.id} value={student.id}>{student.first_name} {student.last_name}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={alertForm.message}
+              onChange={(event) => setAlertForm((prev) => ({ ...prev, message: event.target.value }))}
+              placeholder="Comentario / motivo de la alerta…"
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+              required
+            />
+            <select
+              value={alertForm.severity}
+              onChange={(event) => setAlertForm((prev) => ({ ...prev, severity: event.target.value }))}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              <option value="medium">Media</option>
+              <option value="high">Alta</option>
+              <option value="low">Baja</option>
+            </select>
+            <select
+              value={alertForm.target_role}
+              onChange={(event) => setAlertForm((prev) => ({ ...prev, target_role: event.target.value }))}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+            >
+              <option value="parent">Padre</option>
+              <option value="tutor">Tutor</option>
+              <option value="coordinator">Coordinador</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button
+              type="submit"
+              disabled={savingAlert || students.length === 0}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold disabled:opacity-50"
+            >
+              {savingAlert ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
+              Crear
+            </button>
+          </div>
+        </form>
       )}
 
       {/* Empty state */}
