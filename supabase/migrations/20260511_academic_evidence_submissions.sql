@@ -10,7 +10,7 @@ create table if not exists public.academic_evidence_submissions (
   school_year text not null,
   quarter text not null check (quarter in ('Q1', 'Q2', 'Q3', 'Q4')),
   pace_number integer,
-  score numeric(5,2) not null check (score >= 0 and score <= 100),
+  score numeric(5,2) check (score is null or (score >= 0 and score <= 100)),
   evidence_type text not null check (evidence_type in ('PACE Test', 'Self Test', 'Proyecto', 'Life Skills', 'Extensión Local')),
   comment text,
   attachment_path text,
@@ -25,6 +25,7 @@ create table if not exists public.academic_evidence_submissions (
   constraint academic_evidence_subject_matches_student check (student_id is not null and student_subject_id is not null),
   constraint academic_evidence_pace_minimum check (
     evidence_type <> 'PACE Test'
+    or score is null
     or score >= 80
     or (review_status <> 'approved' and academic_outcome in ('requires_repeat', 'correction_required'))
   )
@@ -86,9 +87,10 @@ create policy "rls_academic_evidence_parent_insert"
   to authenticated
   with check (
     submitted_by = auth.uid()
-    and review_status in ('pending_review', 'correction_requested')
+    and review_status = 'pending_review'
     and (
       evidence_type <> 'PACE Test'
+      or score is null
       or score >= 80
       or academic_outcome in ('requires_repeat', 'correction_required')
     )
