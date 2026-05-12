@@ -153,18 +153,52 @@ export function getPaceStatus(score) {
   return isPassingPaceScore(normalized) ? 'approved' : 'failed';
 }
 
-export function calculateHighSchoolCreditsFromPaces(paceCount, courseCreditValue = null) {
-  const configuredCredit = Number(courseCreditValue);
-  if (Number.isFinite(configuredCredit) && configuredCredit > 0) {
-    return configuredCredit;
-  }
-
+export function calculateHighSchoolCreditsFromPaces(paceCount, courseCreditValue = null, options = {}) {
+  const { allowConfiguredCredit = true } = options;
   const count = Number(paceCount);
-  if (!Number.isFinite(count) || count <= 0) return 0;
+  const configuredCredit = Number(courseCreditValue);
 
   if (count >= HIGH_SCHOOL_FULL_CREDIT_PACES) return 1;
   if (count >= HIGH_SCHOOL_HALF_CREDIT_PACES) return 0.5;
+
+  if (allowConfiguredCredit && Number.isFinite(configuredCredit) && configuredCredit > 0) {
+    return configuredCredit;
+  }
+
   return 0;
+}
+
+export function getGradeNumberFromLevel(level) {
+  const normalized = String(level || '').toLowerCase().trim();
+  const numericMatch = normalized.match(/(?:grade\s*)?(\d{1,2})(?:st|nd|rd|th|\.º|º)?/);
+  if (numericMatch) {
+    const grade = Number(numericMatch[1]);
+    if (grade >= 1 && grade <= 12) return grade;
+  }
+
+  if (normalized.includes('freshman')) return 9;
+  if (normalized.includes('sophomore')) return 10;
+  if (normalized.includes('junior')) return 11;
+  if (normalized.includes('senior')) return 12;
+
+  return null;
+}
+
+export function getStudentSchoolStage(student = {}) {
+  if (student.school_stage) return student.school_stage;
+
+  const grade = getGradeNumberFromLevel(student.us_grade_level || student.grade_level);
+  if (grade === null) return null;
+  if (grade <= 5) return 'elementary';
+  if (grade <= 8) return 'middle_school';
+  return 'high_school';
+}
+
+export function shouldShowOfficialCredits(student = {}, options = {}) {
+  const stage = getStudentSchoolStage(student);
+  if (stage === 'high_school') return true;
+  if (stage === 'middle_school') return Boolean(options.allowMiddleSchoolCredits);
+  return false;
 }
 
 export function gradeToTranscriptLetter(grade) {

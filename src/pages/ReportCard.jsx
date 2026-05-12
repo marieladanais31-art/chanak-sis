@@ -7,8 +7,14 @@ import { Loader2, FileBarChart, Download, FileText, WifiOff } from 'lucide-react
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { getCachedData, setCachedData } from '@/lib/cacheUtils';
-
-const CATEGORIES = ['Core', 'Extensión Local', 'Life Skills', 'Electiva'];
+import {
+  ACTIVE_SCHOOL_YEAR,
+  calculateAverageGrade,
+  calculateHighSchoolCreditsFromPaces,
+  isPassingPaceScore,
+  normalizeBlock,
+  shouldShowOfficialCredits,
+} from '@/lib/academicUtils';
 
 const ReportCard = ({ studentId }) => {
   const { rolePermissions } = useAuth();
@@ -16,6 +22,7 @@ const ReportCard = ({ studentId }) => {
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState(null);
   const [subjects, setSubjects] = useState([]);
+  const [gradeEntries, setGradeEntries] = useState([]);
   const [generating, setGenerating] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
@@ -26,6 +33,7 @@ const ReportCard = ({ studentId }) => {
       
       const stCacheKey = `student_${studentId}`;
       const subCacheKey = `academic_registry_${studentId}`;
+      const entriesCacheKey = `approved_grade_entries_${studentId}`;
 
       try {
         setLoading(true);
@@ -34,10 +42,28 @@ const ReportCard = ({ studentId }) => {
         setStudent(stData);
         if(stData) setCachedData(stCacheKey, stData);
 
-        const { data: subData, error: subError } = await supabase.from('student_subjects').select('*').eq('student_id', studentId);
+        const { data: subData, error: subError } = await supabase
+          .from('student_subjects')
+          .select('*')
+          .eq('student_id', studentId)
+          .eq('school_year', ACTIVE_SCHOOL_YEAR);
         if (subError) throw subError;
         setSubjects(subData || []);
         if(subData) setCachedData(subCacheKey, subData);
+
+        const subjectIds = (subData || []).map((subject) => subject.id);
+        const entriesQuery = supabase
+          .from('student_grade_entries')
+          .select('id, student_subject_id, score, submission_status')
+          .eq('student_id', studentId)
+          .eq('school_year', ACTIVE_SCHOOL_YEAR)
+          .eq('submission_status', 'approved')
+          .not('score', 'is', null);
+        if (subjectIds.length > 0) entriesQuery.in('student_subject_id', subjectIds);
+        const { data: entriesData, error: entriesError } = await entriesQuery;
+        if (entriesError) throw entriesError;
+        setGradeEntries(entriesData || []);
+        if(entriesData) setCachedData(entriesCacheKey, entriesData);
 
         setIsOffline(false);
       } catch (err) {
@@ -45,6 +71,7 @@ const ReportCard = ({ studentId }) => {
         setIsOffline(true);
         setStudent(getCachedData(stCacheKey));
         setSubjects(getCachedData(subCacheKey) || []);
+        setGradeEntries(getCachedData(entriesCacheKey) || []);
       } finally {
         setLoading(false);
       }
@@ -103,26 +130,50 @@ const ReportCard = ({ studentId }) => {
       doc.setFont('helvetica', 'normal');
       doc.text(`${today}`, 55, 88);
 
-      // Calculations (Task 3: Force 1.0 credits per subject)
-      const totalCredits = subjects.length * 1.0;
-      const totalGrades = subjects.reduce((acc, curr) => acc + Number(curr.grade), 0);
-      const gpa = subjects.length > 0 ? (totalGrades / subjects.length).toFixed(1) : 0;
+      const entriesBySubject = gradeEntries.reduce((acc, entry) => {
+        if (!acc[entry.student_subject_id]) acc[entry.student_subject_id] = [];
+        acc[entry.student_subject_id].push(entry);
+        return acc;
+      }, {});
+      const reportSubjects = subjects
+        .map((subject) => {
+          const entries = entriesBySubject[subject.id] || [];
+          const average = calculateAverageGrade(entries);
+          const completedPaces = entries.filter((entry) => isPassingPaceScore(entry.score)).length;
+          return {
+            ...subject,
+            academic_area: normalizeBlock(subject.academic_block || subject.pillar_type),
+            final_grade: average,
+            credits_earned: shouldShowOfficialCredits(student)
+              ? calculateHighSchoolCreditsFromPaces(completedPaces, subject.credit_value, { allowConfiguredCredit: false })
+              : 0,
+          };
+        })
+        .filter((subject) => subject.final_grade !== null);
+
+      const showCredits = shouldShowOfficialCredits(student);
+      const totalCredits = reportSubjects.reduce((acc, curr) => acc + Number(curr.credits_earned || 0), 0);
+      const totalGrades = reportSubjects.reduce((acc, curr) => acc + Number(curr.final_grade), 0);
+      const gpa = reportSubjects.length > 0 ? (totalGrades / reportSubjects.length).toFixed(1) : '—';
 
       doc.setFont('helvetica', 'bold');
       doc.text(`Cumulative GPA:`, 115, 88);
       doc.setFont('helvetica', 'normal');
       doc.text(`${gpa}%`, 145, 88);
       
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Total Credits:`, 165, 88);
-      doc.setFont('helvetica', 'normal');
-      doc.text(`${totalCredits.toFixed(1)}`, 190, 88);
+      if (showCredits) {
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Total Credits:`, 165, 88);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`${totalCredits.toFixed(1)}`, 190, 88);
+      }
 
       let yPos = 105;
 
-      // Grouped Subjects
-      CATEGORIES.forEach(category => {
-        const catSubs = subjects.filter(s => s.category === category);
+      // Grouped Subjects from dynamic student_subjects areas only.
+      const categories = Array.from(new Set(reportSubjects.map((subject) => subject.academic_area)));
+      categories.forEach(category => {
+        const catSubs = reportSubjects.filter(s => s.academic_area === category);
         if (catSubs.length === 0) return;
 
         if (yPos > 240) {
@@ -141,8 +192,8 @@ const ReportCard = ({ studentId }) => {
         doc.setFontSize(9);
         doc.setTextColor(100, 100, 100);
         doc.text('SUBJECT', 25, yPos);
-        doc.text('GRADE', 145, yPos);
-        doc.text('CREDITS', 170, yPos);
+        doc.text('GRADE / 100', 130, yPos);
+        if (showCredits) doc.text('CREDITS', 170, yPos);
         yPos += 2;
         doc.setDrawColor(220, 220, 220);
         doc.line(20, yPos, 190, yPos);
@@ -156,30 +207,13 @@ const ReportCard = ({ studentId }) => {
             yPos = 20;
           }
           doc.text(sub.subject_name, 25, yPos);
-          doc.text(`${sub.grade}%`, 145, yPos);
-          doc.text(`1.0`, 170, yPos);
+          doc.text(`${Number(sub.final_grade).toFixed(1)} / 100`, 130, yPos);
+          if (showCredits) doc.text(`${Number(sub.credits_earned || 0).toFixed(1)}`, 170, yPos);
           yPos += 6;
         });
         yPos += 5;
       });
 
-      // Convalidación Section
-      if (yPos > 240) { doc.addPage(); yPos = 20; }
-      doc.setFillColor(255, 245, 240);
-      doc.rect(20, yPos - 5, 170, 8, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(25, 25, 112);
-      doc.text('CONVALIDACIÓN', 25, yPos);
-      yPos += 8;
-      
-      doc.setFontSize(9);
-      doc.setTextColor(0, 0, 0);
-      doc.setFont('helvetica', 'normal');
-      doc.text('Asignaturas Convalidadas', 25, yPos);
-      doc.text('N/A', 145, yPos);
-      doc.text('0.0', 170, yPos);
-      yPos += 15;
 
       // Signature Area
       if (yPos > 230) { doc.addPage(); yPos = 50; } else { yPos += 20; }
