@@ -33,19 +33,16 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   // ── Sesión de recuperación de contraseña ──────────────────────────────────
   const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
   if (isPasswordRecovery || storedRecovery) {
-    console.log('SKIPPING ROLE REDIRECT - password recovery in progress (ProtectedRoute)');
     return <Navigate to="/reset-password" replace />;
   }
 
   // ── Sin sesión ────────────────────────────────────────────────────────────
   if (!user || !profile) {
-    console.log('🔒 ProtectedRoute: sin sesión → /login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // ── Rol completamente desconocido ─────────────────────────────────────────
   if (!ALL_VALID_ROLES.includes(profile.role)) {
-    console.warn(`⚠️ ProtectedRoute: rol no reconocido "${profile.role}"`);
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100 text-center space-y-4">
@@ -77,16 +74,11 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     if (!allowed.includes(profile.role)) {
       // Redirigir al dashboard correcto del usuario, no a /login
       const dest = getDashboardPath(profile.role);
-      console.log(
-        `🔒 ProtectedRoute: acceso denegado. ` +
-        `Ruta requiere [${allowed.join(',')}], usuario tiene "${profile.role}". → ${dest}`
-      );
       return <Navigate to={dest} replace />;
     }
   }
 
   // ── Acceso concedido ──────────────────────────────────────────────────────
-  console.log(`🔓 ProtectedRoute: acceso concedido [${profile.role}] → ${location.pathname}`);
   return children;
 };
 

@@ -41,12 +41,12 @@ const CAT_COLORS = {
   Otro:       'bg-gray-50 text-gray-700 border-gray-100',
 };
 
-/* ── Recursos / Links operativos ─────────────────────────────────────────── */
+/* ── Recursos / Enlaces operativos ─────────────────────────────────────────── */
 function ParentRecursosPanel({ links }) {
   if (!links || links.length === 0) {
     return (
       <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-        No hay recursos disponibles todavía.
+        No hay documentos disponibles todavía.
       </div>
     );
   }
@@ -213,7 +213,7 @@ function ParentBoletinesPanel({ studentChildren }) {
 
   if (transcripts.length === 0) return (
     <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-      No hay boletines publicados todavía.
+      Aún no hay boletines publicados.
     </div>
   );
 
@@ -280,8 +280,6 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
           .order('reviewed_at', { ascending: false, nullsFirst: false }),
       ]);
 
-      if (alertsRes.error) console.warn('[ParentDashboard] academic_alerts no disponible:', alertsRes.error.message);
-      if (correctionsRes.error) console.warn('[ParentDashboard] evidence corrections no disponibles:', correctionsRes.error.message);
 
       setAlerts(alertsRes.error ? [] : (alertsRes.data || []));
       setCorrections(correctionsRes.error ? [] : (correctionsRes.data || []));
@@ -317,7 +315,7 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
   if (isEmpty) {
     return (
       <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-        No hay alertas académicas activas ni correcciones solicitadas por ahora.
+        No hay alertas activas.
       </div>
     );
   }
@@ -521,14 +519,14 @@ function ParentDocumentosPanel({ studentChildren }) {
     <div className="space-y-6">
       {allEmpty && (
         <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 space-y-2">
-          <p>No hay PEI publicado todavía.</p>
-          <p>No hay boletines publicados todavía.</p>
-          <p>No hay carta de matrícula publicada todavía.</p>
+          <p>Aún no hay PEI publicado.</p>
+          <p>Aún no hay boletines publicados.</p>
+          <p>No hay documentos disponibles todavía.</p>
         </div>
       )}
 
       {peis.length === 0 && !allEmpty && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay PEI publicado todavía.</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">Aún no hay PEI publicado.</div>
       )}
 
       {peis.length > 0 && (
@@ -598,7 +596,7 @@ function ParentDocumentosPanel({ studentChildren }) {
       )}
 
       {letters.length === 0 && !allEmpty && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay carta de matrícula publicada todavía.</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay documentos disponibles todavía.</div>
       )}
 
       {transcripts.length > 0 ? (
@@ -622,7 +620,7 @@ function ParentDocumentosPanel({ studentChildren }) {
           </div>
         </div>
       ) : !allEmpty && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay boletines publicados todavía.</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">Aún no hay boletines publicados.</div>
       )}
     </div>
   );
@@ -765,7 +763,6 @@ export default function ParentDashboard() {
 
         if (!e1 && fd1 && fd1.length > 0) {
           studentIds = fd1.map((r) => r.student_id);
-          console.log('[ParentDashboard] hijos por profile.id:', studentIds.length);
         } else if (secondaryId && secondaryId !== primaryId) {
           const { data: fd2, error: e2 } = await supabase
             .from('family_students')
@@ -774,7 +771,6 @@ export default function ParentDashboard() {
 
           if (!e2 && fd2 && fd2.length > 0) {
             studentIds = fd2.map((r) => r.student_id);
-            console.log('[ParentDashboard] hijos por profile.user_id:', studentIds.length);
           } else {
             // Intentar con parent_id si existe la columna
             const { data: fd3 } = await supabase
@@ -783,9 +779,7 @@ export default function ParentDashboard() {
               .eq('parent_id', primaryId);
             if (fd3 && fd3.length > 0) {
               studentIds = fd3.map((r) => r.student_id);
-              console.log('[ParentDashboard] hijos por parent_id:', studentIds.length);
             } else {
-              console.warn('[ParentDashboard] No se encontraron hijos. profile.id:', primaryId, 'user_id:', secondaryId);
               if (e1) console.error('[ParentDashboard] family_students error:', e1.message);
             }
           }
@@ -793,7 +787,7 @@ export default function ParentDashboard() {
       }
       // ────────────────────────────────────────────────────────────────────────
 
-      // ── Links operativos y calendario (no fatales; tablas pueden no existir aún) ──
+      // ── Enlaces operativos y calendario (no fatales; tablas pueden no existir aún) ──
       const orFilter = studentIds.length > 0
         ? `student_id.is.null,student_id.in.(${studentIds.join(',')})`
         : 'student_id.is.null';
@@ -816,8 +810,6 @@ export default function ParentDashboard() {
       setOperationalLinks(linksRes.error ? [] : (linksRes.data || []));
       setSchoolCalendar(calRes.error ? null : (calRes.data || null));
 
-      if (linksRes.error) console.warn('[ParentDashboard] operational_links no disponible:', linksRes.error.message);
-      if (calRes.error)   console.warn('[ParentDashboard] academic_calendars no disponible:', calRes.error.message);
       // ────────────────────────────────────────────────────────────────────────
 
       if (studentIds.length === 0) {
@@ -961,7 +953,7 @@ export default function ParentDashboard() {
               className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-sm font-semibold transition-all border border-red-100 hover:border-red-600 shadow-sm"
             >
               <LogOut className="w-4 h-4" />
-              <span className="hidden sm:block">Cerrar Sesión</span>
+              <span className="hidden sm:block">Cerrar sesión</span>
             </button>
           </div>
         </div>
@@ -1202,7 +1194,7 @@ export default function ParentDashboard() {
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
                           onClick={() => setActiveTab('boletines')}
-                          title={hasBulletinPublished ? 'Ver boletines oficiales publicados' : 'No hay boletines publicados todavía.'}
+                          title={hasBulletinPublished ? 'Ver boletines oficiales publicados' : 'Aún no hay boletines publicados.'}
                           className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
                             hasBulletinPublished
                               ? 'bg-white border-slate-200 hover:shadow-md'
@@ -1211,7 +1203,7 @@ export default function ParentDashboard() {
                         >
                           <FileText className={`w-5 h-5 transition-transform ${hasBulletinPublished ? 'group-hover:scale-110 text-[#193D6D]' : 'text-slate-400'}`} />
                           <span className={`text-xs font-bold text-center ${hasBulletinPublished ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasBulletinPublished ? 'Boletines oficiales' : 'No hay boletines publicados todavía'}
+                            {hasBulletinPublished ? 'Boletines oficiales' : 'Aún no hay boletines publicados.'}
                           </span>
                         </button>
 
@@ -1245,7 +1237,7 @@ export default function ParentDashboard() {
 
                         <button
                           onClick={() => setActiveTab('documentos')}
-                          title={hasPeiPublished ? 'Ver PEI oficial publicado' : 'PEI pendiente'}
+                          title={hasPeiPublished ? 'Ver PEI oficial publicado' : 'Aún no hay PEI publicado'}
                           className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
                             hasPeiPublished
                               ? 'bg-white border-slate-200 hover:shadow-md'
@@ -1258,7 +1250,7 @@ export default function ParentDashboard() {
                             <Hourglass className="w-5 h-5 text-slate-400" />
                           )}
                           <span className={`text-xs font-bold text-center ${hasPeiPublished ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasPeiPublished ? 'PEI oficial' : 'PEI pendiente'}
+                            {hasPeiPublished ? 'PEI oficial' : 'Aún no hay PEI publicado'}
                           </span>
                         </button>
 
@@ -1356,7 +1348,7 @@ export default function ParentDashboard() {
                   <h2 className="font-black text-xl text-slate-800">Recursos y accesos</h2>
                 </div>
                 <p className="text-sm text-slate-500 mb-4">
-                  Links y plataformas habilitados por administración para tu familia.
+                  Enlaces y plataformas habilitados por administración para tu familia.
                 </p>
                 <ParentRecursosPanel links={operationalLinks} />
               </div>
@@ -1475,7 +1467,7 @@ export default function ParentDashboard() {
 
                 {availableSubjects.length === 0 ? (
                   <p className="text-center text-slate-500 py-8">
-                    No hay materias disponibles para {selectedAcademicQuarter}.
+                    Aún no hay calificaciones aprobadas para {selectedAcademicQuarter}.
                   </p>
                 ) : (
                   availableSubjects.map((subject) => {

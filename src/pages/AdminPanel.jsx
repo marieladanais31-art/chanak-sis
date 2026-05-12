@@ -20,7 +20,6 @@ import InstitutionalSettings from '@/components/InstitutionalSettings';
 import AcademicCalendarManager from '@/components/AcademicCalendarManager';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import AdminOperationalLinks from '@/components/AdminOperationalLinks';
-import SisDebugPanel from '@/components/SisDebugPanel';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, Users, Building2, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -53,7 +52,7 @@ export default function AdminPanel() {
       setStudents(studentsData || []);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
-      toast({ title: 'Error', description: 'No se pudieron cargar los datos del dashboard.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'No se pudieron cargar los datos del panel.', variant: 'destructive' });
     } finally {
       setDataLoading(false);
     }
@@ -69,7 +68,7 @@ export default function AdminPanel() {
 
   const getPageTitle = (section) => {
     switch(section) {
-      case 'dashboard': return 'Dashboard General';
+      case 'dashboard': return 'Panel general';
       case 'users': return 'Gestión de Usuarios';
       case 'estudiantes': return 'Directorio Estudiantil';
       case 'hubs': return 'Administración de Hubs';
@@ -86,8 +85,7 @@ export default function AdminPanel() {
       case 'seguridad': return 'Seguridad y Accesos';
       case 'settings': return 'Configuración';
       case 'alertas': return 'Alertas del Sistema';
-      case 'enlaces-operativos': return 'Recursos y Links Operativos';
-      case 'diagnostico': return 'Diagnóstico SIS';
+      case 'enlaces-operativos': return 'Recursos y enlaces operativos';
       default: return 'Panel de Administración';
     }
   };
@@ -217,7 +215,6 @@ export default function AdminPanel() {
       case 'settings': return <AdminConfiguracion />;
       case 'alertas': return <SisAlertsDashboard />;
       case 'enlaces-operativos': return <AdminOperationalLinks />;
-      case 'diagnostico': return <SisDebugPanel />;
       default:
         return renderDashboard();
     }
@@ -231,7 +228,7 @@ export default function AdminPanel() {
         <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 shadow-sm shrink-0 z-10 relative">
           <div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight">{getPageTitle(currentSection)}</h1>
-            <p className="text-sm text-slate-500 mt-0.5 font-medium">Sistema de Gestión Institucional</p>
+            <p className="text-sm text-slate-500 mt-0.5 font-medium">Sistema de gestión institucional</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">

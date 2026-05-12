@@ -30,7 +30,6 @@ export default function RoleBasedRouter() {
   }
 
   if (!profile) {
-    console.log('❌ RoleBasedRouter: sin perfil — redirigiendo a /login');
     return <Navigate to="/login" replace />;
   }
 
@@ -38,7 +37,6 @@ export default function RoleBasedRouter() {
 
   if (dest === '/login') {
     // Rol desconocido: mostrar pantalla explicativa en lugar de loop /login
-    console.warn(`⚠️ RoleBasedRouter: rol no reconocido "${profile.role}" para ${profile.email}`);
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-slate-100 text-center space-y-4">
@@ -64,6 +62,5 @@ export default function RoleBasedRouter() {
     );
   }
 
-  console.log(`🔄 RoleBasedRouter: ${profile.email} [${profile.role}] → ${dest}`);
   return <Navigate to={dest} replace />;
 }

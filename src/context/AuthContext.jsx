@@ -88,7 +88,6 @@ export const AuthProvider = ({ children }) => {
           .maybeSingle();
         if (d) {
           data = d;
-          console.log('✅ AuthContext: Perfil encontrado por user_id');
         }
       }
 
@@ -101,7 +100,6 @@ export const AuthProvider = ({ children }) => {
           .maybeSingle();
         if (d) {
           data = d;
-          console.log('✅ AuthContext: Perfil encontrado por id');
         }
       }
 
@@ -114,19 +112,14 @@ export const AuthProvider = ({ children }) => {
           .maybeSingle();
         if (d) {
           data = d;
-          console.log('✅ AuthContext: Perfil encontrado por email');
           // Auto-parchar user_id si estaba vacío
           if (!data.user_id) {
-            console.log('🔧 AuthContext: Parcheando user_id en perfil legacy');
             const { error: patchErr } = await supabase
               .from('profiles')
               .update({ user_id: userId })
               .eq('id', data.id);
             if (!patchErr) {
               data = { ...data, user_id: userId };
-              console.log('🔧 AuthContext: user_id actualizado correctamente');
-            } else {
-              console.warn('⚠️ AuthContext: No se pudo parchear user_id (puede ser RLS):', patchErr.message);
             }
           }
         }
@@ -134,7 +127,6 @@ export const AuthProvider = ({ children }) => {
 
       // ── Auto-create si no existe en ningún paso ──────────────────────────
       if (!data) {
-        console.log(`⚠️ AuthContext: Sin perfil para ${userEmail}. Auto-creando...`);
         const defaultRole =
           userEmail === 'administration@chanakacademy.org'
             ? ROLES.SUPER_ADMIN
@@ -153,25 +145,17 @@ export const AuthProvider = ({ children }) => {
           .select(PROFILE_FIELDS)
           .single();
         if (insertError) throw insertError;
-        console.log(`✅ AuthContext: Perfil auto-creado. Rol: ${newProfile?.role}`);
         return newProfile;
       }
 
       // ── Verificar estado activo ──────────────────────────────────────────
       if (!isProfileActive(data)) {
-        console.warn(
-          `🚫 AuthContext: Perfil inactivo. is_active=${data.is_active}, status=${data.status}`
-        );
         setBlockedReason(
           'Tu cuenta está desactivada. Contacta al administrador de Chanak Academy.'
         );
         return null;
       }
 
-      const displayName = resolveDisplayName(data);
-      console.log(
-        `✅ AuthContext: Perfil listo. Rol: ${data.role} | Nombre: ${displayName}`
-      );
       return data;
 
     } catch (err) {
@@ -199,11 +183,6 @@ export const AuthProvider = ({ children }) => {
       setUser(currentUser);
       const fetchedProfile = await fetchProfile(currentUser.id, currentUser.email);
       setProfile(fetchedProfile ?? null);
-      if (fetchedProfile) {
-        console.log(`✅ AuthContext inicializado. Email: ${currentUser.email} | Rol: ${fetchedProfile.role}`);
-      } else {
-        console.warn('⚠️ AuthContext: Sin perfil tras inicialización.');
-      }
     } catch (err) {
       console.error('❌ AuthContext: Error de inicialización:', err);
       setError(err);
@@ -237,9 +216,6 @@ export const AuthProvider = ({ children }) => {
       const amrRecovery    = amrMethods.includes('otp') || amrMethods.includes('recovery');
 
       if (storedRecovery || recoveryPath || isPasswordRecoveryRef.current || amrRecovery) {
-        console.log('SKIPPING ROLE REDIRECT - password recovery in progress (setupAuth)',
-          { storedRecovery, recoveryPath, ref: isPasswordRecoveryRef.current, amrRecovery }
-        );
         isPasswordRecoveryRef.current = true;
         setIsPasswordRecovery(true);
         if (initialSession?.user) setUser(initialSession.user);
@@ -255,13 +231,11 @@ export const AuthProvider = ({ children }) => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        console.log(`🔄 AuthContext: Auth event [${event}]`);
         if (!isMounted) return;
         setSession(newSession);
 
         if (event === 'PASSWORD_RECOVERY') {
           // Flujo implícito (hash): Supabase detecta #type=recovery en el hash
-          console.log('SKIPPING ROLE REDIRECT - password recovery in progress (PASSWORD_RECOVERY event)');
           sessionStorage.setItem('passwordRecoveryInProgress', 'true');
           isPasswordRecoveryRef.current = true;
           setIsPasswordRecovery(true);
@@ -287,9 +261,6 @@ export const AuthProvider = ({ children }) => {
             isPasswordRecoveryRef.current;
 
           if (isRecoverySignIn) {
-            console.log('SKIPPING ROLE REDIRECT - password recovery in progress (SIGNED_IN)',
-              { storedRecovery, recoveryPath, amr: amrMethods, ref: isPasswordRecoveryRef.current }
-            );
             isPasswordRecoveryRef.current = true;
             setIsPasswordRecovery(true);
             setUser(newSession?.user || null);
@@ -304,7 +275,6 @@ export const AuthProvider = ({ children }) => {
 
         } else if (event === 'USER_UPDATED') {
           // Contraseña actualizada correctamente. ResetPasswordPage llama signOut inmediatamente.
-          console.log('PASSWORD UPDATED - clearing recovery state (USER_UPDATED)');
           sessionStorage.removeItem('passwordRecoveryInProgress');
           isPasswordRecoveryRef.current = false;
           setIsPasswordRecovery(false);
@@ -331,7 +301,6 @@ export const AuthProvider = ({ children }) => {
 
   // ─── login ───────────────────────────────────────────────────────────────────
   const login = async (email, password) => {
-    console.log(`🔐 Login: ${email}`);
     setLoading(true);
     setBlockedReason(null);
     try {

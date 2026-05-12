@@ -115,7 +115,7 @@ export default function TutorDashboard() {
             onClick={handleLogout}
             className="flex items-center gap-2 bg-teal-800 hover:bg-teal-900 px-4 py-2 rounded-lg transition-colors font-semibold"
           >
-            <LogOut className="w-4 h-4" /> Cerrar Sesión
+            <LogOut className="w-4 h-4" /> Cerrar sesión
           </button>
         </div>
       </header>
@@ -300,7 +300,7 @@ export default function TutorDashboard() {
                     </div>
                   ) : studentSubjects.length === 0 ? (
                     <p className="text-center text-slate-500 py-10">
-                      No hay materias registradas para {activeQuarter} ({ACTIVE_SCHOOL_YEAR}).
+                      Aún no hay calificaciones aprobadas para {activeQuarter} ({ACTIVE_SCHOOL_YEAR}).
                     </p>
                   ) : (
                     <div className="space-y-2">

@@ -119,13 +119,6 @@ export default function CoordinatorDashboard() {
           .order('updated_at', { ascending: false }),
       ]);
 
-      if (peiRes.error) {
-        console.warn('[CoordinatorDashboard] Error loading PEI records:', peiRes.error);
-      }
-      if (trRes.error) {
-        console.warn('[CoordinatorDashboard] Error loading transcript records:', trRes.error);
-      }
-
       setPeis(peiRes.error ? [] : peiRes.data || []);
       setTranscripts(trRes.error ? [] : trRes.data || []);
     } catch (err) {
@@ -297,7 +290,7 @@ export default function CoordinatorDashboard() {
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-xl text-sm font-bold transition-colors border border-red-100 hover:border-red-600"
           >
             <LogOut className="w-4 h-4" />
-            Cerrar Sesión
+            Cerrar sesión
           </button>
         </div>
       </header>
@@ -485,9 +478,9 @@ export default function CoordinatorDashboard() {
             ) : subjects.length === 0 ? (
               <div className="text-center p-12 bg-white rounded-xl border border-slate-200 max-w-md mx-auto">
                 <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-700 font-bold">No hay materias cargadas</p>
+                <p className="text-slate-700 font-bold">Aún no hay calificaciones aprobadas</p>
                 <p className="text-sm text-slate-500 mt-1">
-                  No se encontraron registros en student_subjects para {activeQuarter} ({ACTIVE_SCHOOL_YEAR}).
+                  No hay registros académicos aprobados para este periodo.
                 </p>
               </div>
             ) : (
