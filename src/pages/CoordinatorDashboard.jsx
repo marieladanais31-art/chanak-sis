@@ -13,11 +13,11 @@ import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 
 export default function CoordinatorDashboard() {
-  const { profile, ROLES } = useAuth();
+  const { profile, ROLES, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'revision' | 'pei' | 'boletines' | 'alertas'
+  const [mainTab, setMainTab] = useState('notas'); // 'notas' | 'revision' | 'evidencias' | 'pei' | 'boletines' | 'alertas'
   const [students, setStudents] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [subjects, setSubjects] = useState([]);
@@ -231,16 +231,8 @@ export default function CoordinatorDashboard() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen bg-slate-50">
-        <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await logout();
     navigate('/login', { replace: true });
   };
 
@@ -320,13 +312,19 @@ export default function CoordinatorDashboard() {
         </div>
       )}
 
+      {loading && (
+        <div className="bg-white border border-slate-200 rounded-xl p-6 flex items-center justify-center gap-3 text-slate-500 font-bold">
+          <Loader2 className="w-5 h-5 animate-spin text-blue-600" /> Cargando estudiantes del alcance académico…
+        </div>
+      )}
+
       {/* Main tabs */}
       <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
         {[
           { id: 'notas',     label: 'Notas',           icon: BookOpen },
           { id: 'revision',  label: 'Revisar Notas',   icon: ClipboardList },
           { id: 'evidencias', label: 'Evidencias', icon: FileCheck2 },
-          { id: 'pei',       label: 'PEI',              icon: FileText },
+          { id: 'pei',       label: 'PEI / PACEs',       icon: FileText },
           { id: 'boletines', label: 'Boletines',        icon: ScrollText },
           { id: 'alertas',   label: 'Alertas',          icon: AlertTriangle },
         ].map(({ id, label, icon: Icon }) => (
@@ -394,7 +392,7 @@ export default function CoordinatorDashboard() {
                         onClick={() => setPeiModal({ studentId: s.id, studentName: `${s.first_name} ${s.last_name}`, peiId: pei?.id || null })}
                         className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg font-bold text-xs"
                       >
-                        {pei ? 'Ver / Editar' : 'Crear PEI'}
+                        {pei ? 'Ver / Editar PEI y PACEs' : 'Crear PEI'}
                       </button>
                     </td>
                   </tr>

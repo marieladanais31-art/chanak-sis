@@ -123,10 +123,18 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
 
   const handleReview = async (submission, action) => {
     if (!['approved', 'correction_requested', 'rejected'].includes(action)) return;
+    if (action === 'approved' && submission.score == null) {
+      toast({
+        title: 'Score requerido',
+        description: 'Toda evidencia aprobada debe tener score sobre 100 para generar nota oficial.',
+        variant: 'destructive',
+      });
+      return;
+    }
     if (action === 'approved' && submission.evidence_type === 'PACE Test' && Number(submission.score) < 80) {
       toast({
         title: 'PACE no aprobable',
-        description: 'Un PACE Test con score menor a 80 no puede marcarse como completado.',
+        description: 'Un PACE Test con score menor a 80 debe quedar como corrección/repetición.',
         variant: 'destructive',
       });
       return;
@@ -209,7 +217,7 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm divide-y divide-slate-100">
           {items.map((item) => {
             const isActive = activeId === item.id;
-            const canApprove = !(item.evidence_type === 'PACE Test' && Number(item.score) < 80);
+            const canApprove = item.score != null && !(item.evidence_type === 'PACE Test' && Number(item.score) < 80);
             return (
               <div key={item.id} className="p-5 space-y-4">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
@@ -225,7 +233,7 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
                       {getStudentName(item.students)} · {item.students?.us_grade_level || 'Sin grado'} · {item.quarter} · {item.school_year}
                     </p>
                     <p className="text-sm text-slate-600">
-                      <span className="font-black">{item.evidence_type}</span> · Score <span className={Number(item.score) < 80 ? 'font-black text-amber-600' : 'font-black text-[#193D6D]'}>{Number(item.score).toFixed(2)}/100</span>
+                      <span className="font-black">{item.evidence_type}</span> · Score <span className={Number(item.score || 0) < 80 ? 'font-black text-amber-600' : 'font-black text-[#193D6D]'}>{item.score == null ? 'Pendiente' : `${Number(item.score).toFixed(2)}/100`}</span>
                       {item.pace_number ? ` · PACE ${item.pace_number}` : ''}
                     </p>
                     <p className="text-xs text-slate-500 font-bold">
@@ -240,7 +248,7 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
                     )}
                     {!canApprove && (
                       <p className="text-xs font-black text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 inline-flex">
-                        PACE Test menor de 80: usa pedir corrección/repetición, no aprobación.
+                        Score pendiente o PACE Test menor de 80: usa pedir corrección/repetición, no aprobación.
                       </p>
                     )}
                   </div>
