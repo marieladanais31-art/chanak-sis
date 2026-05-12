@@ -7,11 +7,12 @@ import ContractManager from '@/components/ContractManager';
 const STATUS_BADGE = {
   draft:    'bg-slate-100 text-slate-700',
   sent:     'bg-amber-100 text-amber-800',
-  signed:   'bg-green-100 text-green-800',
+  signed:   'bg-blue-100 text-blue-800',
+  published: 'bg-green-100 text-green-800',
   archived: 'bg-slate-200 text-slate-600',
 };
 const STATUS_LABEL = {
-  draft: 'Borrador', sent: 'Enviado', signed: 'Firmado', archived: 'Archivado',
+  draft: 'Borrador', sent: 'Enviado', signed: 'Firmado', published: 'Publicado', archived: 'Archivado',
 };
 
 export default function AdminContratos() {

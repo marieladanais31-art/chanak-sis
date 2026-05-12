@@ -382,7 +382,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         .in('student_id', ids).eq('status', 'published'),
       supabase.from('enrollment_contracts')
         .select('*')
-        .in('student_id', ids).in('status', ['sent', 'signed']),
+        .in('student_id', ids).in('status', ['sent', 'signed', 'published']),
       supabase.from('enrollment_letters')
         .select('*')
         .in('student_id', ids).eq('status', 'published'),
@@ -398,8 +398,8 @@ function ParentDocumentosPanel({ studentChildren }) {
     });
   }, [studentChildren]);
 
-  const handleDownloadPei = async (pei) => {
-    setDownloading(`pei-${pei.id}`);
+  const handleDownloadPei = async (pei, lang = 'es') => {
+    setDownloading(`pei-${pei.id}-${lang}`);
     try {
       const { generatePeiPDF } = await import('@/lib/peiPdf');
       const child = studentChildren.find(c => c.id === pei.student_id);
@@ -412,6 +412,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         paces: pacesRes.data || [],
         student: child || { first_name: '', last_name: '' },
         settings: settingsRes.data || null,
+        lang,
       });
     } catch (err) {
       console.error(err);
@@ -420,8 +421,8 @@ function ParentDocumentosPanel({ studentChildren }) {
     }
   };
 
-  const handleDownloadContract = async (contract) => {
-    setDownloading(`con-${contract.id}`);
+  const handleDownloadContract = async (contract, lang = 'es') => {
+    setDownloading(`con-${contract.id}-${lang}`);
     try {
       const { generateContractPDF } = await import('@/lib/contractPdf');
       const child = studentChildren.find(c => c.id === contract.student_id);
@@ -430,6 +431,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         contract,
         student: child || { first_name: '', last_name: '' },
         settings: settings || null,
+        lang,
       });
     } catch (err) {
       console.error(err);
@@ -438,8 +440,8 @@ function ParentDocumentosPanel({ studentChildren }) {
     }
   };
 
-  const handleDownloadLetter = async (letter) => {
-    setDownloading(`let-${letter.id}`);
+  const handleDownloadLetter = async (letter, lang = 'es') => {
+    setDownloading(`let-${letter.id}-${lang}`);
     try {
       const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
       const child = studentChildren.find(c => c.id === letter.student_id);
@@ -448,6 +450,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         letter,
         student: child || { first_name: '', last_name: '' },
         settings: settings || null,
+        lang,
       });
     } catch (err) {
       console.error(err);
@@ -456,8 +459,8 @@ function ParentDocumentosPanel({ studentChildren }) {
     }
   };
 
-  const handleDownloadTranscript = async (transcript) => {
-    setDownloading(`tr-${transcript.id}`);
+  const handleDownloadTranscript = async (transcript, lang = 'es') => {
+    setDownloading(`tr-${transcript.id}-${lang}`);
     try {
       const child = studentChildren.find(c => c.id === transcript.student_id);
       const [coursesRes, settingsRes, creditsRes] = await Promise.all([
@@ -471,7 +474,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         student: child || { id: transcript.student_id },
         settings: settingsRes.data || null,
         creditsSummary: creditsRes.data || [],
-        lang: transcript.language || 'es',
+        lang,
       });
     } catch (err) {
       console.error(err);
@@ -495,14 +498,22 @@ function ParentDocumentosPanel({ studentChildren }) {
           <p className="text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>
-      <button
-        onClick={onDownload}
-        disabled={downloading === dlKey}
-        className="flex items-center gap-2 px-4 py-2 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
-      >
-        {downloading === dlKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        Descargar
-      </button>
+      <div className="flex items-center gap-2">
+        {['es', 'en'].map((lang) => {
+          const key = `${dlKey}-${lang}`;
+          return (
+            <button
+              key={lang}
+              onClick={() => onDownload(lang)}
+              disabled={downloading === key}
+              className="flex items-center gap-2 px-4 py-2 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
+            >
+              {downloading === key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              PDF {lang.toUpperCase()}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -533,7 +544,7 @@ function ParentDocumentosPanel({ studentChildren }) {
                   icon={<FileText className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
                   subtitle={`PEI publicado · ${pei.school_year}`}
-                  onDownload={() => handleDownloadPei(pei)}
+                  onDownload={(lang) => handleDownloadPei(pei, lang)}
                   dlKey={`pei-${pei.id}`}
                 />
               );
@@ -555,7 +566,7 @@ function ParentDocumentosPanel({ studentChildren }) {
                   icon={<FileSignature className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
                   subtitle={`Contrato ${con.status === 'signed' ? 'firmado' : 'enviado'} · ${con.school_year}`}
-                  onDownload={() => handleDownloadContract(con)}
+                  onDownload={(lang) => handleDownloadContract(con, lang)}
                   dlKey={`con-${con.id}`}
                 />
               );
@@ -577,7 +588,7 @@ function ParentDocumentosPanel({ studentChildren }) {
                   icon={<CheckCircle2 className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
                   subtitle={`Carta publicada · ${letter.school_year}${letter.program ? ` · ${letter.program}` : ''}`}
-                  onDownload={() => handleDownloadLetter(letter)}
+                  onDownload={(lang) => handleDownloadLetter(letter, lang)}
                   dlKey={`let-${letter.id}`}
                 />
               );
@@ -603,7 +614,7 @@ function ParentDocumentosPanel({ studentChildren }) {
                   icon={<FileText className="w-5 h-5" />}
                   title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
                   subtitle={`Boletín publicado · ${transcript.school_year} · ${transcript.quarter}`}
-                  onDownload={() => handleDownloadTranscript(transcript)}
+                  onDownload={(lang) => handleDownloadTranscript(transcript, lang)}
                   dlKey={`tr-${transcript.id}`}
                 />
               );
@@ -856,7 +867,7 @@ export default function ParentDashboard() {
         supabase.from('payment_status').select('id, student_id, billing_month, due_date, due_amount, paid_amount, status').in('student_id', studentIds),
         supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
         supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
-        supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed']),
+        supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed', 'published']),
         supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
         supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').in('student_id', studentIds).eq('status', 'published'),
       ]);

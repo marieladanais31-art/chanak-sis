@@ -392,7 +392,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     }
   };
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async (lang = meta.language) => {
     setDl(true);
     try {
       // Fetch student row for PDF
@@ -409,7 +409,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         student: student || { id: studentId },
         settings,
         creditsSummary,
-        lang: meta.language,
+        lang,
       });
     } catch (err) {
       toast({ title: 'Error', description: 'No se pudo generar el PDF.', variant: 'destructive' });
@@ -438,12 +438,20 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         <div className="flex items-center gap-3">
           <span className={`px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>{status.label}</span>
           <button
-            onClick={handleDownloadPDF}
+            onClick={() => handleDownloadPDF('es')}
             disabled={downloading}
             className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors"
           >
             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            PDF
+            PDF ES
+          </button>
+          <button
+            onClick={() => handleDownloadPDF('en')}
+            disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold disabled:opacity-50 transition-colors"
+          >
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            PDF EN
           </button>
           {onClose && <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>}
         </div>

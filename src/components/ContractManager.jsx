@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generateContractPDF } from '@/lib/contractPdf';
 import {
   Save, Loader2, X, Download, ChevronRight,
-  FileSignature, Send, Archive, Wand2
+  FileSignature, Send, Archive
 } from 'lucide-react';
 
 const INPUT    = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 text-sm bg-white';
@@ -13,65 +13,10 @@ const LABEL    = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking
 
 const STATUS_META = {
   draft:    { label: 'Borrador',  color: 'bg-slate-100 text-slate-700',  next: 'sent',    nextLabel: 'Enviar a Familia', icon: Send },
-  sent:     { label: 'Enviado',   color: 'bg-amber-100 text-amber-800',  next: 'signed',  nextLabel: 'Marcar Firmado',   icon: FileSignature },
-  signed:   { label: 'Firmado',   color: 'bg-green-100 text-green-800',  next: 'archived',nextLabel: 'Archivar',         icon: Archive },
-  archived: { label: 'Archivado', color: 'bg-slate-200 text-slate-600',  next: null,      nextLabel: null,               icon: Archive },
-};
-
-const TEMPLATE = {
-  'Off-Campus': {
-    academic_services:
-`CLÁUSULA 1 – OBJETO DEL CONTRATO
-CHANAK prestará a LA FAMILIA un servicio educativo internacional a distancia, bajo la modalidad de Off Campus (Homeschool Guiado), conforme al modelo académico institucional y sus manuales de procedimientos vigentes.
-
-CLÁUSULA 2 – NATURALEZA DEL PROGRAMA
-El programa no constituye educación presencial. Es un servicio de educación a distancia regido por estándares internacionales de «Homeschooling» y la normativa del Estado de Florida.`,
-    chanak_responsibilities:
-`CLÁUSULA 3 – OBLIGACIONES DE CHANAK
-Diseñar y supervisar el Plan Educativo Individualizado (PEI), asignar tutor académico, evaluar el progreso mediante el sistema Mastery Learning, validar calificaciones y emitir la documentación académica oficial.`,
-    family_responsibilities:
-`CLÁUSULA 4 – OBLIGACIONES DE LA FAMILIA
-Actuar como supervisor primario del proceso educativo diario. LA FAMILIA se compromete a supervisar el trabajo diario del estudiante y reportar los datos verídicos y objetivos sobre su desempeño académico en la plataforma oficial, garantizando un entorno de estudio adecuado y el cumplimiento de los compromisos económicos.`,
-    economic_conditions:
-`CLÁUSULA 5 – CONDICIONES ECONÓMICAS Y PAGOS
-El servicio se activa tras la confirmación del pago. El incumplimiento de los pagos acordados podrá implicar la suspensión del acceso a la plataforma y del servicio educativo.`,
-    notes:
-`CLÁUSULA 6 – LEY APLICABLE
-Este contrato se rige íntegramente por las leyes del Estado de Florida, Estados Unidos de América, lugar de constitución de la institución.
-
-ANEXO INFORMATIVO
-Chanak International Academy (Código FLDOE 134620) es una institución educativa internacional a distancia constituida en los Estados Unidos. La matrícula en Chanak no equivale a escolarización presencial en el país de residencia del estudiante.`,
-  },
-  'Dual Diploma': {
-    academic_services:
-`CLÁUSULA 1 – OBJETO DEL CONTRATO
-CHANAK prestará a LA FAMILIA un servicio de doble titulación internacional a distancia bajo la modalidad de Dual Diploma. El programa permite al estudiante obtener el High School Diploma de los Estados Unidos de forma simultánea a sus estudios de bachillerato nacional en su país de residencia.
-
-CLÁUSULA 2 – NATURALEZA DEL PROGRAMA Y SIMULTANEIDAD
-El programa Dual Diploma no sustituye la escolarización presencial obligatoria. Se basa en un modelo de convalidación de créditos: el sistema estadounidense reconoce el 75% (18 créditos) de las materias cursadas en el colegio local, y el alumno cursa con CHANAK el 25% restante (6 créditos específicos) requeridos por el Estado de Florida.
-
-CLÁUSULA 3 – LIFE SKILLS Y COSMOVISIÓN
-Como pilar fundamental de la formación en Chanak, el programa integra obligatoriamente el bloque de Life Skills. Este componente se enfoca en oratoria, inteligencia financiera, proyectos sociales y cosmovisión cristiana, con una carga horaria estimada de 5 horas semanales totales.
-
-CLÁUSULA 4 – MASTERY LEARNING Y CURRÍCULO A.C.E.
-El programa utiliza el currículo A.C.E. (Accelerated Christian Education). LA FAMILIA acepta que el sistema se rige por el dominio del aprendizaje: el estudiante debe alcanzar un puntaje mínimo del 80% en cada PACE (módulo) para avanzar al siguiente nivel.
-
-CLÁUSULA 5 – EVALUACIÓN DIAGNÓSTICA
-Para alumnos que inicien el programa de forma tardía (a partir de 3.° de ESO), CHANAK realizará una Evaluación Diagnóstica de Inglés y Matemáticas para determinar el nivel de entrada real y diseñar el plan de nivelación correspondiente.`,
-    chanak_responsibilities:
-`CLÁUSULA 6 – OBLIGACIONES DE CHANAK
-Proporcionar acceso a la plataforma institucional, asignar un mentor académico certificado, emitir transcripts oficiales y el diploma de High School al completar los requisitos, y brindar acompañamiento continuo durante todo el programa.`,
-    family_responsibilities:
-`CLÁUSULA 7 – OBLIGACIONES DE LA FAMILIA
-Mantener la matrícula activa en el colegio local durante todo el programa. Proveer el equipamiento tecnológico necesario. Cumplir con los compromisos económicos pactados y comunicar oportunamente cualquier cambio en la situación académica local del estudiante.`,
-    economic_conditions: '',
-    notes:
-`CLÁUSULA 8 – CANALES OFICIALES Y LEY APLICABLE
-El Sistema Académico (SIS) de Chanak es el único canal oficial para registros y documentos. Este contrato se rige por las leyes del Estado de Florida, EE. UU.
-
-ANEXO INFORMATIVO
-Chanak International Academy (Código FLDOE 134620) es una institución educativa internacional a distancia constituida en los Estados Unidos. El Dual Diploma no sustituye los estudios obligatorios locales del estudiante. La familia es responsable de cumplir con la normativa educativa local de su país de residencia.`,
-  },
+  sent:      { label: 'Enviado',   color: 'bg-amber-100 text-amber-800',  next: 'signed',    nextLabel: 'Marcar Firmado', icon: FileSignature },
+  signed:    { label: 'Firmado',   color: 'bg-blue-100 text-blue-800',    next: 'published', nextLabel: 'Publicar',       icon: FileSignature },
+  published: { label: 'Publicado', color: 'bg-green-100 text-green-800',  next: 'archived',  nextLabel: 'Archivar',       icon: Archive },
+  archived:  { label: 'Archivado', color: 'bg-slate-200 text-slate-600',  next: null,        nextLabel: null,             icon: Archive },
 };
 
 const DEFAULT_FORM = {
@@ -124,16 +69,16 @@ export default function ContractManager({ studentId, studentName, contractId: in
 
   const loadStudentFicha = useCallback(async () => {
     if (!studentId || initialId) return;
-    const { data } = await supabase
-      .from('students')
-      .select('parent1_name, modality')
-      .eq('id', studentId)
-      .single();
-    if (data) {
+    const [studentRes, settingsRes] = await Promise.all([
+      supabase.from('students').select('parent1_name, modality').eq('id', studentId).single(),
+      supabase.from('institutional_settings').select('active_school_year').limit(1).single(),
+    ]);
+    if (studentRes.data || settingsRes.data) {
       setForm(prev => ({
         ...prev,
-        tutor_legal: data.parent1_name || prev.tutor_legal,
-        modality:    data.modality     || prev.modality,
+        school_year: settingsRes.data?.active_school_year || prev.school_year,
+        tutor_legal: studentRes.data?.parent1_name || prev.tutor_legal,
+        modality:    studentRes.data?.modality     || prev.modality,
       }));
     }
   }, [studentId, initialId]);
@@ -143,15 +88,6 @@ export default function ContractManager({ studentId, studentName, contractId: in
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
-  const loadTemplate = () => {
-    const tpl = TEMPLATE[form.modality];
-    if (!tpl) {
-      toast({ title: 'Selecciona Off-Campus o Dual Diploma para cargar la plantilla.', variant: 'destructive' });
-      return;
-    }
-    setForm(prev => ({ ...prev, ...tpl }));
-    toast({ title: `Cláusulas ${form.modality} cargadas` });
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -196,15 +132,16 @@ export default function ContractManager({ studentId, studentName, contractId: in
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (lang = 'es') => {
     setDownloading(true);
     try {
       const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
       const [first, ...rest] = (studentName || '').split(' ');
       generateContractPDF({
-        contract: { ...form, id: contractId },
+        contract: { ...form, id: contractId, language: lang },
         student:  { first_name: first || studentName, last_name: rest.join(' ') },
         settings: settings || null,
+        lang,
       });
     } catch {
       toast({ title: 'Error', description: 'No se pudo generar el PDF.', variant: 'destructive' });
@@ -242,10 +179,15 @@ export default function ContractManager({ studentId, studentName, contractId: in
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>{status.label}</span>
-          <button onClick={handleDownload} disabled={downloading}
+          <button onClick={() => handleDownload('es')} disabled={downloading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold disabled:opacity-50">
             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            PDF
+            PDF ES
+          </button>
+          <button onClick={() => handleDownload('en')} disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold disabled:opacity-50">
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            PDF EN
           </button>
           <button onClick={onClose} className="text-blue-200 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
@@ -265,14 +207,6 @@ export default function ContractManager({ studentId, studentName, contractId: in
               <option value="Homeschool">Homeschool</option>
             </select>
           </div>
-          {!isReadOnly && (
-            <button
-              onClick={loadTemplate}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap"
-            >
-              <Wand2 className="w-4 h-4" /> Cargar Cláusulas Modelo
-            </button>
-          )}
         </div>
 
         {/* Datos generales */}

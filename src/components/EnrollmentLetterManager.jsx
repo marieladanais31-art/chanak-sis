@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generateEnrollmentLetterPDF } from '@/lib/enrollmentLetterPdf';
 import {
   Save, Loader2, X, Download, ChevronRight,
-  Mail, CheckCircle, Send, Eye, Globe
+  Mail, CheckCircle, Send, Eye
 } from 'lucide-react';
 
 const INPUT    = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-teal-500 text-slate-800 text-sm bg-white';
@@ -16,13 +16,6 @@ const STATUS_META = {
   sent:      { label: 'Enviado',    color: 'bg-amber-100 text-amber-800', next: 'published',  nextLabel: 'Publicar',         icon: Eye },
   published: { label: 'Publicado',  color: 'bg-green-100 text-green-800', next: 'archived',   nextLabel: 'Archivar',         icon: CheckCircle },
   archived:  { label: 'Archivado',  color: 'bg-slate-200 text-slate-600', next: null,         nextLabel: null,               icon: Mail },
-};
-
-const BODY_TEXT = {
-  es: (studentName, schoolYear, fldoe) =>
-    `Chanak International Academy es una institución educativa internacional privada diseñada para brindar continuidad académica a familias que requieren una estructura de aprendizaje a distancia flexible, fundamentada en el currículo A.C.E. (Accelerated Christian Education) y los estándares del Estado de Florida, EE. UU.\n\nEsta carta confirma que el/la siguiente estudiante está debidamente inscrito/a y registrado/a en Chanak International Academy para el año académico ${schoolYear || '—'}. El estudiante sigue un Plan Educativo Individualizado (PEI) basado en el currículo A.C.E. (Accelerated Christian Education), impartido mediante nuestro modelo estructurado de aprendizaje a distancia. Chanak International Academy asume la supervisión académica y la responsabilidad de la entrega, supervisión y evaluación del programa educativo de cada estudiante, conforme a las políticas institucionales. Esta confirmación se emite a petición de la familia para fines administrativos oficiales.`,
-  en: (studentName, schoolYear, fldoe) =>
-    `Chanak International Academy is a private international educational institution designed to provide academic continuity to families requiring a flexible distance learning structure, grounded in the A.C.E. (Accelerated Christian Education) curriculum and the standards of the State of Florida, USA.\n\nThis letter confirms that the following student is duly enrolled and registered with Chanak International Academy for the academic year ${schoolYear || '—'}. The student follows an Individualized Educational Plan (IEP) based on the Accelerated Christian Education (A.C.E.) curriculum, delivered through our structured distance learning model. Chanak International Academy assumes academic oversight and responsibility for the delivery, supervision, and evaluation of each student's educational programme in accordance with institutional policies. This confirmation is issued upon request for official administrative purposes.`,
 };
 
 const DEFAULT_FORM = {
@@ -71,19 +64,19 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
 
   const loadStudentFicha = useCallback(async () => {
     if (!studentId || initialId) return;
-    const { data } = await supabase
-      .from('students')
-      .select('grade_level, us_grade_level, modality, program, enrollment_date')
-      .eq('id', studentId)
-      .single();
-    if (data) {
+    const [studentRes, settingsRes] = await Promise.all([
+      supabase.from('students').select('grade_level, us_grade_level, modality, program, enrollment_date').eq('id', studentId).single(),
+      supabase.from('institutional_settings').select('active_school_year').limit(1).single(),
+    ]);
+    if (studentRes.data || settingsRes.data) {
       setForm(prev => ({
         ...prev,
-        grade_level:    data.grade_level    || prev.grade_level,
-        us_grade_level: data.us_grade_level || prev.us_grade_level,
-        modality:       data.modality       || prev.modality,
-        program:        data.program        || prev.program,
-        start_date:     data.enrollment_date|| prev.start_date,
+        school_year:    settingsRes.data?.active_school_year || prev.school_year,
+        grade_level:    studentRes.data?.grade_level    || prev.grade_level,
+        us_grade_level: studentRes.data?.us_grade_level || prev.us_grade_level,
+        modality:       studentRes.data?.modality       || prev.modality,
+        program:        studentRes.data?.program        || prev.program,
+        start_date:     studentRes.data?.enrollment_date|| prev.start_date,
       }));
     }
   }, [studentId, initialId]);
@@ -91,26 +84,9 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadStudentFicha(); }, [loadStudentFicha]);
 
-  // Auto-fill confirmation_text if still empty when language or school_year changes
-  useEffect(() => {
-    if (!form.confirmation_text) {
-      setForm(prev => ({
-        ...prev,
-        confirmation_text: BODY_TEXT[prev.letter_language]?.(studentName, prev.school_year, '134620') || '',
-      }));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
-  const refreshBodyText = () => {
-    setForm(prev => ({
-      ...prev,
-      confirmation_text: BODY_TEXT[prev.letter_language]?.(studentName, prev.school_year, '134620') || '',
-    }));
-    toast({ title: 'Texto actualizado según idioma y año escolar' });
-  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -155,15 +131,16 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (lang = form.letter_language) => {
     setDownloading(true);
     try {
       const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
       const { data: studentData } = await supabase.from('students').select('*').eq('id', studentId).single();
       generateEnrollmentLetterPDF({
-        letter:   { ...form, id: letterId },
+        letter:   { ...form, id: letterId, letter_language: lang },
         student:  studentData || { id: studentId },
         settings: settings || null,
+        lang,
       });
     } catch {
       toast({ title: 'Error', description: 'No se pudo generar el PDF.', variant: 'destructive' });
@@ -193,10 +170,15 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>{status.label}</span>
-          <button onClick={handleDownload} disabled={downloading}
+          <button onClick={() => handleDownload('es')} disabled={downloading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold disabled:opacity-50">
             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            PDF
+            PDF ES
+          </button>
+          <button onClick={() => handleDownload('en')} disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold disabled:opacity-50">
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            PDF EN
           </button>
           <button onClick={onClose} className="text-teal-100 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
@@ -214,15 +196,7 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
                 <option value="es">Español</option>
                 <option value="en">English</option>
               </select>
-              {!isReadOnly && (
-                <button
-                  onClick={refreshBodyText}
-                  title="Recargar texto según idioma"
-                  className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-700 rounded-xl border border-teal-200 text-xs font-bold"
-                >
-                  <Globe className="w-4 h-4" />
-                </button>
-              )}
+
             </div>
           </div>
           <div>
