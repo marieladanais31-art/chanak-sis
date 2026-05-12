@@ -7,6 +7,7 @@
  */
 
 import jsPDF from 'jspdf';
+import { addInstitutionLogo, getDocumentFooter, getInstitutionAddress, getInstitutionFldoe, getInstitutionName } from '@/lib/officialDocuments';
 import autoTable from 'jspdf-autotable';
 import { shouldShowOfficialCredits } from '@/lib/academicUtils';
 
@@ -116,23 +117,23 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
   const issuedDateStr = now.toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  const refNumber = `${settings?.fldoe_registration || '134620'}-${now.getFullYear()}-${(student?.id || '000000').substring(0, 6).toUpperCase()}`;
+  const refNumber = `${getInstitutionFldoe(settings)}-${now.getFullYear()}-${(student?.id || '000000').substring(0, 6).toUpperCase()}`;
   const showCredits = shouldShowOfficialCredits(student, { allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits) });
 
   // ── Encabezado azul ─────────────────────────────────────────────────────────
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, W, 38, 'F');
 
-  // Logo (si existe URL válida en settings, intentar añadirlo; de lo contrario texto)
+  addInstitutionLogo(doc, settings, 165, 6, 25, 25);
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text(settings?.institution_name || 'Chanak International Academy', 14, 14);
+  doc.text(getInstitutionName(settings), 14, 14);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text(`${t.fldoe}: ${settings?.fldoe_registration || '134620'}  |  ${settings?.website || 'www.chanakacademy.org'}`, 14, 20);
-  doc.text(`${settings?.address || ''}  ${settings?.city || ''}  ${settings?.state_province || 'Florida'}  ${settings?.country || 'USA'}`, 14, 25);
+  doc.text(`${t.fldoe}: ${getInstitutionFldoe(settings)}  |  ${settings?.website || ''}`, 14, 20);
+  doc.text(getInstitutionAddress(settings), 14, 25);
 
   // Título del documento
   doc.setFont('helvetica', 'bold');
@@ -318,7 +319,7 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
-  doc.text(settings?.legal_text_es || '', 14, pageH - 9, { maxWidth: W - 28 });
+  doc.text(settings?.legal_text_es || getDocumentFooter(settings, lang), 14, pageH - 9, { maxWidth: W - 28 });
   doc.text(`${t.issuedDate}: ${issuedDateStr}  |  ${t.refNumber}: ${refNumber}`, W - 14, pageH - 5, { align: 'right' });
 
   const studentLastName = (student?.last_name || 'student').replace(/\s+/g, '_');

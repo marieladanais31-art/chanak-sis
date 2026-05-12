@@ -1,4 +1,13 @@
 import jsPDF from 'jspdf';
+import {
+  addInstitutionLogo,
+  getDocumentFooter,
+  getInstitutionAddress,
+  getInstitutionEmail,
+  getInstitutionFldoe,
+  getInstitutionName,
+  normalizeDocumentLanguage,
+} from '@/lib/officialDocuments';
 
 const NAVY  = [25, 61, 109];
 const TEAL  = [32, 178, 170];
@@ -37,8 +46,8 @@ const I18N = {
     name:        'Nombre',
     date:        'Fecha',
     role:        'Head of School / Dirección',
-    footer:      'Chanak International Academy · Documento Oficial · FLDOE #134620',
-    legalFooter: 'CHANAK TRAINUP EDUCATION INC · EIN 36-5154011 · 7901 4th St N Ste 300, St. Petersburg FL 33702',
+    footer:      '',
+    legalFooter: '',
   },
   en: {
     title:       'DECLARATION OF ENROLMENT',
@@ -56,17 +65,20 @@ const I18N = {
     name:        'Name',
     date:        'Date',
     role:        'Head of School',
-    footer:      'Chanak International Academy · Official Document · FLDOE #134620',
-    legalFooter: 'CHANAK TRAINUP EDUCATION INC · EIN 36-5154011 · 7901 4th St N Ste 300, St. Petersburg FL 33702',
+    footer:      '',
+    legalFooter: '',
   },
 };
 
-export function generateEnrollmentLetterPDF({ letter, student, settings }) {
+export function generateEnrollmentLetterPDF({ letter, student, settings, lang: requestedLang }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const M   = 20;
   const W   = pW(doc);
-  const lang = letter?.letter_language || 'es';
+  const lang = normalizeDocumentLanguage(requestedLang || letter?.letter_language || 'es');
   const t    = I18N[lang] || I18N.es;
+  const institutionName = getInstitutionName(settings);
+  const fldoe = getInstitutionFldoe(settings);
+  const contactLine = [getInstitutionEmail(settings), settings?.website, getInstitutionAddress(settings)].filter(Boolean).join('  ·  ');
 
   // ── Header ────────────────────────────────────────────────────────────────
   doc.setFillColor(...NAVY);
@@ -76,12 +88,13 @@ export function generateEnrollmentLetterPDF({ letter, student, settings }) {
 
   doc.setTextColor(...WHITE);
   doc.setFont('helvetica', 'bold');
+  addInstitutionLogo(doc, settings, 10, 5, 22, 22);
   doc.setFontSize(14);
-  doc.text('CHANAK INTERNATIONAL ACADEMY', W / 2, 12, { align: 'center' });
+  doc.text(institutionName, W / 2, 12, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.text(
-    `FLDOE #${settings?.fldoe_registration || '134620'}  ·  offcampus@chanakacademy.org  ·  www.chanakacademy.org`,
+    [`FLDOE #${fldoe}`, contactLine].filter(Boolean).join('  ·  '),
     W / 2, 19, { align: 'center' }
   );
   doc.setFont('helvetica', 'bold');
@@ -113,11 +126,7 @@ export function generateEnrollmentLetterPDF({ letter, student, settings }) {
     ? `${student.first_name || ''} ${student.last_name || ''}`.trim()
     : '—';
 
-  const bodyText = letter?.confirmation_text ||
-    (lang === 'en'
-      ? `This letter confirms that the following student is duly enrolled and registered with Chanak International Academy for the academic year ${letter?.school_year || '—'}. The student follows an Individualized Educational Plan (IEP) based on the Accelerated Christian Education (A.C.E.) curriculum, delivered through our structured distance learning model. Chanak International Academy assumes academic oversight and responsibility for the delivery, supervision, and evaluation of each student's educational programme in accordance with institutional policies. This confirmation is issued upon request for official administrative purposes.`
-      : `Esta carta confirma que el/la siguiente estudiante está debidamente inscrito/a y registrado/a en Chanak International Academy para el año académico ${letter?.school_year || '—'}. El estudiante sigue un Plan Educativo Individualizado (PEI) basado en el currículo A.C.E. (Accelerated Christian Education), impartido mediante nuestro modelo estructurado de aprendizaje a distancia. Chanak International Academy asume la supervisión académica y la responsabilidad de la entrega, supervisión y evaluación del programa educativo de cada estudiante, conforme a las políticas institucionales. Esta confirmación se emite a petición de la familia para fines administrativos oficiales.`
-    );
+  const bodyText = letter?.confirmation_text || letter?.body_text || letter?.content || '';
 
   y = block(doc, y, bodyText, M, 10);
   y += 4;
@@ -179,7 +188,7 @@ export function generateEnrollmentLetterPDF({ letter, student, settings }) {
   doc.line(M + 20, y + 10, M + sigW - 3, y + 10);
   doc.text(`${t.name}:`, M + 3, y + 19);
   doc.setTextColor(...BLACK);
-  const dirName = letter?.director_signature_name || settings?.director_name || 'Mariela Andrade';
+  const dirName = letter?.director_signature_name || settings?.director_name || '______________________';
   doc.text(dirName, M + 20, y + 19);
   doc.setTextColor(...GRAY);
   doc.text(`${t.date}:`, M + 3, y + 26);
@@ -196,10 +205,10 @@ export function generateEnrollmentLetterPDF({ letter, student, settings }) {
   doc.setTextColor(...WHITE);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  doc.text(t.legalFooter, W / 2, pH(doc) - 8, { align: 'center' });
+  doc.text([institutionName, getInstitutionAddress(settings)].filter(Boolean).join(' · '), W / 2, pH(doc) - 8, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
-  doc.text(t.footer, W / 2, pH(doc) - 4, { align: 'center' });
+  doc.text(getDocumentFooter(settings, lang), W / 2, pH(doc) - 4, { align: 'center' });
 
   const ln   = student?.last_name?.toLowerCase().replace(/\s+/g, '_') || 'estudiante';
   const yr   = (letter?.school_year || '').replace('-', '_');

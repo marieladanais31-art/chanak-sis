@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getDocumentFooter, getInstitutionFldoe, getInstitutionName, normalizeDocumentLanguage } from '@/lib/officialDocuments';
 import { gradeToTranscriptLetter, TRANSCRIPT_GRADING_SCALE } from '@/lib/academicUtils';
 
 const NAVY = [25, 61, 109];
@@ -24,9 +25,9 @@ function fmt(val) {
   return Number(val).toFixed(2);
 }
 
-function addPageNumbers(doc) {
+function addPageNumbers(doc, settings, lang = 'en') {
   const total = doc.internal.getNumberOfPages();
-  const footer = `Chanak International Academy  ·  FLDOE #134620  ·  www.chanakacademy.org`;
+  const footer = getDocumentFooter(settings, lang);
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
     const w = doc.internal.pageSize.getWidth();
@@ -35,7 +36,7 @@ function addPageNumbers(doc) {
     doc.setTextColor(...MID_GRAY);
     doc.setFont('helvetica', 'normal');
     doc.text(footer, w / 2, h - 8, { align: 'center' });
-    doc.text(`Page ${i} of ${total}`, w - 14, h - 8, { align: 'right' });
+    doc.text(`${lang === 'en' ? 'Page' : 'Pág.'} ${i} / ${total}`, w - 14, h - 8, { align: 'right' });
     doc.setDrawColor(...MID_GRAY);
     doc.setLineWidth(0.3);
     doc.line(14, h - 12, w - 14, h - 12);
@@ -50,7 +51,8 @@ function addPageNumbers(doc) {
  * @param {object} params.settings - institutional_settings row
  * @param {boolean} params.isHighSchool
  */
-export function generateAnnualTranscriptPDF({ student, years, settings, isHighSchool = false }) {
+export function generateAnnualTranscriptPDF({ student, years, settings, isHighSchool = false, lang: requestedLang }) {
+  const lang = normalizeDocumentLanguage(requestedLang || settings?.primary_language || 'es');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
   let y = 0;
@@ -63,17 +65,17 @@ export function generateAnnualTranscriptPDF({ student, years, settings, isHighSc
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(255, 255, 255);
-  doc.text('CHANAK INTERNATIONAL ACADEMY', W / 2, 14, { align: 'center' });
+  doc.text(getInstitutionName(settings), W / 2, 14, { align: 'center' });
   doc.setFontSize(10);
   doc.setTextColor(...TEAL.map(v => Math.min(v + 100, 255)));
-  doc.text('Official Transcript of Grades  ·  Academic Record', W / 2, 21, { align: 'center' });
+  doc.text(lang === 'en' ? 'Official Transcript of Grades · Academic Record' : 'Boletín Anual Oficial · Expediente Académico', W / 2, 21, { align: 'center' });
 
   // Issue date top right
   doc.setFontSize(7);
   doc.setTextColor(200, 210, 230);
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
   doc.text(`Issued: ${today}`, W - 14, 10, { align: 'right' });
-  doc.text('FLDOE #134620', W - 14, 15, { align: 'right' });
+  doc.text(`FLDOE #${getInstitutionFldoe(settings)}`, W - 14, 15, { align: 'right' });
 
   y = 50;
 
@@ -118,7 +120,7 @@ export function generateAnnualTranscriptPDF({ student, years, settings, isHighSc
   y += 4;
 
   const regBody = years.map(yr => [
-    settings?.institution_name || 'Chanak International Academy',
+    getInstitutionName(settings),
     student.id ? student.id.slice(0, 8).toUpperCase() : '—',
     yr.hs_year_name
       ? `${yr.hs_year_name} — ${yr.us_grade_level || yr.grade_level || ''}`
@@ -133,7 +135,7 @@ export function generateAnnualTranscriptPDF({ student, years, settings, isHighSc
     styles: { fontSize: 8, cellPadding: 3 },
     headStyles: { fillColor: NAVY, textColor: 255, fontStyle: 'bold', fontSize: 7 },
     head: [['School attended', 'Registration #', 'Level', 'School year', 'Observations']],
-    body: regBody.length ? regBody : [['Chanak International Academy', '—', '—', '—', '']],
+    body: regBody.length ? regBody : [[getInstitutionName(settings), '—', '—', '—', '']],
     theme: 'grid',
   });
   y = doc.lastAutoTable.finalY + 10;
@@ -294,12 +296,12 @@ export function generateAnnualTranscriptPDF({ student, years, settings, isHighSc
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(100, 110, 130);
-  doc.text(settings?.institution_name || 'Chanak International Academy', 14, y);
-  doc.text('Chanak International Academy', 28 + sigW, y);
+  doc.text(getInstitutionName(settings), 14, y);
+  doc.text(getInstitutionName(settings), 28 + sigW, y);
 
   // Page numbers / footer
-  addPageNumbers(doc);
+  addPageNumbers(doc, settings, lang);
 
   const lastName = (student.last_name || 'student').replace(/\s+/g, '_');
-  doc.save(`transcript_oficial_${lastName}.pdf`);
+  doc.save(`${lang === 'en' ? 'annual_report' : 'boletin_anual'}_${lastName}.pdf`);
 }

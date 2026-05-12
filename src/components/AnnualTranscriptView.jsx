@@ -111,7 +111,7 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
 
   useEffect(() => { load(); }, [load]);
 
-  const handleDownload = async () => {
+  const handleDownload = async (lang = 'es') => {
     setDownloading(true);
     try {
       const isHighSchool = detectHighSchool(student);
@@ -133,6 +133,7 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
         years: yearsForPdf,
         settings,
         isHighSchool,
+        lang,
       });
     } catch (err) {
       toast({ title: 'Error al generar PDF', description: err.message, variant: 'destructive' });
@@ -190,12 +191,20 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={handleDownload}
+              onClick={() => handleDownload('es')}
               disabled={downloading}
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-sm font-bold transition-all"
             >
               {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              Descargar PDF
+              PDF ES
+            </button>
+            <button
+              onClick={() => handleDownload('en')}
+              disabled={downloading}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-sm font-bold transition-all"
+            >
+              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              PDF EN
             </button>
             <button onClick={onClose} className="text-white/70 hover:text-white text-xl font-bold">×</button>
           </div>

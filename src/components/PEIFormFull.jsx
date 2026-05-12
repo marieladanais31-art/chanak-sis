@@ -203,7 +203,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
     }
   };
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async (lang = 'es') => {
     setDownloading(true);
     try {
       const [pacesRes, settingsRes] = await Promise.all([
@@ -221,6 +221,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           last_name: (studentName || '').replace(parts + ' ', ''),
         },
         settings: settingsRes.data || null,
+        lang,
       });
     } catch (err) {
       toast({ title: 'Error', description: 'No se pudo generar el PDF.', variant: 'destructive' });
@@ -248,10 +249,15 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         </div>
         <div className="flex items-center gap-3">
           <span className={`px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>{status.label}</span>
-          <button onClick={handleDownloadPDF} disabled={downloading}
+          <button onClick={() => handleDownloadPDF('es')} disabled={downloading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
             {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-            PDF
+            PDF ES
+          </button>
+          <button onClick={() => handleDownloadPDF('en')} disabled={downloading}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            PDF EN
           </button>
           <button onClick={onClose} className="text-blue-200 hover:text-white">
             <X className="w-5 h-5" />

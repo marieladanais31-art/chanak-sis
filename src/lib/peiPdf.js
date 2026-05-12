@@ -8,6 +8,13 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  addInstitutionLogo,
+  getDocumentFooter,
+  getInstitutionFldoe,
+  getInstitutionName,
+  normalizeDocumentLanguage,
+} from '@/lib/officialDocuments';
 
 // ── Paleta institucional ──────────────────────────────────────────────────────
 const NAVY   = [25, 61, 109];
@@ -24,41 +31,43 @@ const FONT_NORMAL = 'helvetica';
 function pageW(doc) { return doc.internal.pageSize.getWidth(); }
 function pageH(doc) { return doc.internal.pageSize.getHeight(); }
 
-function drawNavyHeader(doc, settings) {
+const I18N = {
+  es: { title: 'PROGRAMA EDUCATIVO INDIVIDUALIZADO (PEI)', page: 'Pág.' },
+  en: { title: 'INDIVIDUALIZED EDUCATION PLAN (IEP)', page: 'Page' },
+};
+
+function drawNavyHeader(doc, settings, lang = 'es') {
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, pageW(doc), 32, 'F');
 
-  const logo = settings?.logo_url;
-  if (logo) {
-    try { doc.addImage(logo, 'PNG', 10, 4, 24, 24); } catch (_) {}
-  }
+  addInstitutionLogo(doc, settings, 10, 4, 24, 24);
 
   doc.setTextColor(...WHITE);
   doc.setFont(FONT_BOLD, 'bold');
   doc.setFontSize(14);
-  doc.text('CHANAK INTERNATIONAL ACADEMY', pageW(doc) / 2, 13, { align: 'center' });
+  doc.text(getInstitutionName(settings), pageW(doc) / 2, 13, { align: 'center' });
   doc.setFontSize(9);
   doc.setFont(FONT_NORMAL, 'normal');
   doc.text(
-    `FLDOE #${settings?.fldoe_registration || '134620'}  ·  ${settings?.website || 'www.chanakacademy.org'}`,
+    `FLDOE #${getInstitutionFldoe(settings)}  ·  ${settings?.website || ''}`,
     pageW(doc) / 2, 20, { align: 'center' }
   );
   doc.setFontSize(10);
   doc.setFont(FONT_BOLD, 'bold');
-  doc.text('PROGRAMA EDUCATIVO INDIVIDUALIZADO (PEI)', pageW(doc) / 2, 28, { align: 'center' });
+  doc.text((I18N[lang] || I18N.es).title, pageW(doc) / 2, 28, { align: 'center' });
   doc.setTextColor(...BLACK);
 }
 
-function addPageNumbers(doc) {
+function addPageNumbers(doc, settings, lang = 'es') {
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(...GRAY);
-    doc.text(`Pág. ${i} / ${total}`, pageW(doc) - 14, pageH(doc) - 6, { align: 'right' });
+    doc.text(`${(I18N[lang] || I18N.es).page} ${i} / ${total}`, pageW(doc) - 14, pageH(doc) - 6, { align: 'right' });
     doc.setTextColor(...NAVY);
     doc.setFontSize(7);
-    doc.text('Chanak International Academy · Documento Confidencial', 14, pageH(doc) - 6);
+    doc.text(getDocumentFooter(settings, lang), 14, pageH(doc) - 6);
   }
 }
 
@@ -105,7 +114,7 @@ function textBlock(doc, y, text, margin = 14) {
 function checkPageBreak(doc, y, needed = 20) {
   if (y + needed > pageH(doc) - 20) {
     doc.addPage();
-    drawNavyHeader(doc, null);
+    drawNavyHeader(doc, null, 'es');
     return 40;
   }
   return y;
@@ -120,13 +129,14 @@ function checkPageBreak(doc, y, needed = 20) {
  *   student  — { first_name, last_name, ... }
  *   settings — fila de institutional_settings
  */
-export function generatePeiPDF({ pei, paces = [], student, settings }) {
+export function generatePeiPDF({ pei, paces = [], student, settings, lang: requestedLang }) {
+  const lang = normalizeDocumentLanguage(requestedLang || pei?.language || settings?.primary_language || 'es');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = pageW(doc);
   const M = 14;
 
   // ── PORTADA ──────────────────────────────────────────────────────────────────
-  drawNavyHeader(doc, settings);
+  drawNavyHeader(doc, settings, lang);
   let y = 40;
 
   // Recuadro institucional de portada
@@ -259,7 +269,7 @@ export function generatePeiPDF({ pei, paces = [], student, settings }) {
   // ── SECCIÓN 9: Proyección anual de PACEs ─────────────────────────────────
   if (paces.length > 0) {
     doc.addPage();
-    drawNavyHeader(doc, settings);
+    drawNavyHeader(doc, settings, lang);
     y = 40;
     y = sectionTitle(doc, y, '9. Proyección Anual de PACEs');
     y += 2;
@@ -416,9 +426,9 @@ export function generatePeiPDF({ pei, paces = [], student, settings }) {
   doc.text('Padre / Madre / Tutor Legal', sig2X + sigW / 2, y + 29, { align: 'center' });
 
   // ── Paginación y guardado ──────────────────────────────────────────────────
-  addPageNumbers(doc);
+  addPageNumbers(doc, settings, lang);
 
   const lastName = student?.last_name?.toLowerCase().replace(/\s+/g, '_') || 'estudiante';
   const year     = (pei?.school_year || '').replace('-', '_');
-  doc.save(`pei_${lastName}_${year}.pdf`);
+  doc.save(`${lang === 'en' ? 'iep' : 'pei'}_${lastName}_${year}.pdf`);
 }
