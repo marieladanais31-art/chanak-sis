@@ -171,12 +171,13 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     event.preventDefault();
     setMessage(null);
 
-    const score = Number(form.score);
+    const hasScore = form.score !== '';
+    const score = hasScore ? Number(form.score) : null;
     if (!form.student_id || !form.student_subject_id || !selectedSubject) {
       setMessage({ type: 'error', title: 'Datos incompletos', text: 'Selecciona estudiante y materia desde student_subjects.' });
       return;
     }
-    if (!Number.isFinite(score) || score < 0 || score > 100) {
+    if (hasScore && (!Number.isFinite(score) || score < 0 || score > 100)) {
       setMessage({ type: 'error', title: 'Score inválido', text: 'La nota debe ser un número entre 0 y 100.' });
       return;
     }
@@ -185,7 +186,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     try {
       const draftId = crypto.randomUUID();
       const { attachmentPath, attachmentUrl } = await uploadAttachment(draftId);
-      const belowPaceMinimum = form.evidence_type === 'PACE Test' && score < 80;
+      const belowPaceMinimum = hasScore && form.evidence_type === 'PACE Test' && score < 80;
 
       const payload = {
         id: draftId,
@@ -200,7 +201,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         comment: form.comment || null,
         attachment_path: attachmentPath,
         attachment_url: attachmentUrl,
-        review_status: belowPaceMinimum ? 'correction_requested' : 'pending_review',
+        review_status: 'pending_review',
         academic_outcome: belowPaceMinimum ? 'requires_repeat' : 'pending_review',
       };
 
@@ -214,10 +215,10 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         evidence_type: current.evidence_type,
       }));
       setMessage({
-        type: belowPaceMinimum ? 'warning' : 'success',
-        title: belowPaceMinimum ? 'Evidencia enviada con repetición requerida' : 'Evidencia enviada',
+        type: 'success',
+        title: 'Evidencia enviada',
         text: belowPaceMinimum
-          ? 'PACE Test menor de 80 queda marcado como requires_repeat / correction_requested. Chanak revisará oficialmente.'
+          ? 'La evidencia quedó pendiente de revisión oficial por Chanak. El score menor de 80 queda señalado como requires_repeat, pero la familia no aprueba ni rechaza notas.'
           : 'La evidencia quedó pendiente de revisión oficial por Chanak. No se insertó como nota final.',
       });
       await loadSubmissions();
@@ -328,7 +329,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
           </div>
 
           <div>
-            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Score / 100</label>
+            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Score / 100 opcional</label>
             <input
               type="number"
               min="0"
@@ -337,8 +338,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
               value={form.score}
               onChange={(event) => updateForm('score', event.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
-              required
-              placeholder="0–100"
+              placeholder="0–100 (opcional)"
             />
           </div>
 
@@ -377,7 +377,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
           <p className="text-xs text-slate-500 font-bold">
-            Score menor a 80 en PACE Test se envía como correction_requested / requires_repeat.
+            Todas las evidencias se guardan como pending_review; Chanak revisa y decide si aprueba, solicita corrección o rechaza.
           </p>
           <button
             type="submit"
@@ -425,7 +425,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
                       )}
                     </div>
                     <p className="text-sm text-slate-600 font-bold">
-                      {getStudentName(student)} · {submission.quarter} · {submission.evidence_type} · Score {submission.score}/100
+                      {getStudentName(student)} · {submission.quarter} · {submission.evidence_type} · Score {submission.score != null ? `${submission.score}/100` : 'sin score'}
                       {submission.pace_number ? ` · PACE ${submission.pace_number}` : ''}
                     </p>
                     {submission.comment && <p className="text-sm text-slate-500">{submission.comment}</p>}

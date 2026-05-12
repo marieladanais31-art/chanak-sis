@@ -22,8 +22,8 @@ import {
   Link2,
   Bell,
   CalendarDays,
+  AlertTriangle,
 } from 'lucide-react';
-import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
@@ -242,10 +242,134 @@ function ParentBoletinesPanel({ studentChildren }) {
   );
 }
 
+
+function severityClass(severity) {
+  if (severity === 'critical') return 'bg-red-50 text-red-700 border-red-200';
+  if (severity === 'warning') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-blue-50 text-blue-700 border-blue-200';
+}
+
+function ParentAlertasPanel({ studentChildren, paceProjection }) {
+  const [alerts, setAlerts] = React.useState([]);
+  const [corrections, setCorrections] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const loadAlerts = async () => {
+      if (!studentChildren || studentChildren.length === 0) {
+        setAlerts([]);
+        setCorrections([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const ids = studentChildren.map((child) => child.id);
+      const [alertsRes, correctionsRes] = await Promise.all([
+        supabase
+          .from('academic_alerts')
+          .select('id, student_id, alert_type, message, severity, status, target_role, context_type, created_at, resolved_at')
+          .in('student_id', ids)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('academic_evidence_submissions')
+          .select('id, student_id, subject_name, evidence_type, pace_number, review_status, academic_outcome, reviewer_comment, created_at, reviewed_at')
+          .in('student_id', ids)
+          .in('review_status', ['correction_requested', 'rejected'])
+          .order('reviewed_at', { ascending: false, nullsFirst: false }),
+      ]);
+
+      if (alertsRes.error) console.warn('[ParentDashboard] academic_alerts no disponible:', alertsRes.error.message);
+      if (correctionsRes.error) console.warn('[ParentDashboard] evidence corrections no disponibles:', correctionsRes.error.message);
+
+      setAlerts(alertsRes.error ? [] : (alertsRes.data || []));
+      setCorrections(correctionsRes.error ? [] : (correctionsRes.data || []));
+      setLoading(false);
+    };
+
+    loadAlerts();
+  }, [studentChildren]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const overduePaces = (paceProjection || []).filter((pace) => {
+    if (!studentChildren?.some((child) => child.id === pace.student_id)) return false;
+    if (['completed', 'approved', 'delivered'].includes((pace.status || '').toLowerCase())) return false;
+    if ((pace.status || '').toLowerCase() === 'overdue') return true;
+    const due = pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date;
+    if (!due) return false;
+    const dueDate = new Date(due);
+    if (Number.isNaN(dueDate.getTime())) return false;
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  });
+
+  const getChildName = (studentId) => {
+    const child = studentChildren.find((item) => item.id === studentId);
+    return child ? `${child.first_name || ''} ${child.last_name || ''}`.trim() : 'Estudiante';
+  };
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-[#193D6D]" /></div>;
+
+  const isEmpty = alerts.length === 0 && corrections.length === 0 && overduePaces.length === 0;
+
+  if (isEmpty) {
+    return (
+      <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
+        No hay alertas académicas activas ni correcciones solicitadas por ahora.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {alerts.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="font-black text-slate-800 flex items-center gap-2"><Bell className="w-5 h-5 text-amber-500" /> Alertas académicas</h3>
+          {alerts.map((alert) => (
+            <div key={alert.id} className={`rounded-xl border p-4 ${severityClass(alert.severity)}`}>
+              <p className="text-xs font-black uppercase tracking-wider">{getChildName(alert.student_id)} · {alert.alert_type}</p>
+              <p className="font-bold mt-1">{alert.message}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {corrections.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="font-black text-slate-800 flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-orange-500" /> Correcciones solicitadas</h3>
+          {corrections.map((item) => (
+            <div key={item.id} className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-800">
+              <p className="text-xs font-black uppercase tracking-wider">{getChildName(item.student_id)} · {item.subject_name}</p>
+              <p className="font-bold mt-1">{item.evidence_type}{item.pace_number ? ` · PACE ${item.pace_number}` : ''}</p>
+              <p className="text-sm font-medium mt-1">{item.reviewer_comment || 'Chanak solicitó corrección o repetición de esta evidencia.'}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {overduePaces.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="font-black text-slate-800 flex items-center gap-2"><Hourglass className="w-5 h-5 text-red-500" /> PACEs atrasados según proyección</h3>
+          {overduePaces.map((pace) => (
+            <div key={pace.id} className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800">
+              <p className="text-xs font-black uppercase tracking-wider">{getChildName(pace.student_id)} · {pace.quarter || 'Quarter pendiente'}</p>
+              <p className="font-bold mt-1">{pace.subject_name || 'Materia'}{pace.pace_number ? ` · PACE ${pace.pace_number}` : ''}</p>
+              <p className="text-sm font-medium mt-1">Fecha proyectada: {pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date || 'sin fecha'}</p>
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
 function ParentDocumentosPanel({ studentChildren }) {
   const [peis, setPeis]           = React.useState([]);
   const [contracts, setContracts] = React.useState([]);
   const [letters, setLetters]     = React.useState([]);
+  const [transcripts, setTranscripts] = React.useState([]);
   const [loading, setLoading]     = React.useState(true);
   const [downloading, setDownloading] = React.useState(null);
 
@@ -262,10 +386,14 @@ function ParentDocumentosPanel({ studentChildren }) {
       supabase.from('enrollment_letters')
         .select('*')
         .in('student_id', ids).eq('status', 'published'),
-    ]).then(([peiRes, conRes, letRes]) => {
+      supabase.from('transcript_records')
+        .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
+        .in('student_id', ids).eq('status', 'published'),
+    ]).then(([peiRes, conRes, letRes, trRes]) => {
       setPeis(peiRes.data || []);
       setContracts(conRes.data || []);
       setLetters(letRes.data || []);
+      setTranscripts(trRes.data || []);
       setLoading(false);
     });
   }, [studentChildren]);
@@ -328,15 +456,33 @@ function ParentDocumentosPanel({ studentChildren }) {
     }
   };
 
+  const handleDownloadTranscript = async (transcript) => {
+    setDownloading(`tr-${transcript.id}`);
+    try {
+      const child = studentChildren.find(c => c.id === transcript.student_id);
+      const [coursesRes, settingsRes, creditsRes] = await Promise.all([
+        supabase.from('transcript_courses').select('*').eq('transcript_id', transcript.id),
+        supabase.from('institutional_settings').select('*').limit(1).single(),
+        supabase.from('student_credits_summary').select('*').eq('student_id', transcript.student_id),
+      ]);
+      generateTranscriptPDF({
+        transcript,
+        courses: coursesRes.data || [],
+        student: child || { id: transcript.student_id },
+        settings: settingsRes.data || null,
+        creditsSummary: creditsRes.data || [],
+        lang: transcript.language || 'es',
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-[#193D6D]" /></div>;
 
-  const allEmpty = peis.length === 0 && contracts.length === 0 && letters.length === 0;
-
-  if (allEmpty) return (
-    <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-      No hay documentos oficiales publicados todavía.
-    </div>
-  );
+  const allEmpty = peis.length === 0 && contracts.length === 0 && letters.length === 0 && transcripts.length === 0;
 
   const DocRow = ({ icon, title, subtitle, onDownload, dlKey }) => (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between">
@@ -362,6 +508,18 @@ function ParentDocumentosPanel({ studentChildren }) {
 
   return (
     <div className="space-y-6">
+      {allEmpty && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 space-y-2">
+          <p>No hay PEI publicado todavía.</p>
+          <p>No hay boletines publicados todavía.</p>
+          <p>No hay carta de matrícula publicada todavía.</p>
+        </div>
+      )}
+
+      {peis.length === 0 && !allEmpty && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay PEI publicado todavía.</div>
+      )}
+
       {peis.length > 0 && (
         <div>
           <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
@@ -426,6 +584,34 @@ function ParentDocumentosPanel({ studentChildren }) {
             })}
           </div>
         </div>
+      )}
+
+      {letters.length === 0 && !allEmpty && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay carta de matrícula publicada todavía.</div>
+      )}
+
+      {transcripts.length > 0 ? (
+        <div>
+          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" /> Boletines / Transcripts publicados
+          </h3>
+          <div className="space-y-3">
+            {transcripts.map(transcript => {
+              const child = studentChildren.find(c => c.id === transcript.student_id);
+              return (
+                <DocRow key={transcript.id}
+                  icon={<FileText className="w-5 h-5" />}
+                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                  subtitle={`Boletín publicado · ${transcript.school_year} · ${transcript.quarter}`}
+                  onDownload={() => handleDownloadTranscript(transcript)}
+                  dlKey={`tr-${transcript.id}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : !allEmpty && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay boletines publicados todavía.</div>
       )}
     </div>
   );
@@ -885,7 +1071,7 @@ export default function ParentDashboard() {
           /* Secciones globales accesibles aunque no haya hijos vinculados aún */
           <div className="space-y-4">
             {activeTab === 'recursos' && <ParentRecursosPanel links={operationalLinks} />}
-            {activeTab === 'alertas' && <SisAlertsDashboard compact={false} />}
+            {activeTab === 'alertas' && <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} />}
             {activeTab === 'calendario' && <ParentCalendarioPanel calendar={schoolCalendar} />}
           </div>
         ) : (
@@ -1004,8 +1190,7 @@ export default function ParentDashboard() {
 
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
-                          onClick={() => hasBulletinPublished && setActiveTab('boletines')}
-                          disabled={!hasBulletinPublished}
+                          onClick={() => setActiveTab('boletines')}
                           title={hasBulletinPublished ? 'Ver boletines oficiales publicados' : 'No hay boletines publicados todavía.'}
                           className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
                             hasBulletinPublished
@@ -1048,8 +1233,7 @@ export default function ParentDashboard() {
                         </button>
 
                         <button
-                          onClick={() => hasPeiPublished && setActiveTab('documentos')}
-                          disabled={!hasPeiPublished}
+                          onClick={() => setActiveTab('documentos')}
                           title={hasPeiPublished ? 'Ver PEI oficial publicado' : 'PEI pendiente'}
                           className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
                             hasPeiPublished
@@ -1068,8 +1252,7 @@ export default function ParentDashboard() {
                         </button>
 
                         <button
-                          onClick={() => hasEnrollmentPublished && setActiveTab('documentos')}
-                          disabled={!hasEnrollmentPublished}
+                          onClick={() => setActiveTab('documentos')}
                           title={hasEnrollmentPublished ? 'Ver carta oficial publicada' : 'Confirmación de matrícula pendiente'}
                           className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
                             hasEnrollmentPublished
@@ -1088,8 +1271,7 @@ export default function ParentDashboard() {
                         </button>
 
                         <button
-                          onClick={() => hasContractOfficial && setActiveTab('documentos')}
-                          disabled={!hasContractOfficial}
+                          onClick={() => setActiveTab('documentos')}
                           title={hasContractOfficial ? 'Ver contrato oficial enviado o firmado' : 'Contrato pendiente'}
                           className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
                             hasContractOfficial
@@ -1175,7 +1357,7 @@ export default function ParentDashboard() {
                   <Bell className="w-5 h-5 text-amber-500" />
                   <h2 className="font-black text-xl text-slate-800">Alertas del portal</h2>
                 </div>
-                <SisAlertsDashboard compact={false} />
+                <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} />
               </div>
             )}
 
