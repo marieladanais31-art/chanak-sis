@@ -132,7 +132,6 @@ async function findStudentByColumn(column, value, { caseInsensitive = false } = 
   const { data, error } = await query;
   if (error) {
     if (isMissingStudentColumnError(error)) {
-      console.info(`ℹ️ StudentDashboard: columna students.${column} no disponible; se omite esta estrategia.`);
       return null;
     }
     throw error;
@@ -145,7 +144,6 @@ async function findLinkedStudent(profile, user) {
   if (profile?.role !== 'student') return null;
 
   const studentByProfileId = await findStudentByColumn('profile_id', profile.id);
-  console.log('[StudentDashboard] student by profile_id', studentByProfileId);
   if (studentByProfileId) return studentByProfileId;
 
   const profileEmail = normalizeEmail(profile?.email || user?.email);
@@ -196,10 +194,7 @@ export default function StudentDashboard() {
       setSubjectsError(null);
 
       try {
-        console.log(`👨‍🎓 Inicializando StudentDashboard para perfil: ${profile.id}`);
-        console.log('[StudentDashboard] auth profile', profile);
         const sData = await findLinkedStudent(profile, user);
-        console.log('[StudentDashboard] linked student found', sData);
         setStudent(sData);
 
         if (!sData) {
@@ -258,10 +253,7 @@ export default function StudentDashboard() {
           metaResults.forEach((result) => {
             if (result.status !== 'fulfilled') return;
             const { type, data, error } = result.value;
-            if (error) {
-              if (!isOptionalTableError(error)) console.warn('[StudentDashboard] metadata load warning', error);
-              return;
-            }
+            if (error) return;
             if (type === 'hub') nextMeta.hubName = data?.name || null;
             if (type === 'student_hub') nextMeta.hubName = data?.hubs?.name || null;
             if (type === 'tutor') nextMeta.tutorName = data ? getStudentName(data) : null;
@@ -269,7 +261,6 @@ export default function StudentDashboard() {
 
           setStudentMeta(nextMeta);
         } catch (metaError) {
-          if (!isOptionalTableError(metaError)) console.warn('[StudentDashboard] metadata load warning', metaError);
           setStudentMeta({ hubName: null, tutorName: null });
         }
 
@@ -345,13 +336,11 @@ export default function StudentDashboard() {
             .order('created_at', { ascending: false });
 
           if (evidenceError) {
-            if (!isOptionalTableError(evidenceError)) console.warn('[StudentDashboard] evidence load warning', evidenceError);
             setEvidenceSubmissions([]);
           } else {
             setEvidenceSubmissions(evidenceData || []);
           }
         } catch (evidenceError) {
-          if (!isOptionalTableError(evidenceError)) console.warn('[StudentDashboard] evidence load warning', evidenceError);
           setEvidenceSubmissions([]);
         }
 
@@ -365,13 +354,11 @@ export default function StudentDashboard() {
             .order('published_at', { ascending: false });
 
           if (transcriptError) {
-            if (!isOptionalTableError(transcriptError)) console.warn('[StudentDashboard] transcripts load warning', transcriptError);
             setPublishedTranscripts([]);
           } else {
             setPublishedTranscripts(transcriptData || []);
           }
         } catch (transcriptError) {
-          if (!isOptionalTableError(transcriptError)) console.warn('[StudentDashboard] transcripts load warning', transcriptError);
           setPublishedTranscripts([]);
         }
 
@@ -386,13 +373,11 @@ export default function StudentDashboard() {
             .limit(1);
 
           if (peiError) {
-            if (!isOptionalTableError(peiError)) console.warn('[StudentDashboard] PEI load warning', peiError);
             setPublishedPei(null);
           } else {
             setPublishedPei(peiData?.[0] || null);
           }
         } catch (peiError) {
-          if (!isOptionalTableError(peiError)) console.warn('[StudentDashboard] PEI load warning', peiError);
           setPublishedPei(null);
         }
 
@@ -408,13 +393,11 @@ export default function StudentDashboard() {
             .order('pace_number', { ascending: true });
 
           if (projectionError) {
-            if (!isOptionalTableError(projectionError)) console.warn('[StudentDashboard] pace projection load warning', projectionError);
             setPaceProjections([]);
           } else {
             setPaceProjections(projectionData || []);
           }
         } catch (projectionError) {
-          if (!isOptionalTableError(projectionError)) console.warn('[StudentDashboard] pace projection load warning', projectionError);
           setPaceProjections([]);
         }
 
@@ -427,13 +410,11 @@ export default function StudentDashboard() {
             .order('created_at', { ascending: false });
 
           if (alertsError) {
-            if (!isOptionalTableError(alertsError)) console.warn('[StudentDashboard] academic alerts load warning', alertsError);
             setAcademicAlerts([]);
           } else {
             setAcademicAlerts(alertsData || []);
           }
         } catch (alertsError) {
-          if (!isOptionalTableError(alertsError)) console.warn('[StudentDashboard] academic alerts load warning', alertsError);
           setAcademicAlerts([]);
         }
       } catch (err) {
@@ -491,7 +472,7 @@ export default function StudentDashboard() {
   const renderQuarterGrades = (quarterCode) => {
     const qGrades = grades.filter((grade) => grade.quarter === quarterCode);
     if (grades.length === 0) return <p className="text-slate-500 text-sm py-4 px-6">Aún no hay calificaciones aprobadas.</p>;
-    if (qGrades.length === 0) return <p className="text-slate-500 text-sm py-4 px-6">No hay calificaciones aprobadas en este trimestre.</p>;
+    if (qGrades.length === 0) return <p className="text-slate-500 text-sm py-4 px-6">Aún no hay calificaciones aprobadas en este trimestre.</p>;
     return (
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left">
@@ -617,7 +598,7 @@ export default function StudentDashboard() {
           </h3>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {subjects.length === 0 ? (
-              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay materias asignadas.</p>
+              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay calificaciones aprobadas.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
                 {subjects.map((subject) => (
@@ -669,7 +650,7 @@ export default function StudentDashboard() {
           </h3>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {evidenceSubmissions.length === 0 ? (
-              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay evidencias registradas para revisión.</p>
+              <p className="text-slate-500 text-sm py-6 px-6">No hay evidencias pendientes.</p>
             ) : (
               <div className="divide-y divide-slate-100">
                 {evidenceSubmissions.map((evidence) => (
@@ -696,7 +677,7 @@ export default function StudentDashboard() {
           </h3>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {paceProjections.length === 0 ? (
-              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay proyección de PACEs publicada.</p>
+              <p className="text-slate-500 text-sm py-6 px-6">No hay documentos disponibles todavía.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
@@ -734,7 +715,7 @@ export default function StudentDashboard() {
           </h3>
           <div className="space-y-3">
             {academicAlerts.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-500">No hay alertas académicas activas.</div>
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-500">No hay alertas activas.</div>
             ) : (
               academicAlerts.map((alert) => (
                 <div key={alert.id} className={`border rounded-2xl p-4 ${getSeverityClass(alert.severity)}`}>

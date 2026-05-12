@@ -176,7 +176,6 @@ export default function AdminUserManagement() {
 
     const familyStudents = data || [];
     setFamilyStudents(familyStudents);
-    console.log('[AdminUserManagement] family_students after save', familyStudents);
     return familyStudents;
   };
 
@@ -272,7 +271,6 @@ export default function AdminUserManagement() {
   };
 
   const openEdit = (profile) => {
-    console.log('[AdminUserManagement] edit profile', profile);
     setSelectedUser(profile);
     setEditForm({
       firstName: profile.first_name || '',
@@ -312,9 +310,6 @@ export default function AdminUserManagement() {
   const syncFamilyStudents = async (profile, selectedIds) => {
     const desiredIds = uniqueIds(selectedIds);
 
-    console.log('[AdminUserManagement] selected student ids', desiredIds);
-    console.log('[AdminUserManagement] deleting family links for profile.id', profile.id);
-
     const { error: deleteError } = await supabase
       .from('family_students')
       .delete()
@@ -327,15 +322,12 @@ export default function AdminUserManagement() {
         family_id: profile.id,
         student_id: studentId,
       }));
-      console.log('[AdminUserManagement] inserting family links', linksToInsert);
       const { data, error: insertError } = await supabase
         .from('family_students')
         .insert(linksToInsert)
         .select('family_id, student_id');
       if (insertError) throw insertError;
       linksToInsert = data || linksToInsert;
-    } else {
-      console.log('[AdminUserManagement] inserting family links', linksToInsert);
     }
 
     try {
@@ -361,7 +353,6 @@ export default function AdminUserManagement() {
       .select('student_id', { count: 'exact', head: true })
       .eq('family_id', profile.id);
     if (countError) throw countError;
-    console.log('[AdminUserManagement] parent count after save', profile.email, count || 0);
 
     await reloadFamilyStudents();
   };
@@ -379,7 +370,6 @@ export default function AdminUserManagement() {
     setSubmitting(true);
     try {
       const role = editForm.role;
-      console.log('[AdminUserManagement] selected role value', editForm.role);
       const profilePayload = {
         first_name: editForm.firstName.trim(),
         last_name: editForm.lastName.trim(),
@@ -406,7 +396,6 @@ export default function AdminUserManagement() {
       setSelectedUser(null);
       await loadData();
     } catch (err) {
-      console.log('[AdminUserManagement] save user error', err);
       console.error('[AdminUserManagement] editProfile:', err);
       toast({ title: 'Error al editar', description: err.message || 'No se pudo actualizar el usuario.', variant: 'destructive' });
     } finally {

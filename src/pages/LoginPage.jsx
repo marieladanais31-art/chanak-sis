@@ -28,14 +28,12 @@ const LoginPage = () => {
     // Sesión de recuperación de contraseña → no redirigir al dashboard
     const storedRecovery = sessionStorage.getItem('passwordRecoveryInProgress') === 'true';
     if (isPasswordRecovery || storedRecovery) {
-      console.log('SKIPPING ROLE REDIRECT - password recovery in progress (LoginPage)');
       navigate('/reset-password', { replace: true });
       return;
     }
 
     if (user && profile) {
       const dest = getDashboardPath(profile.role);
-      console.log(`➡️ [LoginPage] Sesión válida. Rol: "${profile.role}" → ${dest}`);
 
       // Respetar la ruta de origen si existía y el usuario tiene acceso a ella
       const from = location.state?.from?.pathname;
@@ -46,7 +44,6 @@ const LoginPage = () => {
 
       if (dest === '/login') {
         // Rol desconocido: no generar bucle
-        console.warn(`⚠️ [LoginPage] Rol no reconocido: "${profile.role}"`);
       } else {
         navigate(dest, { replace: true });
       }
@@ -59,7 +56,6 @@ const LoginPage = () => {
     setFormError(null);
 
     try {
-      console.log('🔐 [LoginPage] Attempting login for:', email);
       const { error, success } = await login(email, password);
       
       if (!success || error) {
@@ -89,14 +85,10 @@ const LoginPage = () => {
   return (
     <>
       <Helmet>
-        <title>Login - Chanak Academy</title>
+        <title>Inicio de sesión - Chanak Academy</title>
       </Helmet>
 
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-50">
-        {/* ── Marcador de versión temporal — eliminar tras confirmar deploy ── */}
-        <div className="mb-4 px-4 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 text-xs font-bold text-center shadow-sm">
-          BUILD PRUEBA 21 — usuarios unificados
-        </div>
         <Card className="w-full max-w-md bg-white border-slate-200 shadow-xl text-slate-800">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
@@ -134,7 +126,7 @@ const LoginPage = () => {
             {authError && !blockedReason && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700 text-sm">
                 <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
-                <span><strong>Error de sistema:</strong> {authError.message || 'Error de inicialización.'}</span>
+                <span><strong>No pudimos iniciar sesión:</strong> {authError.message || 'Inténtalo nuevamente o contacta a administración.'}</span>
               </div>
             )}
 
@@ -147,7 +139,7 @@ const LoginPage = () => {
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700 font-bold">Correo Electrónico</Label>
+                <Label htmlFor="email" className="text-slate-700 font-bold">Correo electrónico</Label>
                 <Input
                   id="email"
                   type="email"
@@ -205,7 +197,7 @@ const LoginPage = () => {
                 ) : (
                   <>
                     <Lock className="w-5 h-5 mr-2" />
-                    Iniciar Sesión
+                    Iniciar sesión
                   </>
                 )}
               </Button>
@@ -216,7 +208,7 @@ const LoginPage = () => {
               Plataforma de acceso restringido para personal autorizado de Chanak Academy.
             </p>
             <p className="text-[10px] text-slate-300 font-mono tracking-tight select-none">
-              SIS v4 académico-documental
+              Chanak International Academy · Student Information System
             </p>
           </CardFooter>
         </Card>

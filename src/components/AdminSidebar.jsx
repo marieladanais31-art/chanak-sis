@@ -22,7 +22,6 @@ import {
   CalendarDays,
   Bell,
   Link2,
-  Terminal,
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -102,7 +101,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
         
         {isSuperAdmin && (
           <>
-            <NavItem section="dashboard" icon={LayoutDashboard} label="Dashboard" />
+            <NavItem section="dashboard" icon={LayoutDashboard} label="Panel principal" />
             <NavItem section="estudiantes" icon={GraduationCap} label="Estudiantes" />
             <NavItem section="hubs" icon={Building2} label="Hubs" />
             <NavItem section="academico" icon={BookOpen} label="Académico" />
@@ -115,17 +114,16 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="calendario" icon={CalendarDays} label="Calendario Escolar" />
             <NavItem section="cartas" icon={Mail} label="Cartas" />
             <NavItem section="revision-notas" icon={ClipboardList} label="Revisión de Notas" />
-            <NavItem section="enlaces-operativos" icon={Link2} label="Recursos / Links" />
+            <NavItem section="enlaces-operativos" icon={Link2} label="Recursos y enlaces" />
             <NavItem section="seguridad" icon={Shield} label="Seguridad" />
             <NavItem section="settings" icon={Settings} label="Configuración" />
             <NavItem section="config-institucional" icon={Building} label="Inst. Config." />
-            <NavItem section="diagnostico" icon={Terminal} label="Diagnóstico SIS" />
 
             {/* Pagos — módulo deshabilitado temporalmente */}
             <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-300 cursor-not-allowed mb-1 select-none">
               <CreditCard className="w-5 h-5 text-slate-200" />
               <span>Pagos</span>
-              <span className="ml-auto text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-md">Próx.</span>
+              <span className="ml-auto text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-md">Disponible próximamente</span>
             </div>
           </>
         )}
@@ -154,7 +152,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl text-sm font-bold transition-all border border-red-200 hover:border-red-600 shadow-sm"
         >
           <LogOut className="w-4 h-4" />
-          <span>Cerrar Sesión</span>
+          <span>Cerrar sesión</span>
         </button>
       </div>
     </aside>
