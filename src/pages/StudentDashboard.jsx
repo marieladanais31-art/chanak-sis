@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ACTIVE_SCHOOL_YEAR, isPassingPaceScore } from '@/lib/academicUtils';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
@@ -14,6 +14,9 @@ import {
   ClipboardCheck,
   FileText,
   Layers,
+  CalendarDays,
+  UserCheck,
+  Bell,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { calculateTrimestralPACES, QUARTERS, getQuarterName, isValidQuarter } from '@/utils/schoolCalendar';
@@ -64,6 +67,44 @@ const getDashboardQuarterName = (quarter) => (
 const getMasteryMessage = (score) => (
   isPassingPaceScore(score) ? 'Dominio ACE alcanzado' : 'Requiere repetición/corrección'
 );
+
+const getStudentName = (student) => {
+  const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(' ').trim();
+  return student?.full_name || fullName || student?.name || 'Estudiante';
+};
+
+const getStudentGrade = (student) => (
+  student?.grade_level || student?.us_grade_level || student?.grade || 'Grado no registrado'
+);
+
+const getStudentProgram = (student) => (
+  student?.program || student?.academic_program || student?.enrollment_program || 'Programa no registrado'
+);
+
+const getStatusLabel = (status) => {
+  const labels = {
+    pending_review: 'Pendiente de revisión',
+    approved: 'Aprobada',
+    correction_requested: 'Corrección solicitada',
+    rejected: 'Rechazada',
+    pending: 'Pendiente',
+    in_progress: 'En progreso',
+    delivered: 'Entregado',
+    evaluated: 'Evaluado',
+    delayed: 'Atrasado',
+    cancelled: 'Cancelado',
+    active: 'Activa',
+    resolved: 'Resuelta',
+    ignored: 'Ignorada',
+  };
+  return labels[status] || status || 'Sin estado';
+};
+
+const getSeverityClass = (severity) => {
+  if (severity === 'critical') return 'border-rose-200 bg-rose-50 text-rose-800';
+  if (severity === 'warning') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-sky-200 bg-sky-50 text-sky-800';
+};
 
 const dedupeSubjects = (subjectRows) => {
   const seen = new Set();
@@ -135,6 +176,9 @@ export default function StudentDashboard() {
   const [evidenceSubmissions, setEvidenceSubmissions] = useState([]);
   const [publishedTranscripts, setPublishedTranscripts] = useState([]);
   const [publishedPei, setPublishedPei] = useState(null);
+  const [paceProjections, setPaceProjections] = useState([]);
+  const [academicAlerts, setAcademicAlerts] = useState([]);
+  const [studentMeta, setStudentMeta] = useState({ hubName: null, tutorName: null });
   const [gradesError, setGradesError] = useState(null);
   const [subjectsError, setSubjectsError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -164,10 +208,70 @@ export default function StudentDashboard() {
           setEvidenceSubmissions([]);
           setPublishedTranscripts([]);
           setPublishedPei(null);
+          setPaceProjections([]);
+          setAcademicAlerts([]);
+          setStudentMeta({ hubName: null, tutorName: null });
           return;
         }
 
         let loadedSubjects = [];
+
+        try {
+          const metaQueries = [];
+
+          if (sData.hub_id) {
+            metaQueries.push(
+              supabase
+                .from('hubs')
+                .select('id, name')
+                .eq('id', sData.hub_id)
+                .maybeSingle()
+                .then(({ data, error }) => ({ type: 'hub', data, error }))
+            );
+          }
+
+          if (sData.tutor_id) {
+            metaQueries.push(
+              supabase
+                .from('profiles')
+                .select('id, user_id, first_name, last_name, full_name, email')
+                .or(`user_id.eq.${sData.tutor_id},id.eq.${sData.tutor_id}`)
+                .limit(1)
+                .then(({ data, error }) => ({ type: 'tutor', data: data?.[0] || null, error }))
+            );
+          }
+
+          if (!sData.hub_id) {
+            metaQueries.push(
+              supabase
+                .from('student_hubs')
+                .select('hubs(name)')
+                .eq('student_id', sData.id)
+                .limit(1)
+                .then(({ data, error }) => ({ type: 'student_hub', data: data?.[0] || null, error }))
+            );
+          }
+
+          const metaResults = await Promise.allSettled(metaQueries);
+          const nextMeta = { hubName: null, tutorName: null };
+
+          metaResults.forEach((result) => {
+            if (result.status !== 'fulfilled') return;
+            const { type, data, error } = result.value;
+            if (error) {
+              if (!isOptionalTableError(error)) console.warn('[StudentDashboard] metadata load warning', error);
+              return;
+            }
+            if (type === 'hub') nextMeta.hubName = data?.name || null;
+            if (type === 'student_hub') nextMeta.hubName = data?.hubs?.name || null;
+            if (type === 'tutor') nextMeta.tutorName = data ? getStudentName(data) : null;
+          });
+
+          setStudentMeta(nextMeta);
+        } catch (metaError) {
+          if (!isOptionalTableError(metaError)) console.warn('[StudentDashboard] metadata load warning', metaError);
+          setStudentMeta({ hubName: null, tutorName: null });
+        }
 
         try {
           const { data: subData, error: subError } = await supabase
@@ -237,6 +341,7 @@ export default function StudentDashboard() {
             .eq('student_id', sData.id)
             .eq('school_year', ACTIVE_SCHOOL_YEAR)
             .in('quarter', QUARTER_CODES)
+            .in('review_status', ['pending_review', 'approved', 'correction_requested', 'rejected'])
             .order('created_at', { ascending: false });
 
           if (evidenceError) {
@@ -290,20 +395,77 @@ export default function StudentDashboard() {
           if (!isOptionalTableError(peiError)) console.warn('[StudentDashboard] PEI load warning', peiError);
           setPublishedPei(null);
         }
+
+        try {
+          const { data: projectionData, error: projectionError } = await supabase
+            .from('pei_pace_projections')
+            .select('id, pei_id, student_id, subject_name, pace_number, grade_level, school_year, quarter, estimated_start_date, estimated_delivery_date, actual_delivery_date, status, grade_obtained, tutor_notes, coordinator_notes, student_subject_id')
+            .eq('student_id', sData.id)
+            .eq('school_year', ACTIVE_SCHOOL_YEAR)
+            .in('quarter', QUARTER_CODES)
+            .order('quarter', { ascending: true })
+            .order('subject_name', { ascending: true })
+            .order('pace_number', { ascending: true });
+
+          if (projectionError) {
+            if (!isOptionalTableError(projectionError)) console.warn('[StudentDashboard] pace projection load warning', projectionError);
+            setPaceProjections([]);
+          } else {
+            setPaceProjections(projectionData || []);
+          }
+        } catch (projectionError) {
+          if (!isOptionalTableError(projectionError)) console.warn('[StudentDashboard] pace projection load warning', projectionError);
+          setPaceProjections([]);
+        }
+
+        try {
+          const { data: alertsData, error: alertsError } = await supabase
+            .from('academic_alerts')
+            .select('id, student_id, alert_type, message, severity, status, target_role, context_type, created_at, resolved_at')
+            .eq('student_id', sData.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false });
+
+          if (alertsError) {
+            if (!isOptionalTableError(alertsError)) console.warn('[StudentDashboard] academic alerts load warning', alertsError);
+            setAcademicAlerts([]);
+          } else {
+            setAcademicAlerts(alertsData || []);
+          }
+        } catch (alertsError) {
+          if (!isOptionalTableError(alertsError)) console.warn('[StudentDashboard] academic alerts load warning', alertsError);
+          setAcademicAlerts([]);
+        }
       } catch (err) {
         console.error('❌ Error loading linked student:', err);
-        setStudent(null);
         setGrades([]);
         setSubjects([]);
         setEvidenceSubmissions([]);
         setPublishedTranscripts([]);
         setPublishedPei(null);
+        setPaceProjections([]);
+        setAcademicAlerts([]);
+        setStudentMeta({ hubName: null, tutorName: null });
       } finally {
         setLoading(false);
       }
     };
     loadData();
   }, [profile, user]);
+
+
+  const subjectAverageMap = useMemo(() => {
+    return grades.reduce((acc, grade) => {
+      const key = grade.student_subject_id || `${grade.subject}-${grade.quarter}-${grade.school_year}`;
+      if (!acc[key]) acc[key] = { total: 0, count: 0, average: null };
+      acc[key].total += Number(grade.score || 0);
+      acc[key].count += 1;
+      acc[key].average = acc[key].total / acc[key].count;
+      return acc;
+    }, {});
+  }, [grades]);
+
+  const subjectAverages = Object.values(subjectAverageMap).filter((item) => item.count > 0);
 
   const handleLogout = async () => {
     await logout();
@@ -321,10 +483,10 @@ export default function StudentDashboard() {
   );
 
   const projection = calculateTrimestralPACES(student.created_at, grades);
-  const averageScore = grades.length > 0
-    ? grades.reduce((acc, grade) => acc + Number(grade.score || 0), 0) / grades.length
+  const averageScore = subjectAverages.length > 0
+    ? subjectAverages.reduce((acc, item) => acc + item.average, 0) / subjectAverages.length
     : null;
-  const masteryCount = grades.filter((grade) => isPassingPaceScore(grade.score)).length;
+  const masteryCount = subjectAverages.filter((item) => isPassingPaceScore(item.average)).length;
 
   const renderQuarterGrades = (quarterCode) => {
     const qGrades = grades.filter((grade) => grade.quarter === quarterCode);
@@ -366,7 +528,7 @@ export default function StudentDashboard() {
             <GraduationCap className="w-8 h-8" />
             <div>
               <h1 className="text-xl font-bold">Mi Portal Estudiantil</h1>
-              <p className="text-sm text-sky-100">{student.first_name} {student.last_name}</p>
+              <p className="text-sm text-sky-100">{getStudentName(student)}</p>
             </div>
           </div>
           <button onClick={handleLogout} className="flex items-center gap-2 bg-sky-700 hover:bg-sky-800 px-4 py-2 rounded-lg transition-colors font-semibold">
@@ -376,6 +538,33 @@ export default function StudentDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto p-4 py-8 space-y-8">
+        <section className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wider text-sky-600">Estudiante</p>
+              <h2 className="text-2xl font-black text-slate-900 mt-1">{getStudentName(student)}</h2>
+              <p className="text-sm text-slate-500 mt-1">Año escolar: <span className="font-bold text-slate-700">{ACTIVE_SCHOOL_YEAR}</span></p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Grado</p>
+                <p className="font-bold text-slate-800 mt-1">{getStudentGrade(student)}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Programa</p>
+                <p className="font-bold text-slate-800 mt-1">{getStudentProgram(student)}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Hub</p>
+                <p className="font-bold text-slate-800 mt-1">{studentMeta.hubName || student.hub_name || 'Hub no registrado'}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1"><UserCheck className="w-3 h-3" /> Tutor</p>
+                <p className="font-bold text-slate-800 mt-1">{studentMeta.tutorName || 'Sin tutor asignado'}</p>
+              </div>
+            </div>
+          </div>
+        </section>
         <section className="space-y-4">
           <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
             <Activity className="w-6 h-6 text-sky-600" /> Resumen académico
@@ -438,7 +627,7 @@ export default function StudentDashboard() {
                     <div className="flex gap-2 flex-wrap mt-3 text-xs font-bold">
                       <span className="bg-white border border-slate-200 rounded-full px-3 py-1">{subject.quarter}</span>
                       <span className="bg-white border border-slate-200 rounded-full px-3 py-1">{subject.school_year}</span>
-                      {subject.grade !== null && subject.grade !== undefined && <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-3 py-1">Promedio {formatScore(subject.grade)}</span>}
+                      {subjectAverageMap[subject.id]?.count > 0 && <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-3 py-1">Promedio aprobado {formatScore(subjectAverageMap[subject.id].average)}</span>}
                     </div>
                   </div>
                 ))}
@@ -476,7 +665,7 @@ export default function StudentDashboard() {
 
         <section className="space-y-4">
           <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-            <ClipboardCheck className="w-6 h-6 text-sky-600" /> Evidencias/estado de revisión
+            <ClipboardCheck className="w-6 h-6 text-sky-600" /> Mis evidencias
           </h3>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {evidenceSubmissions.length === 0 ? (
@@ -487,16 +676,73 @@ export default function StudentDashboard() {
                   <div key={evidence.id} className="p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
                       <p className="font-black text-slate-800">{evidence.subject_name}</p>
-                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{evidence.evidence_type} · {evidence.quarter} · {formatScore(evidence.score)}</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{evidence.evidence_type || 'Evidencia'} · {evidence.quarter} · {formatScore(evidence.score)}</p>
                       {evidence.reviewer_comment && <p className="text-sm text-slate-600 mt-2">{evidence.reviewer_comment}</p>}
                     </div>
                     <div className="text-left md:text-right">
-                      <p className="text-xs font-black uppercase tracking-wider text-slate-500">{evidence.review_status}</p>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500">{getStatusLabel(evidence.review_status)}</p>
                       <p className="text-sm font-bold text-slate-700">{evidence.academic_outcome}</p>
                     </div>
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <CalendarDays className="w-6 h-6 text-sky-600" /> Proyección de PACEs
+          </h3>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {paceProjections.length === 0 ? (
+              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay proyección de PACEs publicada.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-100 text-slate-600 font-bold">
+                    <tr>
+                      <th className="p-3 px-6">Materia</th>
+                      <th className="p-3 px-6 text-center">PACE</th>
+                      <th className="p-3 px-6">Trimestre</th>
+                      <th className="p-3 px-6">Entrega estimada</th>
+                      <th className="p-3 px-6">Estado</th>
+                      <th className="p-3 px-6 text-center">Nota</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paceProjections.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3 px-6 font-medium text-slate-800">{item.subject_name}</td>
+                        <td className="p-3 px-6 text-center font-bold text-slate-800">{item.pace_number}</td>
+                        <td className="p-3 px-6 text-slate-600">{item.quarter}</td>
+                        <td className="p-3 px-6 text-slate-600">{formatDate(item.estimated_delivery_date)}</td>
+                        <td className="p-3 px-6 text-xs font-black uppercase tracking-wider text-slate-500">{getStatusLabel(item.status)}</td>
+                        <td className="p-3 px-6 text-center font-bold text-slate-800">{item.grade_obtained === null || item.grade_obtained === undefined ? '—' : formatScore(item.grade_obtained)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-4">
+          <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <Bell className="w-6 h-6 text-amber-600" /> Alertas académicas
+          </h3>
+          <div className="space-y-3">
+            {academicAlerts.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 text-sm text-slate-500">No hay alertas académicas activas.</div>
+            ) : (
+              academicAlerts.map((alert) => (
+                <div key={alert.id} className={`border rounded-2xl p-4 ${getSeverityClass(alert.severity)}`}>
+                  <p className="text-xs font-black uppercase tracking-wider">{getStatusLabel(alert.severity)} · {alert.alert_type}</p>
+                  <p className="font-bold mt-1">{alert.message}</p>
+                  <p className="text-xs mt-2 opacity-80">Creada: {formatDate(alert.created_at)}</p>
+                </div>
+              ))
             )}
           </div>
         </section>
