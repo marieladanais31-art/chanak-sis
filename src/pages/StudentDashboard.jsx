@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { isPassingPaceScore } from '@/lib/academicUtils';
+import { ACTIVE_SCHOOL_YEAR, isPassingPaceScore } from '@/lib/academicUtils';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { LogOut, GraduationCap, Download, Activity, AlertCircle, CheckCircle2, Loader2, BookOpen } from 'lucide-react';
@@ -67,6 +67,8 @@ export default function StudentDashboard() {
   const [student, setStudent] = useState(null);
   const [grades, setGrades] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [gradesError, setGradesError] = useState(null);
+  const [subjectsError, setSubjectsError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reportModalOpen, setReportModalOpen] = useState(false);
 
@@ -78,34 +80,85 @@ export default function StudentDashboard() {
       }
 
       setLoading(true);
+      setGradesError(null);
+      setSubjectsError(null);
+
       try {
         console.log(`👨‍🎓 Inicializando StudentDashboard para perfil: ${profile.id}`);
         console.log('[StudentDashboard] auth profile', profile);
         const sData = await findLinkedStudent(profile, user);
+        console.log('[StudentDashboard] linked student found', sData);
         setStudent(sData);
 
-        if (sData) {
-          const { data: gData, error: gError } = await supabase
-            .from('student_grades')
-            .select('*')
-            .eq('student_id', sData.id);
-          if (gError) throw gError;
-
-          const validatedGrades = (gData || []).map(g => ({
-            ...g,
-            quarter: isValidQuarter(g.quarter) ? g.quarter : QUARTERS.Q1
-          }));
-          setGrades(validatedGrades);
-        } else {
+        if (!sData) {
           setGrades([]);
+          setSubjects([]);
+          return;
         }
 
-        const { data: subData, error: subError } = await supabase.from('subjects').select('*');
-        if (subError) throw subError;
-        setSubjects(subData || []);
+        const quarterCodes = Object.values(QUARTERS);
+        let loadedSubjects = [];
 
+        try {
+          const { data: subData, error: subError } = await supabase
+            .from('student_subjects')
+            .select('id, student_id, subject_name, academic_block, pillar_type, grade, quarter, school_year, approval_status, credit_value')
+            .eq('student_id', sData.id)
+            .eq('school_year', ACTIVE_SCHOOL_YEAR)
+            .in('quarter', quarterCodes);
+
+          if (subError) {
+            console.error('[StudentDashboard] subjects load error', subError);
+            setSubjectsError('No se pudieron cargar materias.');
+            setSubjects([]);
+          } else {
+            loadedSubjects = subData || [];
+            setSubjects(loadedSubjects);
+          }
+        } catch (subError) {
+          console.error('[StudentDashboard] subjects load error', subError);
+          setSubjectsError('No se pudieron cargar materias.');
+          setSubjects([]);
+        }
+
+        const subjectsById = new Map(loadedSubjects.map((subject) => [subject.id, subject]));
+
+        try {
+          const { data: gData, error: gError } = await supabase
+            .from('student_grade_entries')
+            .select('id, student_id, student_subject_id, assessment_name, score, quarter, school_year, submission_status, created_at, updated_at')
+            .eq('student_id', sData.id)
+            .eq('school_year', ACTIVE_SCHOOL_YEAR)
+            .in('quarter', quarterCodes)
+            .eq('submission_status', 'approved')
+            .not('score', 'is', null)
+            .order('quarter', { ascending: true })
+            .order('created_at', { ascending: true });
+
+          if (gError) {
+            console.error('[StudentDashboard] grades load error', gError);
+            setGradesError('No se pudieron cargar calificaciones.');
+            setGrades([]);
+          } else {
+            const validatedGrades = (gData || []).map((gradeEntry) => {
+              const subject = subjectsById.get(gradeEntry.student_subject_id);
+              return {
+                ...gradeEntry,
+                subject: subject?.subject_name || gradeEntry.assessment_name || 'Materia registrada',
+                category: subject?.academic_block || subject?.pillar_type || 'Materia registrada',
+                completed_at: gradeEntry.updated_at || gradeEntry.created_at,
+                quarter: isValidQuarter(gradeEntry.quarter) ? gradeEntry.quarter : QUARTERS.Q1,
+              };
+            });
+            setGrades(validatedGrades);
+          }
+        } catch (gError) {
+          console.error('[StudentDashboard] grades load error', gError);
+          setGradesError('No se pudieron cargar calificaciones.');
+          setGrades([]);
+        }
       } catch (err) {
-        console.error("❌ Error loading student data:", err);
+        console.error('❌ Error loading linked student:', err);
         setStudent(null);
         setGrades([]);
         setSubjects([]);
@@ -135,6 +188,7 @@ export default function StudentDashboard() {
 
   const renderQuarterGrades = (quarterCode) => {
     const qGrades = grades.filter(g => g.quarter === quarterCode);
+    if (grades.length === 0) return <p className="text-slate-500 text-sm py-4 px-6">Aún no hay calificaciones registradas.</p>;
     if (qGrades.length === 0) return <p className="text-slate-500 text-sm py-4 px-6">No hay calificaciones en este trimestre.</p>;
     return (
       <div className="overflow-x-auto">
@@ -149,11 +203,11 @@ export default function StudentDashboard() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {qGrades.map(g => {
-              const subDetails = subjects.find(s => s.name === g.subject);
+              const subDetails = subjects.find((s) => s.id === g.student_subject_id);
               return (
                 <tr key={g.id} className="hover:bg-slate-50 transition-colors">
                   <td className="p-3 px-6 font-medium text-slate-800">{g.subject}</td>
-                  <td className="p-3 px-6 text-slate-500 text-xs uppercase tracking-wider">{subDetails?.category || 'Electiva'}</td>
+                  <td className="p-3 px-6 text-slate-500 text-xs uppercase tracking-wider">{g.category || subDetails?.academic_block || subDetails?.pillar_type || 'Materia registrada'}</td>
                   <td className="p-3 px-6 text-center font-bold text-slate-800">{g.score}%</td>
                   <td className="p-3 px-6 text-right text-slate-500">{new Date(g.completed_at).toLocaleDateString()}</td>
                 </tr>
@@ -213,6 +267,19 @@ export default function StudentDashboard() {
           <BookOpen className="w-6 h-6 text-sky-600" /> Registro Académico por Trimestre
         </h3>
 
+        {(gradesError || subjectsError) && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl p-4 flex gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">No se pudieron cargar calificaciones/materias.</p>
+              <ul className="text-sm mt-1 list-disc list-inside">
+                {gradesError && <li>{gradesError}</li>}
+                {subjectsError && <li>{subjectsError}</li>}
+              </ul>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="pt-6 border-b border-slate-100">
             <h4 className="font-bold text-lg text-slate-800 mb-2 px-6">{getQuarterName(QUARTERS.Q1)}</h4>
@@ -267,7 +334,7 @@ export default function StudentDashboard() {
                      </tr>
                    ))}
                    {grades.length === 0 && (
-                     <tr><td colSpan="3" className="p-6 text-center text-slate-500">Aún no hay notas registradas.</td></tr>
+                     <tr><td colSpan="3" className="p-6 text-center text-slate-500">Aún no hay calificaciones registradas.</td></tr>
                    )}
                  </tbody>
                </table>
