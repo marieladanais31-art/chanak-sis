@@ -3,7 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList, LogOut, FileCheck2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import GradeReviewPanel from '@/components/GradeReviewPanel';
 import EvidenceReviewPanel from '@/components/EvidenceReviewPanel';
@@ -627,6 +627,14 @@ export default function CoordinatorDashboard() {
         )}
         </>
       )}
+      <footer className="max-w-6xl mx-auto px-4 py-6 flex justify-center">
+        <Link
+          to="/ayuda"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl hover:border-slate-300 bg-white transition-colors"
+        >
+          ? Ayuda
+        </Link>
+      </footer>
     </div>
   );
 }

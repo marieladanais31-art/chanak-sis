@@ -599,6 +599,26 @@ export default function StudentFicha({ studentId, onClose }) {
                     Abrir carpeta en Drive ↗
                   </a>
                 )}
+                {/* Instrucciones estructura Drive */}
+                <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-4 text-xs text-blue-800">
+                  <p className="font-semibold mb-2">Estructura recomendada del Drive del estudiante</p>
+                  <pre className="font-mono text-[11px] leading-5 whitespace-pre text-blue-900">
+{`Student Drive Folder
+├── Evidence
+│   ├── Pace Test
+│   │   └── [School Year]
+│   │       ├── Math
+│   │       ├── English
+│   │       ├── Word Building
+│   │       ├── Science
+│   │       └── Social Studies
+│   ├── Extensión Local
+│   │   └── [School Year]
+│   └── Life Skills
+│       └── [School Year]`}
+                  </pre>
+                  <p className="mt-2 text-blue-700">Las carpetas deben crearse manualmente en el Drive asignado al estudiante. El enlace al Drive se registra en este campo.</p>
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">

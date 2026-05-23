@@ -28,7 +28,6 @@ export default function PEIViewer({ studentId, readOnly = false }) {
 
   useEffect(() => {
     const fetchPEI = async () => {
-      console.log(`📚 [PEIViewer] Fetching PEI for student: ${studentId} for year ${currentYear}`);
       if (!studentId) return;
       
       try {
@@ -59,7 +58,6 @@ export default function PEIViewer({ studentId, readOnly = false }) {
         }
 
         if (!peiData) {
-          console.log(`ℹ️ [PEIViewer] No PEI found. Creating default PEI 2026 for ${studentData.first_name}.`);
           const defaultObjectives = ['Perfil Financiero', 'Consolidar vocabulario', 'Preparación SAT'];
           
           const { data: newPei, error: insertError } = await supabase
@@ -108,7 +106,6 @@ export default function PEIViewer({ studentId, readOnly = false }) {
         if (notesErr) console.error('❌ [PEIViewer] Error fetching daily notes:', notesErr);
         setDailyNotes(notesData || []);
 
-        console.log(`✅ [PEIViewer] PEI data loaded successfully.`);
       } catch (err) {
         console.error('❌ [PEIViewer] Fatal error loading PEI:', err);
         toast({ title: "Error", description: "Ocurrió un problema al cargar el PEI.", variant: "destructive" });
@@ -130,7 +127,6 @@ export default function PEIViewer({ studentId, readOnly = false }) {
     }
 
     try {
-      console.log(`📝 [PEIViewer] Registering daily note: ${newNote.subject} - ${newNote.pages_completed} pages`);
       const { data: insertedNote, error } = await supabase
         .from('pei_daily_notes')
         .insert({
@@ -157,7 +153,6 @@ export default function PEIViewer({ studentId, readOnly = false }) {
 
   const generatePEIPDF = () => {
     if (!student || !pei) return;
-    console.log(`📄 [PEIViewer] Generating PEI PDF...`);
     const doc = new jsPDF('p', 'mm', 'a4');
     
     doc.setFillColor(25, 25, 112);
@@ -227,7 +222,6 @@ export default function PEIViewer({ studentId, readOnly = false }) {
     doc.text(LEGAL_FOOTER, 105, 290, { align: 'center' });
 
     doc.save(`PEI_${student.first_name}_${student.last_name}_${currentYear}.pdf`);
-    console.log(`✅ [PEIViewer] PDF Generated.`);
   };
 
   const totalPages = pacing.reduce((sum, p) => sum + (parseInt(p.pages_per_day) || 0), 0);

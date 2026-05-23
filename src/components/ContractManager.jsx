@@ -19,16 +19,62 @@ const STATUS_META = {
   archived:  { label: 'Archivado', color: 'bg-slate-200 text-slate-600',  next: null,        nextLabel: null,             icon: Archive },
 };
 
+// ── Plantilla base completa Programa Off-Campus ───────────────────────────────
+const OFF_CAMPUS_FULL_DEFAULTS = {
+  academic_services:
+`PRIMERA. OBJETO DEL ACUERDO
+El presente acuerdo tiene por objeto la prestación, por parte de CHANAK, de servicios educativos internacionales a través del Programa Off-Campus, que incluye: (a) diagnóstico académico inicial; (b) elaboración del Plan Educativo Individualizado (PEI); (c) provisión de materiales curriculares según el PEI asignado; (d) acceso a las plataformas SIS y LMS de CHANAK; (e) seguimiento académico mensual con mentor asignado; (f) emisión de reportes, boletines y transcript académico; y (g) emisión del High School Diploma estadounidense al cumplir los requisitos del programa.
+
+SEGUNDA. NATURALEZA DEL SERVICIO Y RESPONSABILIDAD LEGAL EN ESPAÑA
+Los servicios prestados por CHANAK tienen carácter internacional y complementario. CHANAK actúa exclusivamente como institución educativa registrada en Florida, EE.UU., sin establecimiento físico en España ni actividad docente presencial en territorio español. LA FAMILIA asume plena e íntegra responsabilidad por el cumplimiento de cualesquiera obligaciones que imponga la legislación educativa española vigente, incluidas las relativas a la escolarización obligatoria. CHANAK no asesora, no orienta, ni asume responsabilidad alguna sobre las opciones educativas locales adoptadas por LA FAMILIA en su país de residencia.
+
+TERCERA. DURACIÓN
+El presente acuerdo entrará en vigor en la fecha de su firma y tendrá una duración de un (1) año académico, prorrogable automáticamente por períodos anuales salvo que cualquiera de las partes notifique su voluntad de no renovación con un mínimo de treinta (30) días de antelación al término del período en curso.`,
+
+  chanak_responsibilities:
+`QUINTA. COMPROMISOS DE CHANAK
+CHANAK se compromete a: (a) asignar un mentor académico al estudiante; (b) elaborar el PEI en un plazo máximo de quince (15) días hábiles desde el diagnóstico; (c) garantizar el acceso operativo a las plataformas SIS y LMS; (d) emitir reportes académicos trimestrales; (e) custodiar el expediente académico (Cumulative Record) conforme a los estándares de FLDOE y MSA-CESS; (f) emitir el High School Diploma cuando el estudiante complete los requisitos establecidos.`,
+
+  family_responsibilities:
+`SEXTA. COMPROMISOS DE LA FAMILIA
+LA FAMILIA se compromete a: (a) supervisar el trabajo académico diario del estudiante conforme al modelo indicado por CHANAK; (b) custodiar las claves de corrección y los PACE Tests bajo su responsabilidad; (c) registrar las calificaciones en el SIS con exactitud y honestidad; (d) mantener las credenciales de acceso a las plataformas en confidencialidad; (e) comunicar a CHANAK cualquier incidencia académica relevante; (f) abonar puntualmente las cuotas establecidas; (g) cumplir de forma autónoma e independiente con cualquier obligación legal o administrativa que la normativa española imponga en materia de educación.`,
+
+  economic_conditions:
+`CUARTA. CONDICIONES ECONÓMICAS
+Los servicios del Programa Off-Campus quedan sujetos a la siguiente estructura económica, vigente en el momento de la firma y susceptible de actualización anual:
+
+Matrícula de apertura de expediente: 180 €.
+Paquete curricular anual: 480 €.
+Mensualidad de seguimiento académico: 70 €/mes.
+
+El paquete curricular comprende los materiales académicos base asignados al estudiante conforme a su Plan Educativo Individualizado (PEI), sin perjuicio de ajustes, materiales adicionales o recursos complementarios que pudieran ser necesarios según el diagnóstico académico y la planificación individual del estudiante.
+
+Los pagos se realizarán mediante los métodos habilitados en el portal SIS de CHANAK o por los medios autorizados por la administración institucional. La falta de pago de dos (2) mensualidades consecutivas faculta a CHANAK para suspender temporalmente el acceso a los servicios, sin perjuicio de las obligaciones económicas pendientes.`,
+
+  notes:
+`SÉPTIMA. PROTECCIÓN DE DATOS (RGPD / LOPDGDD)
+Los datos personales facilitados serán tratados por CHANAK TRAINUP EDUCATION, INC. con la finalidad de gestionar la relación académica y administrativa del estudiante. La base legal del tratamiento es la ejecución del presente contrato. Los datos no serán cedidos a terceros salvo obligación legal. LA FAMILIA tiene derecho de acceso, rectificación, supresión, portabilidad y oposición dirigiéndose a administration@chanakacademy.org. En el caso de estudiantes menores de 18 años, el responsable legal presta el consentimiento en nombre del menor.
+
+OCTAVA. PROPIEDAD INTELECTUAL
+Todos los materiales, contenidos, plataformas y documentación académica desarrollados o provistos por CHANAK son propiedad intelectual de CHANAK TRAINUP EDUCATION, INC. o de sus licenciantes. Queda expresamente prohibida su reproducción, distribución o cesión a terceros sin autorización escrita previa.
+
+NOVENA. RESOLUCIÓN DEL CONTRATO
+Cualquiera de las partes podrá resolver el presente acuerdo mediante notificación escrita con un preaviso de treinta (30) días naturales. CHANAK podrá resolver de forma inmediata en caso de incumplimiento grave, conducta contraria a los valores institucionales o falsificación de evidencias académicas. La resolución no genera derecho a devolución de cantidades ya abonadas salvo que el incumplimiento sea imputable exclusivamente a CHANAK.
+
+DÉCIMA. LEY APLICABLE Y JURISDICCIÓN
+El presente contrato se regirá e interpretará conforme a las leyes del Estado de Florida, Estados Unidos de América, por ser el domicilio de CHANAK. Para cualquier controversia derivada de su interpretación o ejecución, ambas partes se someten, con renuncia a cualquier otro fuero, a los tribunales del condado de Miami-Dade, Florida, EE.UU., sin perjuicio de los derechos que asistan al consumidor conforme a la normativa española de protección de consumidores y usuarios.`,
+};
+
 const DEFAULT_FORM = {
   school_year:             '2025-2026',
   family_name:             '',
   tutor_legal:             '',
-  program:                 'Dual Diploma / Off-Campus',
+  program:                 'Off-Campus',
   modality:                'Off-Campus',
-  academic_services:       '',
-  economic_conditions:     '',
-  family_responsibilities: '',
-  chanak_responsibilities: '',
+  academic_services:       OFF_CAMPUS_FULL_DEFAULTS.academic_services,
+  economic_conditions:     OFF_CAMPUS_FULL_DEFAULTS.economic_conditions,
+  family_responsibilities: OFF_CAMPUS_FULL_DEFAULTS.family_responsibilities,
+  chanak_responsibilities: OFF_CAMPUS_FULL_DEFAULTS.chanak_responsibilities,
   start_date:              '',
   end_date:                '',
   issue_date:              new Date().toISOString().split('T')[0],
@@ -36,7 +82,7 @@ const DEFAULT_FORM = {
   director_signature_date: '',
   parent_signature_name:   '',
   parent_signature_date:   '',
-  notes:                   '',
+  notes:                   OFF_CAMPUS_FULL_DEFAULTS.notes,
   status:                  'draft',
 };
 
@@ -88,43 +134,81 @@ export default function ContractManager({ studentId, studentName, contractId: in
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  // ── Sanitiza campos date: '' → null para evitar error PostgreSQL 22007 ──────
+  const CONTRACT_DATE_FIELDS = ['start_date', 'end_date', 'issue_date', 'director_signature_date', 'parent_signature_date'];
+  const buildPayload = (overrides = {}) => {
+    const raw = { ...form, student_id: studentId, updated_at: new Date().toISOString(), ...overrides };
+    CONTRACT_DATE_FIELDS.forEach(f => { if (!raw[f]) raw[f] = null; });
+    return raw;
+  };
+
+  // ── Persiste el contrato y devuelve el ID (crea si no existe, actualiza si ya existe) ─
+  const persistContract = async () => {
+    if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
+    const payload = buildPayload();
+    if (contractId) {
+      const { error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId);
+      if (error) throw error;
+      return contractId;
+    } else {
+      const { data, error } = await supabase.from('enrollment_contracts').insert([payload]).select('id').single();
+      if (error) throw error;
+      setContractId(data.id);
+      return data.id;
+    }
+  };
+
+  const applyOffCampusTemplate = () => {
+    setForm(prev => ({
+      ...prev,
+      program:                 'Off-Campus',
+      modality:                'Off-Campus',
+      academic_services:       OFF_CAMPUS_FULL_DEFAULTS.academic_services,
+      economic_conditions:     OFF_CAMPUS_FULL_DEFAULTS.economic_conditions,
+      family_responsibilities: OFF_CAMPUS_FULL_DEFAULTS.family_responsibilities,
+      chanak_responsibilities: OFF_CAMPUS_FULL_DEFAULTS.chanak_responsibilities,
+      notes:                   OFF_CAMPUS_FULL_DEFAULTS.notes,
+    }));
+    toast({ title: 'Plantilla aplicada', description: 'Contrato Off-Campus cargado. Revisa y guarda.' });
+  };
 
   const handleSave = async () => {
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de guardar.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
-      if (contractId) {
-        const { error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('enrollment_contracts').insert([payload]).select('id').single();
-        if (error) throw error;
-        setContractId(data.id);
-      }
-      toast({ title: 'Contrato guardado' });
+      await persistContract();
+      toast({ title: 'Contrato guardado correctamente.' });
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error al guardar', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleAdvance = async () => {
-    if (!contractId) {
-      toast({ title: 'Aviso', description: 'Guarda el contrato antes de avanzar.', variant: 'destructive' });
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de continuar.', variant: 'destructive' });
       return;
     }
     const next = STATUS_META[form.status]?.next;
     if (!next) return;
     setAdvancing(true);
     try {
+      // Auto-guarda si aún no está persistido, luego avanza el estado
+      const id = contractId || (await persistContract());
       const { error } = await supabase
         .from('enrollment_contracts')
         .update({ status: next, updated_at: new Date().toISOString() })
-        .eq('id', contractId);
+        .eq('id', id);
       if (error) throw error;
       setForm(prev => ({ ...prev, status: next }));
-      toast({ title: 'Estado actualizado', description: `Contrato: ${STATUS_META[next].label}` });
+      const desc = next === 'sent'
+        ? 'Contrato marcado como enviado y disponible en el portal de la familia.'
+        : `Contrato: ${STATUS_META[next]?.label}`;
+      toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
@@ -207,6 +291,16 @@ export default function ContractManager({ studentId, studentName, contractId: in
               <option value="Homeschool">Homeschool</option>
             </select>
           </div>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={applyOffCampusTemplate}
+              className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 bg-[#193D6D] hover:bg-[#14305a] text-white rounded-xl text-xs font-bold transition-colors"
+              title="Carga el borrador completo del contrato Off-Campus con todas las cláusulas"
+            >
+              📋 Aplicar Plantilla Off-Campus
+            </button>
+          )}
         </div>
 
         {/* Datos generales */}

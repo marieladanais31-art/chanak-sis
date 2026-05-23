@@ -17,11 +17,11 @@ const STATUS_META = {
     className: 'bg-amber-50 text-amber-700 border-amber-200',
   },
   approved: {
-    label: 'Validada por Chanak',
+    label: 'Aprobada',
     className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
   correction_requested: {
-    label: 'Corrección / repetición requerida',
+    label: 'Corrección solicitada',
     className: 'bg-orange-50 text-orange-700 border-orange-200',
   },
   rejected: {
@@ -122,11 +122,13 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('[ParentEvidencePanel] academic_evidence_submissions no disponible:', error.message);
+      const esRLS = error.code === '42501' || (error.message || '').includes('policy');
       setMessage({
-        type: 'error',
-        title: 'Tabla de evidencias no disponible',
-        text: 'Aplica la migración SQL incluida para crear academic_evidence_submissions y activar RLS por family_students.',
+        type: 'warning',
+        title: 'No se pudieron cargar evidencias anteriores.',
+        text: esRLS
+          ? 'Revisa la vinculación familiar (family_students). El formulario de envío sigue disponible.'
+          : `No se pudo conectar con el historial de evidencias. El formulario sigue disponible. (${error.message || error.code || 'error desconocido'})`,
       });
       setSubmissions([]);
     } else {
@@ -184,6 +186,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
 
     setSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       const draftId = crypto.randomUUID();
       const { attachmentPath, attachmentUrl } = await uploadAttachment(draftId);
       const belowPaceMinimum = hasScore && form.evidence_type === 'PACE Test' && score < 80;
@@ -192,6 +195,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         id: draftId,
         student_id: form.student_id,
         student_subject_id: form.student_subject_id,
+        submitted_by: user?.id || null,
         subject_name: selectedSubject.subject_name,
         school_year: ACTIVE_SCHOOL_YEAR,
         quarter: form.quarter,
@@ -205,8 +209,8 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         academic_outcome: belowPaceMinimum ? 'requires_repeat' : 'pending_review',
       };
 
-      const { error } = await supabase.from('academic_evidence_submissions').insert(payload);
-      if (error) throw error;
+      const { error: insertError } = await supabase.from('academic_evidence_submissions').insert(payload);
+      if (insertError) throw insertError;
 
       setForm((current) => ({
         ...INITIAL_FORM,
@@ -223,7 +227,6 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
       });
       await loadSubmissions();
     } catch (error) {
-      console.error('[ParentEvidencePanel] submit error:', error);
       setMessage({ type: 'error', title: 'No se pudo guardar', text: error.message || 'Intenta nuevamente.' });
     } finally {
       setSaving(false);

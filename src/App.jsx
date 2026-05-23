@@ -18,6 +18,7 @@ import CoordinatorDashboard from '@/pages/CoordinatorDashboard';
 import TutorDashboard from '@/pages/TutorDashboard';
 import StudentDashboard from '@/pages/StudentDashboard';
 import PeiManagement from '@/pages/PeiManagement';
+import HelpPage from '@/pages/HelpPage';
 
 const AppContent = () => {
   return (
@@ -60,6 +61,9 @@ const AppContent = () => {
       <Route path="/student/*"
         element={<ProtectedRoute requiredRole={['student']}><StudentDashboard /></ProtectedRoute>} />
       
+      {/* Centro de Ayuda — accesible para cualquier usuario autenticado */}
+      <Route path="/ayuda" element={<ProtectedRoute><HelpPage /></ProtectedRoute>} />
+
       {/* Catch-all: cualquier ruta desconocida va directo al login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

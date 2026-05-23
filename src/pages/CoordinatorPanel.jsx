@@ -71,7 +71,6 @@ export default function CoordinatorPanel() {
       return;
     }
 
-    console.log(`📝 Guardando nota: Estudiante=${selectedStudentId}, Materia=${formData.subject}, Score=${formData.score}, Trimestre=${formData.quarter}`);
     setSaving(true);
 
     try {

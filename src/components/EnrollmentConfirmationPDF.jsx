@@ -64,7 +64,7 @@ export default function EnrollmentConfirmationPDF({ studentName, passportNumber,
       doc.setFont('times', 'normal');
       doc.setFontSize(12);
       
-      const bodyText = `Por medio de la presente, la dirección de Chanak International Academy certifica que el estudiante detallado anteriormente se encuentra oficialmente matriculado y activo en nuestra institución educativa internacional.`;
+      const bodyText = `Por medio de la presente, Chanak International Academy, institución educativa privada cristiana americana registrada ante el Florida Department of Education de los Estados Unidos de América, confirma que el/la estudiante detallado/a anteriormente figura como alumno/a activo/a y matriculado/a en nuestro programa académico internacional.`;
       
       const legalText = `El estudiante sigue un Plan Educativo Individualizado (PEI) alineado con los estándares internacionales requeridos. De acuerdo con las disposiciones vigentes y los lineamientos de Urbina Escobar, la institución garantiza el acompañamiento, la metodología y las evaluaciones correspondientes a su nivel académico, otorgando la validación oficial de sus estudios bajo nuestro código del Florida Department of Education.`;
 

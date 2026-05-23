@@ -24,7 +24,7 @@ import {
   CalendarDays,
   AlertTriangle,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import ParentEvidencePanel from '@/components/ParentEvidencePanel';
@@ -1376,6 +1376,16 @@ export default function ParentDashboard() {
           </>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-4 py-6 flex justify-center">
+        <Link
+          to="/ayuda"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl hover:border-slate-300 bg-white transition-colors"
+        >
+          ? Ayuda
+        </Link>
+      </footer>
 
       {/* Payment Details Modal */}
       {isPaymentModalOpen && (() => {
