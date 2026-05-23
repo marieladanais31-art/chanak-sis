@@ -124,13 +124,21 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
   const persistLetter = async () => {
     if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
     const payload = buildLetterPayload();
+    // [DIAG] Log temporal para diagnóstico — eliminar tras resolver
+    console.error('[EnrollmentLetterManager:DIAG] payload a enviar:', JSON.stringify(payload, null, 2));
     if (letterId) {
       const { error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId);
-      if (error) throw error;
+      if (error) {
+        console.error('[EnrollmentLetterManager:DIAG] ERROR en update:', { code: error.code, message: error.message, details: error.details, hint: error.hint, full: error });
+        throw error;
+      }
       return letterId;
     } else {
       const { data, error } = await supabase.from('enrollment_letters').insert([payload]).select('id').single();
-      if (error) throw error;
+      if (error) {
+        console.error('[EnrollmentLetterManager:DIAG] ERROR en insert:', { code: error.code, message: error.message, details: error.details, hint: error.hint, full: error });
+        throw error;
+      }
       setLetterId(data.id);
       return data.id;
     }
@@ -146,6 +154,7 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
       await persistLetter();
       toast({ title: 'Carta guardada correctamente.' });
     } catch (err) {
+      console.error('[EnrollmentLetterManager:DIAG] handleSave CATCH:', { code: err.code, message: err.message, details: err.details, hint: err.hint, full: err });
       toast({ title: 'Error al guardar', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
@@ -177,6 +186,7 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
           : `Carta: ${STATUS_META[next]?.label}`;
       toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
+      console.error('[EnrollmentLetterManager:DIAG] handleAdvance CATCH:', { code: err.code, message: err.message, details: err.details, hint: err.hint, full: err });
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setAdvancing(false);
