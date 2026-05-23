@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { generateContractPDF } from '@/lib/contractPdf';
+import { preloadImages } from '@/lib/officialDocuments';
 import {
   Save, Loader2, X, Download, ChevronRight,
   FileSignature, Send, Archive
@@ -233,7 +234,9 @@ export default function ContractManager({ studentId, studentName, contractId: in
   const handleDownload = async (lang = 'es') => {
     setDownloading(true);
     try {
-      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      // Pre-cargar logo y sello como base64 — jsPDF no puede cargar URLs remotas
+      const settings = await preloadImages(rawSettings);
       const [first, ...rest] = (studentName || '').split(' ');
       generateContractPDF({
         contract: { ...form, id: contractId, language: lang },

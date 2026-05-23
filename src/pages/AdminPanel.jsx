@@ -20,6 +20,7 @@ import InstitutionalSettings from '@/components/InstitutionalSettings';
 import AcademicCalendarManager from '@/components/AcademicCalendarManager';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import AdminOperationalLinks from '@/components/AdminOperationalLinks';
+import BulkPaceGradeUpload from '@/components/BulkPaceGradeUpload';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, Users, Building2, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -79,6 +80,7 @@ export default function AdminPanel() {
       case 'revision-notas': return 'Revisión de Notas';
       case 'boletines': return 'Boletines Académicos';
       case 'asignaciones': return 'Asignaciones y PACEs';
+      case 'carga-masiva-paces': return 'Carga Masiva de PACEs';
       case 'calendario': return 'Calendario Escolar';
       case 'cartas': return 'Cartas de Confirmación';
       case 'config-institucional': return 'Configuración Institucional';
@@ -208,6 +210,7 @@ export default function AdminPanel() {
       );
       case 'boletines': return <AdminBoletines />;
       case 'asignaciones': return <AdminAsignaciones />;
+      case 'carga-masiva-paces': return <BulkPaceGradeUpload />;
       case 'calendario': return <AcademicCalendarManager />;
       case 'cartas': return <AdminCartas />;
       case 'config-institucional': return <InstitutionalSettings />;

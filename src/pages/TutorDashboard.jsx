@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/context/AuthContext';
-import { LogOut, Users, BookOpen, Loader2, X, CalendarDays, FileText, AlertTriangle, FileCheck2 } from 'lucide-react';
+import { LogOut, Users, BookOpen, Loader2, X, CalendarDays, FileText, AlertTriangle, FileCheck2, Upload } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import PEIFormFull from '@/components/PEIFormFull';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import EvidenceReviewPanel from '@/components/EvidenceReviewPanel';
+import BulkPaceGradeUpload from '@/components/BulkPaceGradeUpload';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 
 export default function TutorDashboard() {
@@ -137,10 +138,11 @@ export default function TutorDashboard() {
         {/* Tab switcher */}
         <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
           {[
-            { id: 'notas',      label: 'Mis Estudiantes', icon: Users },
-            { id: 'evidencias', label: 'Evidencias',      icon: FileCheck2 },
-            { id: 'pei',        label: 'PEI / PACEs',      icon: FileText },
-            { id: 'alertas', label: 'Alertas',          icon: AlertTriangle },
+            { id: 'notas',        label: 'Mis Estudiantes', icon: Users },
+            { id: 'carga-masiva', label: 'Carga de PACEs',  icon: Upload },
+            { id: 'evidencias',   label: 'Evidencias',      icon: FileCheck2 },
+            { id: 'pei',          label: 'PEI / PACEs',     icon: FileText },
+            { id: 'alertas',      label: 'Alertas',         icon: AlertTriangle },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -153,6 +155,11 @@ export default function TutorDashboard() {
             </button>
           ))}
         </div>
+
+        {/* Carga Masiva de PACEs tab */}
+        {mainTab === 'carga-masiva' && (
+          <BulkPaceGradeUpload />
+        )}
 
         {/* Alertas tab */}
         {mainTab === 'alertas' && (

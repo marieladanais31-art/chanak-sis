@@ -44,12 +44,57 @@ export const getDocumentFooter = (settings, lang = 'es') => {
     : `${institution} · Documento Oficial · FLDOE #${fldoe}`;
 };
 
+/**
+ * Pre-carga logo_url y seal_url como base64.
+ * jsPDF no puede cargar URLs remotas directamente — necesita datos en memoria.
+ * Llama esta función antes de invocar cualquier generador de PDF.
+ */
+export async function preloadImages(settings) {
+  if (!settings) return settings;
+
+  async function toBase64(url) {
+    if (!url) return null;
+    if (url.startsWith('data:')) return url;   // ya es base64
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror  = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch { return null; }
+  }
+
+  const [logo64, seal64] = await Promise.all([
+    toBase64(settings.logo_url),
+    toBase64(settings.seal_url),
+  ]);
+
+  return { ...settings, _logo64: logo64, _seal64: seal64 };
+}
+
+/** Inserta el logo institucional usando base64 pre-cargado. */
 export const addInstitutionLogo = (doc, settings, x, y, w, h) => {
-  if (!settings?.logo_url) return;
+  const src = settings?._logo64 || settings?.logo_url;
+  if (!src) return;
   try {
-    doc.addImage(settings.logo_url, 'PNG', x, y, w, h);
+    doc.addImage(src, 'PNG', x, y, w, h);
   } catch {
-    try { doc.addImage(settings.logo_url, 'JPEG', x, y, w, h); } catch (_) {}
+    try { doc.addImage(src, 'JPEG', x, y, w, h); } catch (_) {}
+  }
+};
+
+/** Inserta el sello institucional (seal) usando base64 pre-cargado. */
+export const addInstitutionSeal = (doc, settings, x, y, w, h) => {
+  const src = settings?._seal64 || settings?.seal_url;
+  if (!src) return;
+  try {
+    doc.addImage(src, 'PNG', x, y, w, h);
+  } catch {
+    try { doc.addImage(src, 'JPEG', x, y, w, h); } catch (_) {}
   }
 };
 
