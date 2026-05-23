@@ -383,7 +383,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         .in('student_id', ids).in('status', ['sent', 'signed', 'published']),
       supabase.from('enrollment_letters')
         .select('*')
-        .in('student_id', ids).eq('status', 'published'),
+        .in('student_id', ids).in('status', ['sent', 'published']),
       supabase.from('transcript_records')
         .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
         .in('student_id', ids).eq('status', 'published'),
@@ -860,7 +860,7 @@ export default function ParentDashboard() {
         supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
         supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
         supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed', 'published']),
-        supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
+        supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'published']),
         supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').in('student_id', studentIds).eq('status', 'published'),
       ]);
 

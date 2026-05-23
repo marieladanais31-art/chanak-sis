@@ -28,10 +28,12 @@ La presente carta se expide a efectos académicos, administrativos e informativo
 }
 
 const STATUS_META = {
-  draft:     { label: 'Borrador',   color: 'bg-slate-100 text-slate-700', next: 'sent',      nextLabel: 'Enviar a Familia', icon: Send },
-  sent:      { label: 'Enviado',    color: 'bg-amber-100 text-amber-800', next: 'published',  nextLabel: 'Publicar',         icon: Eye },
-  published: { label: 'Publicado',  color: 'bg-green-100 text-green-800', next: 'archived',   nextLabel: 'Archivar',         icon: CheckCircle },
-  archived:  { label: 'Archivado',  color: 'bg-slate-200 text-slate-600', next: null,         nextLabel: null,               icon: Mail },
+  // Flujo simplificado: draft → published directamente.
+  // La carta queda visible en el portal de la familia en cuanto se publica.
+  draft:     { label: 'Borrador',   color: 'bg-slate-100 text-slate-700', next: 'published', nextLabel: 'Publicar para Familia', icon: Eye },
+  sent:      { label: 'Enviado',    color: 'bg-amber-100 text-amber-800', next: 'published', nextLabel: 'Publicar',              icon: Eye },
+  published: { label: 'Publicado',  color: 'bg-green-100 text-green-800', next: 'archived',  nextLabel: 'Archivar',              icon: CheckCircle },
+  archived:  { label: 'Archivado',  color: 'bg-slate-200 text-slate-600', next: null,        nextLabel: null,                   icon: Mail },
 };
 
 const DEFAULT_FORM = {
@@ -169,12 +171,9 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
         .eq('id', id);
       if (error) throw error;
       setForm(prev => ({ ...prev, status: next }));
-      // Contratos: visible en 'sent'. Cartas: solo visible en 'published'.
       const desc = next === 'published'
-        ? 'Carta publicada y disponible en el portal de la familia.'
-        : next === 'sent'
-          ? 'Carta marcada como enviada. Haz clic en "Publicar" para que la familia pueda verla en su portal.'
-          : `Carta: ${STATUS_META[next]?.label}`;
+        ? '✅ Carta publicada. Ya visible en el portal de la familia.'
+        : `Carta: ${STATUS_META[next]?.label}`;
       toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
