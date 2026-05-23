@@ -112,43 +112,70 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  // ── Sanitiza campos date: '' → null para evitar error PostgreSQL 22007 ──────
+  const LETTER_DATE_FIELDS = ['start_date', 'issue_date', 'director_signature_date'];
+  const buildLetterPayload = () => {
+    const raw = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
+    LETTER_DATE_FIELDS.forEach(f => { if (!raw[f]) raw[f] = null; });
+    return raw;
+  };
+
+  // ── Persiste la carta y devuelve el ID (crea si no existe, actualiza si ya existe) ─
+  const persistLetter = async () => {
+    if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
+    const payload = buildLetterPayload();
+    if (letterId) {
+      const { error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId);
+      if (error) throw error;
+      return letterId;
+    } else {
+      const { data, error } = await supabase.from('enrollment_letters').insert([payload]).select('id').single();
+      if (error) throw error;
+      setLetterId(data.id);
+      return data.id;
+    }
+  };
 
   const handleSave = async () => {
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de guardar.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
-      if (letterId) {
-        const { error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('enrollment_letters').insert([payload]).select('id').single();
-        if (error) throw error;
-        setLetterId(data.id);
-      }
-      toast({ title: 'Carta guardada' });
+      await persistLetter();
+      toast({ title: 'Carta guardada correctamente.' });
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error al guardar', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleAdvance = async () => {
-    if (!letterId) {
-      toast({ title: 'Aviso', description: 'Guarda la carta antes de avanzar.', variant: 'destructive' });
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de continuar.', variant: 'destructive' });
       return;
     }
     const next = STATUS_META[form.status]?.next;
     if (!next) return;
     setAdvancing(true);
     try {
+      // Auto-guarda si aún no está persistido, luego avanza el estado
+      const id = letterId || (await persistLetter());
       const { error } = await supabase
         .from('enrollment_letters')
         .update({ status: next, updated_at: new Date().toISOString() })
-        .eq('id', letterId);
+        .eq('id', id);
       if (error) throw error;
       setForm(prev => ({ ...prev, status: next }));
-      toast({ title: 'Estado actualizado', description: `Carta: ${STATUS_META[next].label}` });
+      // Contratos: visible en 'sent'. Cartas: solo visible en 'published'.
+      const desc = next === 'published'
+        ? 'Carta publicada y disponible en el portal de la familia.'
+        : next === 'sent'
+          ? 'Carta marcada como enviada. Haz clic en "Publicar" para que la familia pueda verla en su portal.'
+          : `Carta: ${STATUS_META[next]?.label}`;
+      toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {

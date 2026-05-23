@@ -134,6 +134,30 @@ export default function ContractManager({ studentId, studentName, contractId: in
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  // ── Sanitiza campos date: '' → null para evitar error PostgreSQL 22007 ──────
+  const CONTRACT_DATE_FIELDS = ['start_date', 'end_date', 'issue_date', 'director_signature_date', 'parent_signature_date'];
+  const buildPayload = (overrides = {}) => {
+    const raw = { ...form, student_id: studentId, updated_at: new Date().toISOString(), ...overrides };
+    CONTRACT_DATE_FIELDS.forEach(f => { if (!raw[f]) raw[f] = null; });
+    return raw;
+  };
+
+  // ── Persiste el contrato y devuelve el ID (crea si no existe, actualiza si ya existe) ─
+  const persistContract = async () => {
+    if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
+    const payload = buildPayload();
+    if (contractId) {
+      const { error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId);
+      if (error) throw error;
+      return contractId;
+    } else {
+      const { data, error } = await supabase.from('enrollment_contracts').insert([payload]).select('id').single();
+      if (error) throw error;
+      setContractId(data.id);
+      return data.id;
+    }
+  };
+
   const applyOffCampusTemplate = () => {
     setForm(prev => ({
       ...prev,
@@ -149,41 +173,42 @@ export default function ContractManager({ studentId, studentName, contractId: in
   };
 
   const handleSave = async () => {
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de guardar.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
-      if (contractId) {
-        const { error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('enrollment_contracts').insert([payload]).select('id').single();
-        if (error) throw error;
-        setContractId(data.id);
-      }
-      toast({ title: 'Contrato guardado' });
+      await persistContract();
+      toast({ title: 'Contrato guardado correctamente.' });
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error al guardar', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleAdvance = async () => {
-    if (!contractId) {
-      toast({ title: 'Aviso', description: 'Guarda el contrato antes de avanzar.', variant: 'destructive' });
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de continuar.', variant: 'destructive' });
       return;
     }
     const next = STATUS_META[form.status]?.next;
     if (!next) return;
     setAdvancing(true);
     try {
+      // Auto-guarda si aún no está persistido, luego avanza el estado
+      const id = contractId || (await persistContract());
       const { error } = await supabase
         .from('enrollment_contracts')
         .update({ status: next, updated_at: new Date().toISOString() })
-        .eq('id', contractId);
+        .eq('id', id);
       if (error) throw error;
       setForm(prev => ({ ...prev, status: next }));
-      toast({ title: 'Estado actualizado', description: `Contrato: ${STATUS_META[next].label}` });
+      const desc = next === 'sent'
+        ? 'Contrato marcado como enviado y disponible en el portal de la familia.'
+        : `Contrato: ${STATUS_META[next]?.label}`;
+      toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
