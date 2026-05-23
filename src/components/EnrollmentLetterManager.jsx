@@ -14,18 +14,12 @@ const LABEL    = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking
 
 /**
  * Genera el texto de confirmación institucional base.
- * El admin puede editarlo antes de guardar / enviar.
+ * El admin puede editarlo libremente antes de guardar / enviar.
+ * Nota: los datos institucionales (FLDOE, MSA-CESS, dirección) ya aparecen
+ * en el encabezado del PDF, por lo que el cuerpo debe ser conciso.
  */
 function buildDefaultConfirmationText(studentName = '[NOMBRE DEL ESTUDIANTE]') {
-  return `Por medio de la presente, Chanak International Academy, institución educativa privada cristiana americana registrada ante el Florida Department of Education de los Estados Unidos de América, confirma que el/la estudiante ${studentName} figura como alumno/a activo/a y matriculado/a en nuestro programa académico internacional.
-
-El/La estudiante está inscrito/a en el Programa Off-Campus de Chanak International Academy, un programa educativo internacional de carácter estructurado que ofrece formación académica rigurosa basada en el modelo pedagógico Mastery Learning. El programa incluye un Plan Educativo Individualizado (PEI), seguimiento académico personalizado con mentor asignado, y acceso a las plataformas institucionales SIS y LMS de Chanak.
-
-Chanak International Academy está registrada ante el Florida Department of Education (FLDOE School Number 134620) como institución educativa privada en el Estado de Florida, Estados Unidos de América, bajo la entidad legal Chanak TrainUp Education, Inc., organización sin fines de lucro registrada en el Estado de Florida. Asimismo, la institución ostenta la condición de MSA-CESS Official Candidate for Accreditation ante la Middle States Association of Colleges and Schools, Commissions on Elementary and Secondary Schools.
-
-Los estudiantes que completen satisfactoriamente los requisitos académicos del programa son elegibles para la obtención del High School Diploma estadounidense, emitido por Chanak International Academy conforme a los estándares del Estado de Florida, documento susceptible de apostilla conforme al Convenio de La Haya de 1961.
-
-La presente carta se expide a efectos académicos, administrativos e informativos, y puede ser verificada contactando directamente con el departamento de administración institucional de Chanak International Academy.`;
+  return `Por medio de la presente, Chanak International Academy, institución educativa privada cristiana americana registrada ante el Florida Department of Education (FLDOE #134620) bajo la entidad legal Chanak TrainUp Education, Inc., confirma que el/la estudiante ${studentName} figura como alumno/a activo/a y matriculado/a en nuestro Programa Off-Campus Internacional.\n\nEl Programa Off-Campus es un programa educativo internacional de carácter estructurado, basado en el modelo pedagógico Mastery Learning, que incluye Plan Educativo Individualizado (PEI), seguimiento académico con mentor asignado y acceso a las plataformas SIS y LMS institucionales. Los estudiantes que completen los requisitos son elegibles para la obtención del High School Diploma estadounidense, emitido conforme a los estándares del Estado de Florida y susceptible de apostilla según el Convenio de La Haya de 1961.\n\nLa presente carta se expide a efectos académicos, administrativos e informativos, y puede verificarse contactando con el departamento de administración en administration@chanakacademy.org.`;
 }
 
 const STATUS_META = {
