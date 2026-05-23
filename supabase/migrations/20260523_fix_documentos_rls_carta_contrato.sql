@@ -150,6 +150,16 @@ CREATE POLICY rls_letters_parent_select
 
 
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- 6. GRANTS DE TABLA — el rol authenticated necesita privilegios explícitos
+--    "permission denied for table" se produce cuando faltan estos GRANTs
+--    aunque las políticas RLS sean correctas.
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.enrollment_contracts TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.enrollment_letters   TO authenticated;
+
+
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- VERIFICACIÓN — ejecuta esto después para confirmar que todo está correcto
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
