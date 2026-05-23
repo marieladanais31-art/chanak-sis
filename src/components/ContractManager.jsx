@@ -146,21 +146,13 @@ export default function ContractManager({ studentId, studentName, contractId: in
   const persistContract = async () => {
     if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
     const payload = buildPayload();
-    // [DIAG] Log temporal para diagnóstico — eliminar tras resolver
-    console.error('[ContractManager:DIAG] payload a enviar:', JSON.stringify(payload, null, 2));
     if (contractId) {
       const { error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId);
-      if (error) {
-        console.error('[ContractManager:DIAG] ERROR en update:', { code: error.code, message: error.message, details: error.details, hint: error.hint, full: error });
-        throw error;
-      }
+      if (error) throw error;
       return contractId;
     } else {
       const { data, error } = await supabase.from('enrollment_contracts').insert([payload]).select('id').single();
-      if (error) {
-        console.error('[ContractManager:DIAG] ERROR en insert:', { code: error.code, message: error.message, details: error.details, hint: error.hint, full: error });
-        throw error;
-      }
+      if (error) throw error;
       setContractId(data.id);
       return data.id;
     }
@@ -190,7 +182,6 @@ export default function ContractManager({ studentId, studentName, contractId: in
       await persistContract();
       toast({ title: 'Contrato guardado correctamente.' });
     } catch (err) {
-      console.error('[ContractManager:DIAG] handleSave CATCH:', { code: err.code, message: err.message, details: err.details, hint: err.hint, full: err });
       toast({ title: 'Error al guardar', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
@@ -219,7 +210,6 @@ export default function ContractManager({ studentId, studentName, contractId: in
         : `Contrato: ${STATUS_META[next]?.label}`;
       toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
-      console.error('[ContractManager:DIAG] handleAdvance CATCH:', { code: err.code, message: err.message, details: err.details, hint: err.hint, full: err });
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
       setAdvancing(false);

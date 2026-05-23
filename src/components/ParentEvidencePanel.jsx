@@ -122,16 +122,6 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
       .order('created_at', { ascending: false });
 
     if (error) {
-      // [DIAG] Log para diagnóstico — ver consola del navegador
-      console.error('[ParentEvidencePanel:DIAG] loadSubmissions error:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        childIds,
-        full: error,
-      });
-      // Mensaje no bloqueante: la tabla existe, el formulario sigue disponible
       const esRLS = error.code === '42501' || (error.message || '').includes('policy');
       setMessage({
         type: 'warning',
@@ -219,18 +209,8 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         academic_outcome: belowPaceMinimum ? 'requires_repeat' : 'pending_review',
       };
 
-      console.error('[ParentEvidencePanel:DIAG] payload a enviar:', JSON.stringify(payload, null, 2));
       const { error: insertError } = await supabase.from('academic_evidence_submissions').insert(payload);
-      if (insertError) {
-        console.error('[ParentEvidencePanel:DIAG] ERROR en insert:', {
-          code: insertError.code,
-          message: insertError.message,
-          details: insertError.details,
-          hint: insertError.hint,
-          full: insertError,
-        });
-        throw insertError;
-      }
+      if (insertError) throw insertError;
 
       setForm((current) => ({
         ...INITIAL_FORM,
@@ -247,13 +227,6 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
       });
       await loadSubmissions();
     } catch (error) {
-      console.error('[ParentEvidencePanel:DIAG] handleSubmit CATCH:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        full: error,
-      });
       setMessage({ type: 'error', title: 'No se pudo guardar', text: error.message || 'Intenta nuevamente.' });
     } finally {
       setSaving(false);
