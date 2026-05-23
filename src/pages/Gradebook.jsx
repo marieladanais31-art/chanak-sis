@@ -43,7 +43,6 @@ const Gradebook = () => {
   }, [selectedStudent, selectedCourse]);
 
   const fetchInitialData = async () => {
-    console.log('📊 Gradebook: Fetching students and courses...');
     setLoading(true);
     try {
       const [studentsRes, coursesRes] = await Promise.all([
@@ -56,7 +55,6 @@ const Gradebook = () => {
 
       setStudents(studentsRes.data || []);
       setCourses(coursesRes.data || []);
-      console.log(`✅ Gradebook: Loaded ${studentsRes.data?.length} students and ${coursesRes.data?.length} courses`);
     } catch (error) {
       console.error('❌ Gradebook: Error fetching data:', error);
       toast({ title: 'Error', description: 'Failed to load initial data', variant: 'destructive' });
@@ -66,7 +64,6 @@ const Gradebook = () => {
   };
 
   const fetchGrades = async (studentId, courseId) => {
-    console.log(`📊 Gradebook: Fetching grades for student ${studentId} in course ${courseId}...`);
     try {
       const { data, error } = await supabase
         .from('grades')
@@ -116,7 +113,6 @@ const Gradebook = () => {
       return;
     }
 
-    console.log('📊 Gradebook: Saving grades...');
     setSaving(true);
     
     try {
@@ -141,7 +137,6 @@ const Gradebook = () => {
 
       if (error) throw error;
       
-      console.log('✅ Gradebook: Grades saved successfully');
       toast({ title: 'Success', description: 'Grades saved successfully' });
     } catch (error) {
       console.error('❌ Gradebook: Error saving grades:', error);

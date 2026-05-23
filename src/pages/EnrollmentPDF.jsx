@@ -15,7 +15,6 @@ export default function EnrollmentPDF({ studentId, signed }) {
     const fetchStudentData = async () => {
       if (!studentId) return;
       try {
-        console.log(`📥 [EnrollmentPDF] Fetching data for student: ${studentId}`);
         const { data, error } = await supabase
           .from('students')
           .select('id, first_name, last_name, full_name, grade_level, passport_number')
@@ -24,7 +23,6 @@ export default function EnrollmentPDF({ studentId, signed }) {
 
         if (error) throw error;
         setStudentData(data);
-        console.log(`✅ [EnrollmentPDF] Student data loaded:`, data);
       } catch (err) {
         console.error(`❌ [EnrollmentPDF] Error fetching student:`, err);
       } finally {
@@ -45,7 +43,6 @@ export default function EnrollmentPDF({ studentId, signed }) {
 
     setGenerating(true);
     const studentName = studentData.full_name || `${studentData.first_name || ''} ${studentData.last_name || ''}`.trim();
-    console.log(`📥 [EnrollmentPDF] Generating PDF for ${studentName}...`);
 
     try {
       const doc = new jsPDF();
@@ -88,7 +85,6 @@ export default function EnrollmentPDF({ studentId, signed }) {
 
       // Save PDF
       doc.save(`Enrollment_${studentName}.pdf`);
-      console.log(`✅ [EnrollmentPDF] PDF successfully generated and downloaded.`);
       toast({ title: 'Éxito', description: 'Documento generado y descargado correctamente.' });
 
     } catch (error) {

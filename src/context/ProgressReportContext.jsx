@@ -68,12 +68,16 @@ export const ProgressReportProvider = ({ children }) => {
   };
 
   const initializeLines = (reportId = null) => {
-    const core = ['Math', 'English', 'Social Studies', 'Word Building', 'Science'].map(subj => ({
+    // TODO: Reemplazar por lectura dinámica de student_subjects cuando se implemente catálogo maestro.
+    // Word Building está incluido como Core. Para agregar asignaturas, editar este array temporalmente.
+    const core = ['Math', 'English', 'Word Building', 'Science', 'Social Studies'].map(subj => ({
       report_id: reportId, category: 'CORE', subject: subj, pace_numbers: '', grade_percent: '', gpa_value: 0
     }));
+    // Categoría "Extensión Local" — valores válidos: ['Spanish Language', 'Social Studies (Local)', 'Physical Education & Arts']
     const ext = ['Spanish Language', 'Social Studies (Local)', 'Physical Education & Arts'].map(subj => ({
       report_id: reportId, category: 'EXTENSION', subject: subj, evidence_title: '', grade_percent: '', gpa_value: 0
     }));
+    // Categoría "Life Skills"
     const life = [{
       report_id: reportId, category: 'LIFESKILLS', subject: 'Leadership & Christian Life', evidence_notes: '', grade_percent: '', gpa_value: 0
     }];

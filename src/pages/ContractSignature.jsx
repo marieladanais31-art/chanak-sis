@@ -23,7 +23,6 @@ export default function ContractSignature({ studentId, onSignatureComplete }) {
   useEffect(() => {
     const initContract = async () => {
       if (!studentId) return;
-      console.log(`📋 [Contract] Initializing for student: ${studentId}`);
       try {
         setLoading(true);
         // Fetch student & family info
@@ -50,10 +49,7 @@ export default function ContractSignature({ studentId, onSignatureComplete }) {
         }
 
         if (cData) {
-          console.log(`✅ [Contract] Existing contract found: ${cData.contract_number}`);
           setContract(cData);
-        } else {
-          console.log(`📝 [Contract] No existing contract. Ready to generate new one.`);
         }
       } catch (err) {
         console.error('❌ [Contract] Initialization error:', err);
@@ -78,7 +74,6 @@ export default function ContractSignature({ studentId, onSignatureComplete }) {
 
     setSaving(true);
     try {
-      console.log(`📝 [Contract] Processing signature...`);
       const signatureDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
       const contractNumber = `CHANAK-${new Date().getFullYear()}-${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`;
       const institutionSignature = 'Mariela Andrade';
@@ -194,7 +189,6 @@ export default function ContractSignature({ studentId, onSignatureComplete }) {
       const filePath = `contracts/${studentId}/${fileName}`;
 
       // 2. Upload to Supabase Storage
-      console.log(`📄 [Contract] Uploading PDF...`);
       const { error: uploadError } = await supabase.storage
         .from('student-documents')
         .upload(filePath, pdfBlob, { upsert: true });
@@ -221,7 +215,6 @@ export default function ContractSignature({ studentId, onSignatureComplete }) {
         status: 'FULLY_SIGNED'
       };
 
-      console.log(`💾 [Contract] Saving to database...`);
       const { data: savedContract, error: dbError } = await supabase
         .from('contracts')
         .upsert(contractRecord, { onConflict: 'student_id, contract_type' })

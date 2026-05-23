@@ -52,7 +52,6 @@ const AcademicManagement = () => {
   }, [selectedStudent, selectedCourse]);
 
   const fetchInitialData = async () => {
-    console.log('📚 AcademicMgmt: Fetching students and courses...');
     setLoading(true);
     try {
       const [studentsRes, coursesRes] = await Promise.all([
@@ -65,7 +64,6 @@ const AcademicManagement = () => {
 
       setStudents(studentsRes.data || []);
       setCourses(coursesRes.data || []);
-      console.log(`✅ AcademicMgmt: Loaded ${studentsRes.data?.length} students and ${coursesRes.data?.length} courses`);
     } catch (error) {
       console.error('❌ AcademicMgmt: Error fetching data:', error);
       toast({ title: 'Error', description: 'Failed to load initial data', variant: 'destructive' });
@@ -75,7 +73,6 @@ const AcademicManagement = () => {
   };
 
   const fetchGrades = async (studentId, courseId) => {
-    console.log(`📚 AcademicMgmt: Fetching records for student ${studentId} in course ${courseId}...`);
     try {
       const { data, error } = await supabase
         .from('grades')
@@ -84,8 +81,6 @@ const AcademicManagement = () => {
         .eq('course_id', courseId);
 
       if (error) throw error;
-
-      console.log(`✅ AcademicMgmt: Records loaded for current selection`);
       
       const newPaces = Array(12).fill('');
       let currentCredits = '';
@@ -134,7 +129,6 @@ const AcademicManagement = () => {
       return;
     }
 
-    console.log(`💾 AcademicMgmt: Saving data for tab: ${activeTab}...`);
     setSaving(true);
     
     try {
@@ -171,7 +165,6 @@ const AcademicManagement = () => {
 
       if (error) throw error;
       
-      console.log('✅ AcademicMgmt: Data saved successfully');
       toast({ title: 'Success', description: 'Academic records saved successfully' });
     } catch (error) {
       console.error('❌ AcademicMgmt: Error saving records:', error);
