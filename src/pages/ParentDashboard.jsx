@@ -30,6 +30,7 @@ import GradeEntriesManager from '@/components/GradeEntriesManager';
 import ParentEvidencePanel from '@/components/ParentEvidencePanel';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
+import { preloadImages } from '@/lib/officialDocuments';
 
 /* ── Categorías: colores de badge ──────────────────────────────────────────── */
 const CAT_COLORS = {
@@ -424,7 +425,8 @@ function ParentDocumentosPanel({ studentChildren }) {
     try {
       const { generateContractPDF } = await import('@/lib/contractPdf');
       const child = studentChildren.find(c => c.id === contract.student_id);
-      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const settings = await preloadImages(rawSettings);
       generateContractPDF({
         contract,
         student: child || { first_name: '', last_name: '' },
@@ -443,7 +445,8 @@ function ParentDocumentosPanel({ studentChildren }) {
     try {
       const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
       const child = studentChildren.find(c => c.id === letter.student_id);
-      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const settings = await preloadImages(rawSettings);
       generateEnrollmentLetterPDF({
         letter,
         student: child || { first_name: '', last_name: '' },

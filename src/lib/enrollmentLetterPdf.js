@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import {
   addInstitutionLogo,
+  addInstitutionSeal,
   getDocumentFooter,
   getInstitutionAddress,
   getInstitutionEmail,
@@ -94,17 +95,22 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
 
   doc.setTextColor(...WHITE);
   doc.setFont('helvetica', 'bold');
+
+  // Logo (izquierda) y sello (derecha) — se muestran sólo si están cargados en base64
   addInstitutionLogo(doc, settings, 10, 5, 22, 22);
+  addInstitutionSeal(doc, settings, W - 32, 5, 22, 22);
 
   doc.setFontSize(14);
-  doc.text('CHANAK INTERNATIONAL ACADEMY', W / 2, 12, { align: 'center' });
+  doc.text(institutionName.toUpperCase(), W / 2, 12, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.text(`Florida Private School · FLDOE #${fldoe}`, W / 2, 18, { align: 'center' });
   doc.text('MSA-CESS Official Candidate for Accreditation', W / 2, 22.5, { align: 'center' });
   doc.text(`501(c)(3) Nonprofit · EIN 36-5154011`, W / 2, 27, { align: 'center' });
 
-  const contactLine = [getInstitutionEmail(settings) || 'administration@chanakacademy.org', settings?.website || 'chanakacademy.org'].filter(Boolean).join('  ·  ');
+  const institutionEmail   = getInstitutionEmail(settings)   || 'administration@chanakacademy.org';
+  const institutionWebsite = settings?.website               || 'chanakacademy.org';
+  const contactLine = [institutionEmail, institutionWebsite].filter(Boolean).join('  ·  ');
   doc.text(contactLine, W / 2, 31.5, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
@@ -244,7 +250,7 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
   doc.setFontSize(7);
   doc.text(t.subRole, M + 3, y + 37);
   doc.text(`FLDOE #${fldoe} · EIN 36-5154011`, M + 3, y + 41);
-  doc.text('administration@chanakacademy.org · chanakacademy.org', M + 3, y + 45);
+  doc.text(`${institutionEmail}  ·  ${institutionWebsite}`, M + 3, y + 45);
 
   // ── Footer ─────────────────────────────────────────────────────────────────
   doc.setFillColor(...NAVY);
