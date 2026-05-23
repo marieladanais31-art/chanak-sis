@@ -127,8 +127,9 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
     if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
     const payload = buildLetterPayload();
     if (letterId) {
-      const { error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId);
+      const { data: updated, error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId).select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) throw new Error('Sin permiso para guardar. Verifica que tu rol sea admin o director.');
       return letterId;
     } else {
       const { data, error } = await supabase.from('enrollment_letters').insert([payload]).select('id').single();
@@ -165,11 +166,15 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
     try {
       // Auto-guarda si aún no está persistido, luego avanza el estado
       const id = letterId || (await persistLetter());
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('enrollment_letters')
         .update({ status: next, updated_at: new Date().toISOString() })
-        .eq('id', id);
+        .eq('id', id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se actualizó el registro. Verifica tu rol o que la migración de base de datos esté aplicada.');
+      }
       setForm(prev => ({ ...prev, status: next }));
       const desc = next === 'published'
         ? '✅ Carta publicada. Ya visible en el portal de la familia.'

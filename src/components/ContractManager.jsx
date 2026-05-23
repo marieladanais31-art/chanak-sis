@@ -147,8 +147,9 @@ export default function ContractManager({ studentId, studentName, contractId: in
     if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
     const payload = buildPayload();
     if (contractId) {
-      const { error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId);
+      const { data: updated, error } = await supabase.from('enrollment_contracts').update(payload).eq('id', contractId).select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) throw new Error('Sin permiso para guardar. Verifica que tu rol sea admin o director.');
       return contractId;
     } else {
       const { data, error } = await supabase.from('enrollment_contracts').insert([payload]).select('id').single();
@@ -199,11 +200,15 @@ export default function ContractManager({ studentId, studentName, contractId: in
     try {
       // Auto-guarda si aún no está persistido, luego avanza el estado
       const id = contractId || (await persistContract());
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('enrollment_contracts')
         .update({ status: next, updated_at: new Date().toISOString() })
-        .eq('id', id);
+        .eq('id', id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se actualizó el registro. Verifica tu rol o que la migración de base de datos esté aplicada.');
+      }
       setForm(prev => ({ ...prev, status: next }));
       const desc = next === 'sent'
         ? 'Contrato marcado como enviado y disponible en el portal de la familia.'
