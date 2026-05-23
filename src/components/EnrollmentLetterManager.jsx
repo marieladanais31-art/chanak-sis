@@ -162,6 +162,15 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
     }
     const next = STATUS_META[form.status]?.next;
     if (!next) return;
+
+    // Confirmación obligatoria antes de archivar
+    if (next === 'archived') {
+      const ok = window.confirm(
+        '⚠️ ¿Archivar esta carta?\n\nDejará de ser visible para la familia. Para publicar de nuevo tendrás que crear una carta nueva desde la lista de estudiantes.'
+      );
+      if (!ok) return;
+    }
+
     setAdvancing(true);
     try {
       // Auto-guarda si aún no está persistido, luego avanza el estado

@@ -196,6 +196,15 @@ export default function ContractManager({ studentId, studentName, contractId: in
     }
     const next = STATUS_META[form.status]?.next;
     if (!next) return;
+
+    // Confirmación obligatoria antes de archivar
+    if (next === 'archived') {
+      const ok = window.confirm(
+        '⚠️ ¿Archivar este contrato?\n\nDejará de ser visible para la familia. Para publicar de nuevo tendrás que crear un contrato nuevo desde la lista de estudiantes.'
+      );
+      if (!ok) return;
+    }
+
     setAdvancing(true);
     try {
       // Auto-guarda si aún no está persistido, luego avanza el estado
