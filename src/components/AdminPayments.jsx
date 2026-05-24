@@ -221,32 +221,52 @@ export default function AdminPayments() {
 
     setSaving(true);
     try {
-      // Normalizar campos nuevos y legacy para evitar NOT NULL constraint errors
-      const normalizedConcept = form.concept || 'mensualidad';
-      const normalizedAmount  = parseFloat(form.amount) || 0;
-      const isPaidStatus      = ['paid', 'scholarship', 'waived'].includes(form.status);
+      // ── Normalización robusta ─────────────────────────────────────────────────
+      const normalizedConcept = form.concept || form.payment_type || 'mensualidad';
+
+      // Soporta decimales con coma (ej. "150,00") y con punto
+      const normalizedAmount = Number(String(form.amount || 0).replace(',', '.')) || 0;
+
+      // Mapear alias legacy ('beca') al valor canónico de DB
+      const balanceStatusMap = {
+        pending:     'pending',
+        overdue:     'overdue',
+        paid:        'paid',
+        scholarship: 'scholarship',
+        beca:        'scholarship',   // alias visual
+        waived:      'waived',
+        cancelled:   'cancelled',
+        refunded:    'refunded',
+      };
+      const rawStatus            = form.status || 'pending';
+      const normalizedStatus     = balanceStatusMap[rawStatus] || rawStatus;
+      const normalizedBalanceSt  = balanceStatusMap[rawStatus] || rawStatus;
+
+      const isPaidStatus = ['paid', 'scholarship', 'beca', 'waived'].includes(rawStatus);
 
       const payload = {
-        // ── Campos nuevos ──
+        // ── Campos nuevos ──────────────────────────────────────────────────────
         student_id:              form.student_id,
         school_year:             form.school_year,
         concept:                 normalizedConcept,
         amount:                  normalizedAmount,
         currency:                form.currency || 'EUR',
-        status:                  form.status,
+        status:                  normalizedStatus,
         due_date:                form.due_date || null,
         paid_at:                 isPaidStatus
-                                   ? (form.paid_at ? new Date(form.paid_at).toISOString() : null)
+                                   ? (form.paid_at
+                                       ? new Date(form.paid_at).toISOString()
+                                       : new Date().toISOString())
                                    : null,
         stripe_payment_link_url: form.stripe_payment_link_url || null,
         payment_method:          form.payment_method || null,
         notes:                   form.notes || null,
         updated_by:              authUser?.id || null,
-        // ── Columnas legacy NOT NULL ──
+        // ── Columnas legacy NOT NULL ───────────────────────────────────────────
         payment_type:            normalizedConcept,
         program_type:            'off_campus',
         amount_cents:            Math.round(normalizedAmount * 100),
-        balance_status:          form.status || 'pending',
+        balance_status:          normalizedBalanceSt,
         final_amount:            normalizedAmount,
         total_due:               normalizedAmount,
       };
