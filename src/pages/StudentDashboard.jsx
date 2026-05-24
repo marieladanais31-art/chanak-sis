@@ -18,7 +18,7 @@ import {
   UserCheck,
   Bell,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { calculateTrimestralPACES, QUARTERS, getQuarterName, isValidQuarter } from '@/utils/schoolCalendar';
 
 const MISSING_STUDENT_COLUMN_CODES = new Set(['42703', 'PGRST204']);
@@ -598,7 +598,7 @@ export default function StudentDashboard() {
           </h3>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             {subjects.length === 0 ? (
-              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay calificaciones aprobadas.</p>
+              <p className="text-slate-500 text-sm py-6 px-6">Aún no hay materias asignadas.</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
                 {subjects.map((subject) => (
@@ -773,6 +773,15 @@ export default function StudentDashboard() {
           </div>
         </section>
       </main>
+
+      <footer className="max-w-5xl mx-auto px-4 py-6 flex justify-center">
+        <Link
+          to="/ayuda"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl hover:border-slate-300 bg-white transition-colors"
+        >
+          ? Ayuda
+        </Link>
+      </footer>
 
       {reportModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">

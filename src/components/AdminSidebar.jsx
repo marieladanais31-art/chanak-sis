@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -22,6 +22,9 @@ import {
   CalendarDays,
   Bell,
   Link2,
+  HelpCircle,
+  Upload,
+  FileCheck,
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -111,6 +114,7 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="users" icon={Users} label="Usuarios" />
             <NavItem section="boletines" icon={ScrollText} label="Boletines" />
             <NavItem section="asignaciones" icon={Calendar} label="Asignaciones y PACEs" />
+            <NavItem section="carga-masiva-paces" icon={Upload} label="Carga Masiva PACEs" />
             <NavItem section="calendario" icon={CalendarDays} label="Calendario Escolar" />
             <NavItem section="cartas" icon={Mail} label="Cartas" />
             <NavItem section="revision-notas" icon={ClipboardList} label="Revisión de Notas" />
@@ -119,12 +123,8 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="settings" icon={Settings} label="Configuración" />
             <NavItem section="config-institucional" icon={Building} label="Inst. Config." />
 
-            {/* Pagos — módulo deshabilitado temporalmente */}
-            <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-300 cursor-not-allowed mb-1 select-none">
-              <CreditCard className="w-5 h-5 text-slate-200" />
-              <span>Pagos</span>
-              <span className="ml-auto text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-md">Disponible próximamente</span>
-            </div>
+            <NavItem section="pagos-alumnos" icon={CreditCard} label="Pagos" />
+            <NavItem section="matriculas"    icon={FileCheck}  label="Matrículas" />
           </>
         )}
       </nav>
@@ -147,7 +147,20 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
           </div>
         </div>
 
-        <button 
+        <NavLink
+          to="/ayuda"
+          className={({ isActive }) =>
+            `w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm mb-2 ${
+              isActive
+                ? 'bg-teal-50 text-teal-700 border-teal-200'
+                : 'bg-white text-slate-600 hover:bg-teal-50 hover:text-teal-700 border-slate-200 hover:border-teal-200'
+            }`
+          }
+        >
+          <HelpCircle className="w-4 h-4" />
+          <span>Ayuda</span>
+        </NavLink>
+        <button
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl text-sm font-bold transition-all border border-red-200 hover:border-red-600 shadow-sm"
         >

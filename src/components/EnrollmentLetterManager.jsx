@@ -12,24 +12,36 @@ const INPUT    = 'w-full p-2.5 border border-slate-300 rounded-xl outline-none f
 const TEXTAREA = INPUT + ' resize-none';
 const LABEL    = 'block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wider';
 
+/**
+ * Genera el texto de confirmación institucional base.
+ * El admin puede editarlo libremente antes de guardar / enviar.
+ * Nota: los datos institucionales (FLDOE, MSA-CESS, dirección) ya aparecen
+ * en el encabezado del PDF, por lo que el cuerpo debe ser conciso.
+ */
+function buildDefaultConfirmationText(studentName = '[NOMBRE DEL ESTUDIANTE]') {
+  return `Por medio de la presente, Chanak International Academy, institución educativa privada cristiana americana registrada ante el Florida Department of Education (FLDOE #134620) bajo la entidad legal Chanak TrainUp Education, Inc., confirma que el/la estudiante ${studentName} figura como alumno/a activo/a y matriculado/a en nuestro Programa Off-Campus Internacional.\n\nEl Programa Off-Campus es un programa educativo internacional de carácter estructurado, basado en el modelo pedagógico Mastery Learning, que incluye Plan Educativo Individualizado (PEI), seguimiento académico con mentor asignado y acceso a las plataformas SIS y LMS institucionales. Los estudiantes que completen los requisitos son elegibles para la obtención del High School Diploma estadounidense, emitido conforme a los estándares del Estado de Florida y susceptible de apostilla según el Convenio de La Haya de 1961.\n\nLa presente carta se expide a efectos académicos, administrativos e informativos, y puede verificarse contactando con el departamento de administración en administration@chanakacademy.org.`;
+}
+
 const STATUS_META = {
-  draft:     { label: 'Borrador',   color: 'bg-slate-100 text-slate-700', next: 'sent',      nextLabel: 'Enviar a Familia', icon: Send },
-  sent:      { label: 'Enviado',    color: 'bg-amber-100 text-amber-800', next: 'published',  nextLabel: 'Publicar',         icon: Eye },
-  published: { label: 'Publicado',  color: 'bg-green-100 text-green-800', next: 'archived',   nextLabel: 'Archivar',         icon: CheckCircle },
-  archived:  { label: 'Archivado',  color: 'bg-slate-200 text-slate-600', next: null,         nextLabel: null,               icon: Mail },
+  // Flujo simplificado: draft → published directamente.
+  // La carta queda visible en el portal de la familia en cuanto se publica.
+  draft:     { label: 'Borrador',   color: 'bg-slate-100 text-slate-700', next: 'published', nextLabel: 'Publicar para Familia', icon: Eye },
+  sent:      { label: 'Enviado',    color: 'bg-amber-100 text-amber-800', next: 'published', nextLabel: 'Publicar',              icon: Eye },
+  published: { label: 'Publicado',  color: 'bg-green-100 text-green-800', next: 'archived',  nextLabel: 'Archivar',              icon: CheckCircle },
+  archived:  { label: 'Archivado',  color: 'bg-slate-200 text-slate-600', next: null,        nextLabel: null,                   icon: Mail },
 };
 
 const DEFAULT_FORM = {
   school_year:             '2025-2026',
-  program:                 'Dual Diploma / Off-Campus',
+  program:                 'Off-Campus International Program · K–12',
   modality:                'Off-Campus',
   grade_level:             '',
   us_grade_level:          '',
   start_date:              '',
   letter_language:         'es',
   letter_ref:              '',
-  confirmation_text:       '',
-  director_signature_name: '',
+  confirmation_text:       buildDefaultConfirmationText(),
+  director_signature_name: 'Mariela Andrade',
   director_signature_date: '',
   issue_date:              new Date().toISOString().split('T')[0],
   notes:                   '',
@@ -70,17 +82,26 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
       supabase.from('institutional_settings').select('active_school_year').limit(1).single(),
     ]);
     if (studentRes.data || settingsRes.data) {
-      setForm(prev => ({
-        ...prev,
-        school_year:    settingsRes.data?.active_school_year || prev.school_year,
-        grade_level:    studentRes.data?.grade_level    || prev.grade_level,
-        us_grade_level: studentRes.data?.us_grade_level || prev.us_grade_level,
-        modality:       studentRes.data?.modality       || prev.modality,
-        program:        studentRes.data?.program        || prev.program,
-        start_date:     studentRes.data?.enrollment_date|| prev.start_date,
-      }));
+      setForm(prev => {
+        // Re-build confirmation text with real student name if it still has the placeholder
+        const currentText = prev.confirmation_text || '';
+        const needsRename = currentText.includes('[NOMBRE DEL ESTUDIANTE]') && studentName;
+        const updatedText = needsRename
+          ? buildDefaultConfirmationText(studentName)
+          : currentText;
+        return {
+          ...prev,
+          school_year:       settingsRes.data?.active_school_year || prev.school_year,
+          grade_level:       studentRes.data?.grade_level    || prev.grade_level,
+          us_grade_level:    studentRes.data?.us_grade_level || prev.us_grade_level,
+          modality:          studentRes.data?.modality       || prev.modality,
+          program:           'Off-Campus International Program · K–12',
+          start_date:        studentRes.data?.enrollment_date|| prev.start_date,
+          confirmation_text: updatedText,
+        };
+      });
     }
-  }, [studentId, initialId]);
+  }, [studentId, initialId, studentName]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { loadStudentFicha(); }, [loadStudentFicha]);
@@ -88,43 +109,81 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  // ── Sanitiza campos date: '' → null para evitar error PostgreSQL 22007 ──────
+  const LETTER_DATE_FIELDS = ['start_date', 'issue_date', 'director_signature_date'];
+  const buildLetterPayload = () => {
+    const raw = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
+    LETTER_DATE_FIELDS.forEach(f => { if (!raw[f]) raw[f] = null; });
+    return raw;
+  };
+
+  // ── Persiste la carta y devuelve el ID (crea si no existe, actualiza si ya existe) ─
+  const persistLetter = async () => {
+    if (!studentId) throw new Error('Selecciona un estudiante antes de guardar.');
+    const payload = buildLetterPayload();
+    if (letterId) {
+      const { data: updated, error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId).select('id');
+      if (error) throw error;
+      if (!updated || updated.length === 0) throw new Error('Sin permiso para guardar. Verifica que tu rol sea admin o director.');
+      return letterId;
+    } else {
+      const { data, error } = await supabase.from('enrollment_letters').insert([payload]).select('id').single();
+      if (error) throw error;
+      setLetterId(data.id);
+      return data.id;
+    }
+  };
 
   const handleSave = async () => {
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de guardar.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
-      if (letterId) {
-        const { error } = await supabase.from('enrollment_letters').update(payload).eq('id', letterId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await supabase.from('enrollment_letters').insert([payload]).select('id').single();
-        if (error) throw error;
-        setLetterId(data.id);
-      }
-      toast({ title: 'Carta guardada' });
+      await persistLetter();
+      toast({ title: 'Carta guardada correctamente.' });
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error al guardar', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
   };
 
   const handleAdvance = async () => {
-    if (!letterId) {
-      toast({ title: 'Aviso', description: 'Guarda la carta antes de avanzar.', variant: 'destructive' });
+    if (!studentId) {
+      toast({ title: 'Sin estudiante', description: 'Selecciona un estudiante antes de continuar.', variant: 'destructive' });
       return;
     }
     const next = STATUS_META[form.status]?.next;
     if (!next) return;
+
+    // Confirmación obligatoria antes de archivar
+    if (next === 'archived') {
+      const ok = window.confirm(
+        '⚠️ ¿Archivar esta carta?\n\nDejará de ser visible para la familia. Para publicar de nuevo tendrás que crear una carta nueva desde la lista de estudiantes.'
+      );
+      if (!ok) return;
+    }
+
     setAdvancing(true);
     try {
-      const { error } = await supabase
+      // Auto-guarda si aún no está persistido, luego avanza el estado
+      const id = letterId || (await persistLetter());
+      const { data: updated, error } = await supabase
         .from('enrollment_letters')
         .update({ status: next, updated_at: new Date().toISOString() })
-        .eq('id', letterId);
+        .eq('id', id)
+        .select('id');
       if (error) throw error;
+      if (!updated || updated.length === 0) {
+        throw new Error('No se actualizó el registro. Verifica tu rol o que la migración de base de datos esté aplicada.');
+      }
       setForm(prev => ({ ...prev, status: next }));
-      toast({ title: 'Estado actualizado', description: `Carta: ${STATUS_META[next].label}` });
+      const desc = next === 'published'
+        ? '✅ Carta publicada. Ya visible en el portal de la familia.'
+        : `Carta: ${STATUS_META[next]?.label}`;
+      toast({ title: 'Estado actualizado', description: desc });
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     } finally {
@@ -223,17 +282,9 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
           </div>
           <div>
             <label className={LABEL}>Programa</label>
-            <input type="text" value={form.program} onChange={set('program')} disabled={isReadOnly} className={INPUT} placeholder="Dual Diploma / Off-Campus" />
+            <input type="text" value={form.program} onChange={set('program')} disabled={isReadOnly} className={INPUT} placeholder="Off-Campus International Program · K–12" />
           </div>
-          <div>
-            <label className={LABEL}>Modalidad</label>
-            <select value={form.modality} onChange={set('modality')} disabled={isReadOnly} className={INPUT}>
-              <option value="Off-Campus">Off-Campus</option>
-              <option value="Dual Diploma">Dual Diploma</option>
-              <option value="On-Campus">On-Campus</option>
-              <option value="Homeschool">Homeschool</option>
-            </select>
-          </div>
+          {/* Modalidad se guarda en BD para uso interno pero no aparece en la carta oficial */}
           <div>
             <label className={LABEL}>Grado (ES)</label>
             <input type="text" value={form.grade_level} onChange={set('grade_level')} disabled={isReadOnly} className={INPUT} placeholder="9.° Grado" />
@@ -249,10 +300,22 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
         </div>
 
         <div>
-          <label className={LABEL}>
-            {form.letter_language === 'en' ? 'Confirmation Text' : 'Texto de Confirmación'}
-          </label>
-          <textarea rows={8} value={form.confirmation_text} onChange={set('confirmation_text')} disabled={isReadOnly} className={TEXTAREA}
+          <div className="flex items-center justify-between mb-1">
+            <label className={LABEL}>
+              {form.letter_language === 'en' ? 'Confirmation Text' : 'Texto de Confirmación'}
+            </label>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => setForm(prev => ({ ...prev, confirmation_text: buildDefaultConfirmationText(studentName || '[NOMBRE DEL ESTUDIANTE]') }))}
+                className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline underline-offset-2"
+                title="Restaura el texto base institucional (puedes editarlo después)"
+              >
+                ↺ Restaurar texto base
+              </button>
+            )}
+          </div>
+          <textarea rows={10} value={form.confirmation_text} onChange={set('confirmation_text')} disabled={isReadOnly} className={TEXTAREA}
             placeholder="Texto de confirmación institucional…" />
         </div>
 

@@ -9,8 +9,6 @@ export default function HubSelectorPostReset({ selectedHubIds = [], onChange, mu
   const [error, setError] = useState(null);
 
   const fetchHubsDirect = async () => {
-    console.log('🏢 [HubSelectorPostReset] Fetching hubs directly from database (No Cache)...');
-    console.log('🔑 [HubSelectorPostReset] Verifying Publishable Key usage...');
     setLoading(true);
     setError(null);
     try {
@@ -21,26 +19,13 @@ export default function HubSelectorPostReset({ selectedHubIds = [], onChange, mu
         .order('name');
 
       if (fetchError) {
-        if (fetchError.code === '42501') {
-           console.error('❌ [HubSelectorPostReset] RLS Permission Denied (42501): The anonymous or authenticated role lacks SELECT permissions on organizations table.');
-        } else if (fetchError.code === '42703') {
-           console.error('❌ [HubSelectorPostReset] Column Not Found (42703): Verify schema for organizations table (check type, name, location, code columns).');
-        } else {
-           console.error(`❌ [HubSelectorPostReset] Database error (${fetchError.code}): ${fetchError.message}`);
-        }
+        console.error(`[HubSelectorPostReset] Database error (${fetchError.code}): ${fetchError.message}`);
         throw fetchError;
       }
-      
-      const hubNames = data?.map(h => h.name) || [];
-      console.log(`✅ [HubSelectorPostReset] Fetched ${data?.length || 0} hubs successfully.`);
-      console.log(`🏢 [HubSelectorPostReset] Names: ${hubNames.join(', ')}`);
-      
-      const hasEducaFe = hubNames.some(name => name.toLowerCase().includes('educafe'));
-      console.log(`🔍 [HubSelectorPostReset] EducaFe presence verification: ${hasEducaFe ? 'FOUND' : 'MISSING'}`);
-      
+
       setHubs(data || []);
     } catch (err) {
-      console.error('🏢 [HubSelectorPostReset] Error fetching hubs:', err);
+      console.error('[HubSelectorPostReset] Error fetching hubs:', err);
       setError(err.message || 'Unknown network error');
     } finally {
       setLoading(false);

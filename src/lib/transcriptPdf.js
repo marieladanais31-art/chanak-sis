@@ -1,7 +1,8 @@
 /**
- * transcriptPdf.js
- * Genera boletines académicos / academic transcripts en PDF (ES o EN).
- * Usa jsPDF + jspdf-autotable — ya instalados en el proyecto.
+ * transcriptPdf.js  v3 — Diseño de baja tinta
+ * ─────────────────────────────────────────────
+ * Boletines académicos / Academic Transcripts  (ES | EN)
+ * jsPDF + jspdf-autotable
  *
  * HOTFIX 2026-05-24: Rediseño low-ink. Logo/sello/firma activos via preloadImages().
  */
@@ -171,7 +172,33 @@ export function generateTranscriptPDF({
   y = checkBreak(doc, y, settings, lang, 45);
   y = drawSectionLabel(doc, y, t.studentInfo);
 
+  const showCredits = shouldShowOfficialCredits(student, {
+    allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits),
+  });
   const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
+
+  // ── Helpers de paginación ──────────────────────────────────────────────────
+  function newPage() {
+    doc.addPage();
+    // Página de continuación: header sin título ni subtítulo (más compacto)
+    return drawOfficialHeader(doc, settings, { lang });
+  }
+
+  function checkBreak(y, need = 20) {
+    return y + need > SAFE_BOTTOM ? newPage() : y;
+  }
+
+  // ── Página 1: header completo con título y subtítulo ───────────────────────
+  let y = drawOfficialHeader(doc, settings, {
+    docTitle:    t.title,
+    docSubtitle: t.subtitle,
+    lang,
+  });
+
+  // ── Sección: datos del estudiante ──────────────────────────────────────────
+  y = checkBreak(y, 8);
+  y = drawSectionLabel(doc, y, t.studentInfo);
+
   const infoRows = [
     [t.name,       studentName],
     [t.studentId,  student?.id?.substring(0, 8).toUpperCase() || '—'],
@@ -201,7 +228,6 @@ export function generateTranscriptPDF({
   const courseHead = showCredits
     ? [t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]
     : [t.subject, t.block, t.paces, t.finalGrade, t.statusLabel];
-  const emptyCourseRow = courseHead.map(() => '—');
 
   const courseRows = (courses || []).map(c => {
     const row = [
@@ -240,7 +266,11 @@ export function generateTranscriptPDF({
       drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
     },
   });
-  y = doc.lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable.finalY + 10;
+
+  // ── Sección: resumen de créditos / GPA ────────────────────────────────────
+  y = checkBreak(y, 28);
+  y = drawSectionLabel(doc, y, t.creditsSummary);
 
   // ── Resumen de créditos / GPA ───────────────────────────────────────────────
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
@@ -257,7 +287,6 @@ export function generateTranscriptPDF({
     const totalThisYear = creditsSummary
       .filter(cs => cs.school_year === transcript?.school_year)
       .reduce((sum, cs) => sum + (parseFloat(cs.credits_earned) || 0), 0) + totalThisQuarter;
-
     const totalCumul = creditsSummary
       .reduce((sum, cs) => sum + (parseFloat(cs.credits_earned) || 0), 0) + totalThisQuarter;
 
@@ -277,7 +306,6 @@ export function generateTranscriptPDF({
       },
       margin: { left: PDF_MARGIN, right: PDF_MARGIN },
     });
-    y = doc.lastAutoTable.finalY + 8;
   } else {
     y = checkBreak(doc, y, settings, lang, 20);
     autoTable(doc, {
@@ -291,8 +319,8 @@ export function generateTranscriptPDF({
       },
       margin: { left: PDF_MARGIN, right: PDF_MARGIN },
     });
-    y = doc.lastAutoTable.finalY + 8;
   }
+  y = doc.lastAutoTable.finalY + 10;
 
   // ── Observaciones académicas ────────────────────────────────────────────────
   if (transcript?.academic_observations) {
@@ -322,6 +350,17 @@ export function generateTranscriptPDF({
   const drewImage = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 18);
   const nameY = drewImage ? y + 21 : y + 8;
 
+  // Imagen de firma (si existe) o espacio en blanco
+  const sigDrawn = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 44, 16);
+  y += sigDrawn ? 18 : 14;
+
+  // Línea de firma
+  doc.setDrawColor(...PDF_NAVY);
+  doc.setLineWidth(0.3);
+  doc.line(PDF_MARGIN, y, 95, y);
+  y += 5;
+
+  // Nombre del director
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...PDF_NAVY);

@@ -25,6 +25,9 @@ import {
 function pW(doc) { return doc.internal.pageSize.getWidth(); }
 function pH(doc) { return doc.internal.pageSize.getHeight(); }
 
+const M = PDF_MARGIN; // 14 mm
+
+// ── I18N ─────────────────────────────────────────────────────────────────────
 const I18N = {
   es: {
     titlePrefix: 'CONTRATO DE PRESTACIÓN DE SERVICIOS EDUCATIVOS',
@@ -99,8 +102,16 @@ function block(doc, y, text, M = PDF_MARGIN) {
   doc.setFontSize(9);
   doc.setTextColor(...PDF_BLACK);
   const lines = doc.splitTextToSize(text, pW(doc) - M * 2);
-  doc.text(lines, M, y);
-  return y + lines.length * 4.5 + 3;
+  for (const line of lines) {
+    if (y + 5 > pH(doc) - PDF_FOOTER_H - 8) {
+      doc.addPage();
+      drawOfficialHeader(doc, settings, { lang });
+      y = 36;
+    }
+    doc.text(line, M, y);
+    y += 4.5;
+  }
+  return y + 3;
 }
 
 function checkBreak(doc, contract, settings, lang, y, need = 25) {
@@ -126,7 +137,8 @@ export function generateContractPDF({ contract, student, settings, lang: request
   // ── Datos de las partes ──────────────────────────────────────────────────────
   y = secTitle(doc, y, t.parties);
   const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
-  const col2 = pW(doc) / 2 + 4;
+  const col2  = W / 2 + 4;
+  const rowH  = 10;
 
   const pairs = [
     [t.institution, getInstitutionName(settings), 'FLDOE', getInstitutionFldoe(settings)],
@@ -136,7 +148,19 @@ export function generateContractPDF({ contract, student, settings, lang: request
     [t.end,      contract?.end_date  || '—',      t.issue,    contract?.issue_date  || '—'],
   ];
 
-  pairs.forEach(([l1, v1, l2, v2]) => {
+  const tableH = tableRows.length * rowH;
+  doc.setFillColor(...PDF_LGRAY);
+  doc.setDrawColor(...PDF_BORDER);
+  doc.setLineWidth(0.2);
+  doc.rect(M, y, W - M * 2, tableH, 'FD');
+
+  tableRows.forEach(([l1, v1, l2, v2], idx) => {
+    const ry = y + idx * rowH;
+    if (idx > 0) {
+      doc.setDrawColor(...PDF_BORDER);
+      doc.setLineWidth(0.15);
+      doc.line(M, ry, W - M, ry);
+    }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...PDF_GRAY);
@@ -156,7 +180,7 @@ export function generateContractPDF({ contract, student, settings, lang: request
     doc.text(String(v2), col2, y + 4);
     y += 10;
   });
-  y += 3;
+  y += tableH + 8;
 
   // ── Cláusulas ────────────────────────────────────────────────────────────────
   if (contract?.academic_services) {
@@ -202,8 +226,10 @@ export function generateContractPDF({ contract, student, settings, lang: request
   y = secTitle(doc, y, t.signatures);
   y += 4;
 
-  const sigW = (pW(doc) - M * 2 - 10) / 2;
-  const s2X  = M + sigW + 10;
+  const sigW   = (W - M * 2 - 10) / 2;
+  const s2X    = M + sigW + 10;
+  const sigH   = 50;
+  const dirName = contract?.director_signature_name || settings?.director_name || 'Mariela Andrade';
 
   const sigBlocks = [
     {

@@ -6,6 +6,7 @@ import { LogOut, Users, Upload, FileText, Download, Loader2, BookOpen, AlertCirc
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { calculateTrimestralPACES, QUARTERS, isValidQuarter } from '@/utils/schoolCalendar';
+import BulkPaceGradeUpload from '@/components/BulkPaceGradeUpload';
 
 export default function CoordinatorPanel() {
   const { profile, logout } = useAuth();
@@ -17,6 +18,7 @@ export default function CoordinatorPanel() {
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  const [coordTab, setCoordTab] = useState('estudiantes');
   const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [formData, setFormData] = useState({ subject: '', score: '', quarter: QUARTERS.Q1, date: new Date().toISOString().split('T')[0] });
@@ -56,6 +58,7 @@ export default function CoordinatorPanel() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
   const handleLogout = async () => {
@@ -71,7 +74,6 @@ export default function CoordinatorPanel() {
       return;
     }
 
-    console.log(`📝 Guardando nota: Estudiante=${selectedStudentId}, Materia=${formData.subject}, Score=${formData.score}, Trimestre=${formData.quarter}`);
     setSaving(true);
 
     try {
@@ -136,14 +138,32 @@ export default function CoordinatorPanel() {
       </header>
 
       <main className="max-w-6xl mx-auto p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Users className="w-6 h-6 text-indigo-600" />
-          <h2 className="text-2xl font-black text-slate-800">Estudiantes del Hub</h2>
+
+        {/* Tab bar */}
+        <div className="flex gap-1 border-b border-slate-200 mb-6 overflow-x-auto">
+          {[
+            { id: 'estudiantes', label: 'Estudiantes', Icon: Users },
+            { id: 'carga-paces', label: 'Carga de PACEs', Icon: Upload },
+          ].map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setCoordTab(id)}
+              className={`flex items-center gap-2 px-4 py-3 font-bold text-sm border-b-2 whitespace-nowrap transition-colors ${
+                coordTab === id
+                  ? 'border-indigo-600 text-indigo-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
         </div>
 
-        {loading ? (
+        {coordTab === 'carga-paces' && <BulkPaceGradeUpload />}
+
+        {coordTab === 'estudiantes' && loading ? (
           <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-indigo-600" /></div>
-        ) : (
+        ) : coordTab === 'estudiantes' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {students.map(student => {
               const studentGrades = grades.filter(g => g.student_id === student.id);
@@ -199,7 +219,7 @@ export default function CoordinatorPanel() {
               );
             })}
           </div>
-        )}
+        ) : null}
       </main>
 
       {isGradeModalOpen && (

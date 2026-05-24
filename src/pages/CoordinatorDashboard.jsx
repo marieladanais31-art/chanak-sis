@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
-import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList, LogOut, FileCheck2 } from 'lucide-react';
+import { Loader2, GraduationCap, CalendarDays, Save, BookOpen, X, FileText, ScrollText, AlertTriangle, ClipboardList, LogOut, FileCheck2, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import GradeReviewPanel from '@/components/GradeReviewPanel';
 import EvidenceReviewPanel from '@/components/EvidenceReviewPanel';
 import PEIFormFull from '@/components/PEIFormFull';
 import TranscriptGenerator from '@/components/TranscriptGenerator';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
+import BulkPaceGradeUpload from '@/components/BulkPaceGradeUpload';
 import { ACTIVE_SCHOOL_YEAR, BLOCK_ORDER, QUARTERS, dedupeAcademicSubjects, formatSubjectGrade, normalizeBlock } from '@/lib/academicUtils';
 
 export default function CoordinatorDashboard() {
@@ -314,12 +315,13 @@ export default function CoordinatorDashboard() {
       {/* Main tabs */}
       <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1 shadow-sm w-fit">
         {[
-          { id: 'notas',     label: 'Notas',           icon: BookOpen },
-          { id: 'revision',  label: 'Revisar Notas',   icon: ClipboardList },
-          { id: 'evidencias', label: 'Evidencias', icon: FileCheck2 },
-          { id: 'pei',       label: 'PEI / PACEs',       icon: FileText },
-          { id: 'boletines', label: 'Boletines',        icon: ScrollText },
-          { id: 'alertas',   label: 'Alertas',          icon: AlertTriangle },
+          { id: 'notas',        label: 'Notas',           icon: BookOpen },
+          { id: 'carga-masiva', label: 'Carga de PACEs',  icon: Upload },
+          { id: 'revision',     label: 'Revisar Notas',   icon: ClipboardList },
+          { id: 'evidencias',   label: 'Evidencias',      icon: FileCheck2 },
+          { id: 'pei',          label: 'PEI / PACEs',     icon: FileText },
+          { id: 'boletines',    label: 'Boletines',       icon: ScrollText },
+          { id: 'alertas',      label: 'Alertas',         icon: AlertTriangle },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -332,6 +334,11 @@ export default function CoordinatorDashboard() {
           </button>
         ))}
       </div>
+
+      {/* Carga Masiva de PACEs tab */}
+      {mainTab === 'carga-masiva' && (
+        <BulkPaceGradeUpload />
+      )}
 
       {/* Alertas tab */}
       {mainTab === 'alertas' && (
@@ -627,6 +634,14 @@ export default function CoordinatorDashboard() {
         )}
         </>
       )}
+      <footer className="max-w-6xl mx-auto px-4 py-6 flex justify-center">
+        <Link
+          to="/ayuda"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl hover:border-slate-300 bg-white transition-colors"
+        >
+          ? Ayuda
+        </Link>
+      </footer>
     </div>
   );
 }

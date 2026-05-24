@@ -36,6 +36,7 @@ function block(doc, y, text, M = PDF_MARGIN, size = 10) {
   return y + lines.length * (size * 0.52) + 4;
 }
 
+// ─── i18n ─────────────────────────────────────────────────────────────────────
 const I18N = {
   es: {
     title:     'CONFIRMACIÓN DE MATRÍCULA',
@@ -77,6 +78,7 @@ const I18N = {
   },
 };
 
+// ─── Generador principal ──────────────────────────────────────────────────────
 export function generateEnrollmentLetterPDF({ letter, student, settings, lang: requestedLang }) {
   const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const lang = normalizeDocumentLanguage(requestedLang || letter?.letter_language || 'es');

@@ -23,8 +23,11 @@ import {
   Bell,
   CalendarDays,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Archive,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import GradeEntriesManager from '@/components/GradeEntriesManager';
 import ParentEvidencePanel from '@/components/ParentEvidencePanel';
@@ -99,7 +102,8 @@ function ParentCalendarioPanel({ calendar }) {
   if (!calendar) {
     return (
       <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-        Calendario escolar pendiente de configuración.
+        <p className="font-bold text-slate-600 mb-1">Calendario no disponible</p>
+        <p className="text-sm">Aún no hay calendario escolar publicado para el año académico {ACTIVE_SCHOOL_YEAR}.</p>
       </div>
     );
   }
@@ -197,6 +201,18 @@ function ParentBoletinesPanel({ studentChildren }) {
         supabase.from('institutional_settings').select('*').limit(1).single(),
         supabase.from('student_credits_summary').select('*').eq('student_id', tr.student_id),
       ]);
+      const preparedSettings = await preloadImages(settingsRes.data);
+      if (import.meta.env.DEV) {
+        console.warn('[PDF SETTINGS CHECK]', {
+          generator:       'ParentBoletinesPanel',
+          hasLogo:         Boolean(preparedSettings?._logo64),
+          hasSeal:         Boolean(preparedSettings?._seal64),
+          hasSignature:    Boolean(preparedSettings?._signature64),
+          rawLogoUrl:      Boolean(preparedSettings?.logo_url),
+          rawSealUrl:      Boolean(preparedSettings?.seal_url),
+          rawSignatureUrl: Boolean(preparedSettings?.director_signature_url),
+        });
+      }
       generateTranscriptPDF({
         transcript: tr,
         courses: coursesRes.data || [],
@@ -364,6 +380,117 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
   );
 }
 
+/* ── Sección colapsable de documentos históricos ──────────────────────────── */
+function HistoricalDocsSection({
+  peis, contracts, letters, transcripts, studentChildren, downloading,
+  onDownloadPei, onDownloadContract, onDownloadLetter, onDownloadTranscript,
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  // Agrupar todos los docs históricos por año
+  const allDocs = [
+    ...peis.map(d => ({ ...d, _type: 'pei' })),
+    ...contracts.map(d => ({ ...d, _type: 'contract' })),
+    ...letters.map(d => ({ ...d, _type: 'letter' })),
+    ...transcripts.map(d => ({ ...d, _type: 'transcript' })),
+  ];
+  const yearSet = [...new Set(allDocs.map(d => d.school_year).filter(Boolean))].sort().reverse();
+
+  const subtitleFor = (doc) => {
+    if (doc._type === 'pei')        return `PEI publicado · ${doc.school_year}`;
+    if (doc._type === 'contract')   return `Contrato ${doc.status === 'signed' ? 'firmado' : 'enviado'} · ${doc.school_year}`;
+    if (doc._type === 'letter')     return `Carta publicada · ${doc.school_year}${doc.program ? ` · ${doc.program}` : ''}`;
+    if (doc._type === 'transcript') return `Boletín · ${doc.school_year} · ${doc.quarter}`;
+    return doc.school_year;
+  };
+
+  const iconFor = (type) => {
+    if (type === 'contract') return <FileSignature className="w-4 h-4" />;
+    if (type === 'letter')   return <CheckCircle2 className="w-4 h-4" />;
+    return <FileText className="w-4 h-4" />;
+  };
+
+  const downloadFor = (doc, lang) => {
+    if (doc._type === 'pei')        return onDownloadPei(doc, lang);
+    if (doc._type === 'contract')   return onDownloadContract(doc, lang);
+    if (doc._type === 'letter')     return onDownloadLetter(doc, lang);
+    if (doc._type === 'transcript') return onDownloadTranscript(doc, lang);
+  };
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 bg-slate-50 hover:bg-slate-100 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <Archive className="w-5 h-5 text-slate-500" />
+          <span className="font-black text-slate-600 text-sm uppercase tracking-wider">
+            Historial Académico ({yearSet.join(', ')})
+          </span>
+          <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-full text-xs font-bold">
+            {allDocs.length} doc{allDocs.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        {open ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+      </button>
+
+      {open && (
+        <div className="p-5 bg-slate-50 border-t border-slate-200 space-y-4">
+          <p className="text-xs text-slate-500 bg-amber-50 border border-amber-100 rounded-lg px-4 py-2">
+            📁 Estos documentos corresponden a años académicos anteriores. Son de solo lectura y están disponibles para consulta y descarga.
+          </p>
+          {yearSet.map(year => {
+            const yearDocs = allDocs.filter(d => d.school_year === year);
+            return (
+              <div key={year}>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">{year}</p>
+                <div className="space-y-2">
+                  {yearDocs.map(doc => {
+                    const child = studentChildren.find(c => c.id === doc.student_id);
+                    const dlKey = `hist-${doc._type}-${doc.id}`;
+                    return (
+                      <div key={doc.id} className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                            {iconFor(doc._type)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-600 text-sm">
+                              {child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                            </p>
+                            <p className="text-xs text-slate-400">{subtitleFor(doc)}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          {['es', 'en'].map(lang => {
+                            const key = `${dlKey}-${lang}`;
+                            return (
+                              <button
+                                key={lang}
+                                onClick={() => downloadFor(doc, lang)}
+                                disabled={downloading === key}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg font-bold text-xs transition-colors disabled:opacity-50"
+                              >
+                                {downloading === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                                {lang.toUpperCase()}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ParentDocumentosPanel({ studentChildren }) {
   const [peis, setPeis]           = React.useState([]);
   const [contracts, setContracts] = React.useState([]);
@@ -384,7 +511,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         .in('student_id', ids).in('status', ['sent', 'signed', 'published']),
       supabase.from('enrollment_letters')
         .select('*')
-        .in('student_id', ids).eq('status', 'published'),
+        .in('student_id', ids).in('status', ['sent', 'published']),
       supabase.from('transcript_records')
         .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
         .in('student_id', ids).eq('status', 'published'),
@@ -462,11 +589,13 @@ function ParentDocumentosPanel({ studentChildren }) {
     setDownloading(`tr-${transcript.id}-${lang}`);
     try {
       const child = studentChildren.find(c => c.id === transcript.student_id);
-      const [coursesRes, settingsRes, creditsRes] = await Promise.all([
+      const [coursesRes, rawSettingsRes, creditsRes] = await Promise.all([
         supabase.from('transcript_courses').select('*').eq('transcript_id', transcript.id),
         supabase.from('institutional_settings').select('*').limit(1).single(),
         supabase.from('student_credits_summary').select('*').eq('student_id', transcript.student_id),
       ]);
+      // preloadImages: converts logo_url, seal_url, director_signature_url to base64
+      const settings = await preloadImages(rawSettingsRes.data || null);
       generateTranscriptPDF({
         transcript,
         courses: coursesRes.data || [],
@@ -484,16 +613,30 @@ function ParentDocumentosPanel({ studentChildren }) {
 
   if (loading) return <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-[#193D6D]" /></div>;
 
-  const allEmpty = peis.length === 0 && contracts.length === 0 && letters.length === 0 && transcripts.length === 0;
+  // ── Separar documentos por año activo / histórico ─────────────────────────
+  const activePeis        = peis.filter(d => !d.school_year || d.school_year === ACTIVE_SCHOOL_YEAR);
+  const activeCons        = contracts.filter(d => !d.school_year || d.school_year === ACTIVE_SCHOOL_YEAR);
+  const activeLetters     = letters.filter(d => !d.school_year || d.school_year === ACTIVE_SCHOOL_YEAR);
+  const activeTranscripts = transcripts.filter(d => !d.school_year || d.school_year === ACTIVE_SCHOOL_YEAR);
 
-  const DocRow = ({ icon, title, subtitle, onDownload, dlKey }) => (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between">
+  const histPeis        = peis.filter(d => d.school_year && d.school_year !== ACTIVE_SCHOOL_YEAR);
+  const histCons        = contracts.filter(d => d.school_year && d.school_year !== ACTIVE_SCHOOL_YEAR);
+  const histLetters     = letters.filter(d => d.school_year && d.school_year !== ACTIVE_SCHOOL_YEAR);
+  const histTranscripts = transcripts.filter(d => d.school_year && d.school_year !== ACTIVE_SCHOOL_YEAR);
+  const hasHistory      = histPeis.length + histCons.length + histLetters.length + histTranscripts.length > 0;
+
+  const allActiveEmpty = activePeis.length === 0 && activeCons.length === 0 &&
+    activeLetters.length === 0 && activeTranscripts.length === 0;
+  const allEmpty = allActiveEmpty && !hasHistory;
+
+  const DocRow = ({ icon, title, subtitle, onDownload, dlKey, muted = false }) => (
+    <div className={`rounded-xl border shadow-sm p-4 flex items-center justify-between ${muted ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-200'}`}>
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#193D6D]/10 flex items-center justify-center text-[#193D6D] shrink-0">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${muted ? 'bg-slate-200 text-slate-500' : 'bg-[#193D6D]/10 text-[#193D6D]'}`}>
           {icon}
         </div>
         <div>
-          <p className="font-bold text-slate-800">{title}</p>
+          <p className={`font-bold ${muted ? 'text-slate-600' : 'text-slate-800'}`}>{title}</p>
           <p className="text-xs text-slate-500">{subtitle}</p>
         </div>
       </div>
@@ -505,7 +648,11 @@ function ParentDocumentosPanel({ studentChildren }) {
               key={lang}
               onClick={() => onDownload(lang)}
               disabled={downloading === key}
-              className="flex items-center gap-2 px-4 py-2 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50 transition-colors ${
+                muted
+                  ? 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                  : 'bg-[#193D6D] hover:bg-[#142d5a] text-white'
+              }`}
             >
               {downloading === key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               PDF {lang.toUpperCase()}
@@ -516,112 +663,94 @@ function ParentDocumentosPanel({ studentChildren }) {
     </div>
   );
 
+  const DocSection = ({ icon, title, docs, muted, renderSubtitle, downloadFn, keyPrefix }) =>
+    docs.length > 0 ? (
+      <div>
+        <h3 className={`font-black mb-3 flex items-center gap-2 ${muted ? 'text-slate-500 text-sm' : 'text-slate-800'}`}>
+          {icon} {title}
+        </h3>
+        <div className="space-y-3">
+          {docs.map(doc => {
+            const child = studentChildren.find(c => c.id === doc.student_id);
+            return (
+              <DocRow
+                key={doc.id}
+                icon={icon}
+                muted={muted}
+                title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+                subtitle={renderSubtitle(doc)}
+                onDownload={(lang) => downloadFn(doc, lang)}
+                dlKey={`${keyPrefix}-${doc.id}`}
+              />
+            );
+          })}
+        </div>
+      </div>
+    ) : null;
+
   return (
     <div className="space-y-6">
-      {allEmpty && (
-        <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 space-y-2">
-          <p>Aún no hay PEI publicado.</p>
-          <p>Aún no hay boletines publicados.</p>
-          <p>No hay documentos disponibles todavía.</p>
+      {/* ── Año activo ───────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 mb-1">
+        <span className="px-3 py-1 bg-[#193D6D] text-white rounded-full text-xs font-black uppercase tracking-wider">
+          {ACTIVE_SCHOOL_YEAR} — Año activo
+        </span>
+      </div>
+
+      {allActiveEmpty && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 text-slate-500 space-y-1">
+          <p>Aún no hay documentos publicados para el año activo {ACTIVE_SCHOOL_YEAR}.</p>
+          <p className="text-xs">Los documentos aparecen aquí cuando el coordinador los publica.</p>
         </div>
       )}
 
-      {peis.length === 0 && !allEmpty && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">Aún no hay PEI publicado.</div>
-      )}
+      <DocSection
+        icon={<FileText className="w-5 h-5 text-[#193D6D]" />}
+        title="Plan Educativo Individualizado (PEI)"
+        docs={activePeis}
+        renderSubtitle={d => `PEI publicado · ${d.school_year}`}
+        downloadFn={handleDownloadPei}
+        keyPrefix="pei"
+      />
+      <DocSection
+        icon={<FileSignature className="w-5 h-5 text-blue-600" />}
+        title="Contratos de Matrícula"
+        docs={activeCons}
+        renderSubtitle={d => `Contrato ${d.status === 'signed' ? 'firmado' : 'enviado'} · ${d.school_year}`}
+        downloadFn={handleDownloadContract}
+        keyPrefix="con"
+      />
+      <DocSection
+        icon={<CheckCircle2 className="w-5 h-5 text-teal-600" />}
+        title="Cartas de Confirmación de Matrícula"
+        docs={activeLetters}
+        renderSubtitle={d => `Carta publicada · ${d.school_year}${d.program ? ` · ${d.program}` : ''}`}
+        downloadFn={handleDownloadLetter}
+        keyPrefix="let"
+      />
+      <DocSection
+        icon={<FileText className="w-5 h-5 text-blue-600" />}
+        title="Boletines / Transcripts publicados"
+        docs={activeTranscripts}
+        renderSubtitle={d => `Boletín publicado · ${d.school_year} · ${d.quarter}`}
+        downloadFn={handleDownloadTranscript}
+        keyPrefix="tr"
+      />
 
-      {peis.length > 0 && (
-        <div>
-          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-[#193D6D]" /> Plan Educativo Individualizado (PEI)
-          </h3>
-          <div className="space-y-3">
-            {peis.map(pei => {
-              const child = studentChildren.find(c => c.id === pei.student_id);
-              return (
-                <DocRow key={pei.id}
-                  icon={<FileText className="w-5 h-5" />}
-                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`PEI publicado · ${pei.school_year}`}
-                  onDownload={(lang) => handleDownloadPei(pei, lang)}
-                  dlKey={`pei-${pei.id}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {contracts.length > 0 && (
-        <div>
-          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
-            <FileSignature className="w-5 h-5 text-blue-600" /> Contratos de Matrícula
-          </h3>
-          <div className="space-y-3">
-            {contracts.map(con => {
-              const child = studentChildren.find(c => c.id === con.student_id);
-              return (
-                <DocRow key={con.id}
-                  icon={<FileSignature className="w-5 h-5" />}
-                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`Contrato ${con.status === 'signed' ? 'firmado' : 'enviado'} · ${con.school_year}`}
-                  onDownload={(lang) => handleDownloadContract(con, lang)}
-                  dlKey={`con-${con.id}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {letters.length > 0 && (
-        <div>
-          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-teal-600" /> Cartas de Confirmación de Matrícula
-          </h3>
-          <div className="space-y-3">
-            {letters.map(letter => {
-              const child = studentChildren.find(c => c.id === letter.student_id);
-              return (
-                <DocRow key={letter.id}
-                  icon={<CheckCircle2 className="w-5 h-5" />}
-                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`Carta publicada · ${letter.school_year}${letter.program ? ` · ${letter.program}` : ''}`}
-                  onDownload={(lang) => handleDownloadLetter(letter, lang)}
-                  dlKey={`let-${letter.id}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {letters.length === 0 && !allEmpty && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">No hay documentos disponibles todavía.</div>
-      )}
-
-      {transcripts.length > 0 ? (
-        <div>
-          <h3 className="font-black text-slate-800 mb-3 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" /> Boletines / Transcripts publicados
-          </h3>
-          <div className="space-y-3">
-            {transcripts.map(transcript => {
-              const child = studentChildren.find(c => c.id === transcript.student_id);
-              return (
-                <DocRow key={transcript.id}
-                  icon={<FileText className="w-5 h-5" />}
-                  title={child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
-                  subtitle={`Boletín publicado · ${transcript.school_year} · ${transcript.quarter}`}
-                  onDownload={(lang) => handleDownloadTranscript(transcript, lang)}
-                  dlKey={`tr-${transcript.id}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-      ) : !allEmpty && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 text-slate-500">Aún no hay boletines publicados.</div>
+      {/* ── Historial académico ───────────────────────────────────────────────── */}
+      {hasHistory && (
+        <HistoricalDocsSection
+          peis={histPeis}
+          contracts={histCons}
+          letters={histLetters}
+          transcripts={histTranscripts}
+          studentChildren={studentChildren}
+          downloading={downloading}
+          onDownloadPei={handleDownloadPei}
+          onDownloadContract={handleDownloadContract}
+          onDownloadLetter={handleDownloadLetter}
+          onDownloadTranscript={handleDownloadTranscript}
+        />
       )}
     </div>
   );
@@ -671,6 +800,7 @@ export default function ParentDashboard() {
     }
 
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, navigate]);
 
   const hasOfficialPei = (childId) => officialDocuments.peis.some((d) => d.student_id === childId);
@@ -709,9 +839,23 @@ export default function ParentDashboard() {
 
   const getStudentStats = (childId) => {
     const childPaces = paceProjection.filter((p) => p.student_id === childId);
-    const completed = childPaces.filter((p) => p.status === 'completed').length;
+    // 'evaluated' o nota asignada = completado
+    const completed = childPaces.filter(
+      (p) => p.status === 'evaluated' || p.grade_obtained != null
+    ).length;
     const planned = childPaces.length;
-    const overdue = childPaces.filter((p) => p.status === 'overdue').length;
+    // 'delayed' o fecha vencida y no evaluado = atrasado
+    const today = new Date().toISOString().slice(0, 10);
+    const overdue = childPaces.filter(
+      (p) =>
+        p.status === 'delayed' ||
+        (
+          p.status !== 'evaluated' &&
+          p.grade_obtained == null &&
+          (p.due_date || p.completion_date) &&
+          (p.due_date || p.completion_date) < today
+        )
+    ).length;
 
     return {
       completed,
@@ -804,7 +948,7 @@ export default function ParentDashboard() {
         supabase
           .from('academic_calendars')
           .select('academic_year, start_date, end_date, q1_start_date, q1_end_date, q2_start_date, q2_end_date, q3_start_date, q3_end_date, break_notes, status')
-          .eq('status', 'active')
+          .eq('academic_year', ACTIVE_SCHOOL_YEAR)
           .maybeSingle(),
       ]);
 
@@ -861,7 +1005,7 @@ export default function ParentDashboard() {
         supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
         supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
         supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed', 'published']),
-        supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
+        supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'published']),
         supabase.from('transcript_records').select('id, student_id, school_year, quarter, status').in('student_id', studentIds).eq('status', 'published'),
       ]);
 
@@ -944,6 +1088,9 @@ export default function ParentDashboard() {
               <h1 className="text-slate-800 font-bold text-sm leading-tight uppercase tracking-wide">
                 Portal de Padres
               </h1>
+              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                Año académico <span className="text-[#193D6D] font-black">{ACTIVE_SCHOOL_YEAR}</span>
+              </p>
             </div>
           </div>
 
@@ -962,87 +1109,28 @@ export default function ParentDashboard() {
 
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="flex gap-6">
-            <button
-              onClick={() => setActiveTab('children')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'children'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Users className="w-5 h-5" /> 👥 Mis Hijos
-            </button>
-            <button
-              onClick={() => setActiveTab('documentos')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'documentos'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Scale className="w-5 h-5" /> 📋 Documentos Oficiales
-            </button>
-            <button
-              onClick={() => setActiveTab('boletines')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'boletines'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              📄 Boletines
-            </button>
-            <button
-              onClick={() => setActiveTab('documentos')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'documentos'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              📁 Documentos
-            </button>
-            <button
-              onClick={() => setActiveTab('evidencias')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'evidencias'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <FileUp className="w-4 h-4" /> Evidencias
-            </button>
-            <button
-              onClick={() => setActiveTab('recursos')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'recursos'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Link2 className="w-4 h-4" /> Recursos
-            </button>
-            <button
-              onClick={() => setActiveTab('alertas')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'alertas'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Bell className="w-4 h-4" /> Alertas
-            </button>
-            <button
-              onClick={() => setActiveTab('calendario')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'calendario'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <CalendarDays className="w-4 h-4" /> Calendario
-            </button>
+          <div className="flex gap-1 overflow-x-auto scrollbar-none">
+            {[
+              { id: 'children',   label: '👥 Mis Hijos',         Icon: Users      },
+              { id: 'documentos', label: '📋 Documentos',         Icon: Scale      },
+              { id: 'boletines',  label: '📄 Boletines',          Icon: null       },
+              { id: 'evidencias', label: 'Evidencias',            Icon: FileUp     },
+              { id: 'recursos',   label: 'Recursos',              Icon: Link2      },
+              { id: 'alertas',    label: 'Alertas',               Icon: Bell       },
+              { id: 'calendario', label: 'Calendario',            Icon: CalendarDays },
+            ].map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`py-4 px-3 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                  activeTab === id
+                    ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {Icon && <Icon className="w-4 h-4" />} {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -1191,6 +1279,64 @@ export default function ParentDashboard() {
                           )}
                         </div>
                       </div>
+
+                      {/* ── PACEs proyectadas por trimestre ── */}
+                      {(() => {
+                        const childPaces = paceProjection.filter((p) => p.student_id === child.id);
+                        const today = new Date().toISOString().slice(0, 10);
+                        if (childPaces.length === 0) {
+                          return (
+                            <div className="px-6 pb-4">
+                              <p className="text-xs text-slate-400 italic">
+                                Aún no hay PACEs proyectadas para este estudiante. El equipo académico las configurará próximamente.
+                              </p>
+                            </div>
+                          );
+                        }
+                        const byQuarter = { Q1: [], Q2: [], Q3: [] };
+                        childPaces.forEach(p => {
+                          const q = p.quarter;
+                          if (byQuarter[q]) byQuarter[q].push(p);
+                        });
+                        return (
+                          <div className="px-6 pb-4 space-y-3">
+                            {['Q1','Q2','Q3'].map(q => {
+                              const paces = byQuarter[q];
+                              if (!paces.length) return null;
+                              return (
+                                <div key={q}>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Trimestre {q.replace('Q','')}</p>
+                                  <div className="space-y-1">
+                                    {paces.map(p => {
+                                      const isCompleted = p.status === 'evaluated' || p.grade_obtained != null;
+                                      const dueDate     = p.due_date || p.completion_date;
+                                      const isOverdue   = !isCompleted && dueDate && dueDate < today;
+                                      return (
+                                        <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                                          <span className="text-slate-700 truncate flex-1">
+                                            <span className="font-bold">{p.subject_name || '—'}</span>
+                                            {p.pace_number ? ` · #${p.pace_number}` : ''}
+                                          </span>
+                                          {dueDate && (
+                                            <span className="text-slate-400 shrink-0">{new Date(dueDate).toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}</span>
+                                          )}
+                                          <span className={`shrink-0 px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                                            isCompleted ? 'bg-emerald-100 text-emerald-700' :
+                                            isOverdue   ? 'bg-red-100 text-red-700' :
+                                                          'bg-slate-100 text-slate-500'
+                                          }`}>
+                                            {isCompleted ? '✓ Listo' : isOverdue ? '⚠ Atrasado' : 'Pendiente'}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
@@ -1377,6 +1523,16 @@ export default function ParentDashboard() {
           </>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-4 py-6 flex justify-center">
+        <Link
+          to="/ayuda"
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl hover:border-slate-300 bg-white transition-colors"
+        >
+          ? Ayuda
+        </Link>
+      </footer>
 
       {/* Payment Details Modal */}
       {isPaymentModalOpen && (() => {

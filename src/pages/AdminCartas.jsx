@@ -42,7 +42,11 @@ export default function AdminCartas() {
 
   useEffect(() => { load(); }, [load]);
 
-  const getLetter = (studentId) => letters.find(l => l.student_id === studentId);
+  // Prioriza cartas no archivadas. Si todas están archivadas, devuelve la más reciente.
+  const getLetter = (studentId) => {
+    const all = letters.filter(l => l.student_id === studentId);
+    return all.find(l => l.status !== 'archived') || all[0] || null;
+  };
 
   const open = (student, letter) => setSelected({
     studentId: student.id,
@@ -105,17 +109,28 @@ export default function AdminCartas() {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <button
-                        onClick={() => open(student, letter)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border ${
-                          letter
-                            ? 'bg-teal-50 text-teal-700 hover:bg-teal-100 border-teal-200'
-                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
-                        }`}
-                      >
-                        {letter ? <Eye className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                        {letter ? 'Ver / Editar' : 'Crear carta'}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Si existe carta (archivada o no): botón ver */}
+                        {letter && (
+                          <button
+                            onClick={() => open(student, letter)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            {letter.status === 'archived' ? 'Ver archivada' : 'Ver / Editar'}
+                          </button>
+                        )}
+                        {/* Si no existe carta O está archivada: botón crear nueva */}
+                        {(!letter || letter.status === 'archived') && (
+                          <button
+                            onClick={() => open(student, null)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border bg-teal-50 text-teal-700 hover:bg-teal-100 border-teal-200"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Crear carta
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

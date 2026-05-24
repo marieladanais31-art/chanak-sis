@@ -43,7 +43,11 @@ export default function AdminContratos() {
 
   useEffect(() => { load(); }, [load]);
 
-  const getContract = (studentId) => contracts.find(c => c.student_id === studentId);
+  // Prioriza contratos no archivados. Si todos están archivados, devuelve el más reciente.
+  const getContract = (studentId) => {
+    const all = contracts.filter(c => c.student_id === studentId);
+    return all.find(c => c.status !== 'archived') || all[0] || null;
+  };
 
   const open = (student, contract) => setSelected({
     studentId: student.id,
@@ -106,17 +110,28 @@ export default function AdminContratos() {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <button
-                        onClick={() => open(student, con)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border ${
-                          con
-                            ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200'
-                            : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
-                        }`}
-                      >
-                        {con ? <Eye className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                        {con ? 'Ver / Editar' : 'Crear contrato'}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {/* Si existe contrato (archivado o no): botón ver */}
+                        {con && (
+                          <button
+                            onClick={() => open(student, con)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            {con.status === 'archived' ? 'Ver archivado' : 'Ver / Editar'}
+                          </button>
+                        )}
+                        {/* Si no existe contrato O está archivado: botón crear nuevo */}
+                        {(!con || con.status === 'archived') && (
+                          <button
+                            onClick={() => open(student, null)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors border bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Crear contrato
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
