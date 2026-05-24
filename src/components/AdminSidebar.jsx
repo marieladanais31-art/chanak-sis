@@ -24,6 +24,7 @@ import {
   Link2,
   HelpCircle,
   Upload,
+  FileCheck,
 } from 'lucide-react';
 import { useAuth, ROLES } from '@/context/AuthContext';
 
@@ -122,12 +123,8 @@ export default function AdminSidebar({ currentSection, onNavigate }) {
             <NavItem section="settings" icon={Settings} label="Configuración" />
             <NavItem section="config-institucional" icon={Building} label="Inst. Config." />
 
-            {/* Pagos — módulo deshabilitado temporalmente */}
-            <div className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold text-slate-300 cursor-not-allowed mb-1 select-none">
-              <CreditCard className="w-5 h-5 text-slate-200" />
-              <span>Pagos</span>
-              <span className="ml-auto text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-md">Disponible próximamente</span>
-            </div>
+            <NavItem section="pagos-alumnos" icon={CreditCard} label="Pagos" />
+            <NavItem section="matriculas"    icon={FileCheck}  label="Matrículas" />
           </>
         )}
       </nav>

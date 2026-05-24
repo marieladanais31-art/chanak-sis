@@ -41,11 +41,18 @@ const DEFAULT_FORM = {
   student_code:               '',
   grade_level:                '',
   coordinator_name:           '',
-  // Portada
+  // Portada — Sección 01: datos del estudiante
   student_age:                '',
   student_dob:                '',
+  student_nationality:        '',
+  student_city:               '',
+  student_country:            'España',
+  student_email:              '',
   enrollment_date:            '',
   last_grade_completed:       '',
+  mentor_assigned:            '',
+  parent_phone:               '',
+  parent_relation:            'Padre/Madre',
   modality:                   'Off-Campus',
   curriculum_base:            'A.C.E. (Accelerated Christian Education)',
   institutional_intro:        '',
@@ -68,21 +75,27 @@ const DEFAULT_FORM = {
   follow_up_strategies:       '',
   follow_up_resources:        '',
   required_adaptations:       '',
-  // Familia
+  // Familia — Sección 09: acuerdos + Sección 08: materiales
   family_message:             '',
   institutional_conclusion:   '',
   coordinator_observations:   '',
+  materials_text:             '',
+  operational_agreements:     '',
   // Vocacional (modelo Daniel)
   vocational_interest:        '',
   strategic_objectives:       '',
   graduation_pathway_notes:   '',
   pace_status_notes:          '',
   vocational_plan:            '',
-  // Firmas
+  // Firmas — Sección 10
   director_signature_name:    '',
   director_signature_date:    '',
   parent_signature_name:      '',
   parent_signature_date:      '',
+  student_signature_name:     '',
+  student_signature_date:     '',
+  version:                    '1.0',
+  next_review_date:           '',
   status:                     'draft',
 };
 
@@ -351,6 +364,49 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                 <input type="text" value={form.coordinator_name} onChange={set('coordinator_name')} disabled={isReadOnly} className={INPUT} placeholder="Nombre del coordinador" />
               </div>
             </div>
+
+            {/* Sección 01 extra: contacto, mentor, responsable */}
+            <div className="pt-2 pb-1">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Datos de Contacto y Responsable Legal</p>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className={LABEL}>Nacionalidad</label>
+                <input type="text" value={form.student_nationality} onChange={set('student_nationality')} disabled={isReadOnly} className={INPUT} placeholder="Española / Venezolana…" />
+              </div>
+              <div>
+                <label className={LABEL}>Ciudad</label>
+                <input type="text" value={form.student_city} onChange={set('student_city')} disabled={isReadOnly} className={INPUT} placeholder="Jávea, Alicante" />
+              </div>
+              <div>
+                <label className={LABEL}>País de Residencia</label>
+                <input type="text" value={form.student_country} onChange={set('student_country')} disabled={isReadOnly} className={INPUT} placeholder="España" />
+              </div>
+              <div>
+                <label className={LABEL}>Correo Electrónico del Estudiante</label>
+                <input type="email" value={form.student_email} onChange={set('student_email')} disabled={isReadOnly} className={INPUT} placeholder="estudiante@ejemplo.com" />
+              </div>
+              <div>
+                <label className={LABEL}>Mentor / Tutor Asignado</label>
+                <input type="text" value={form.mentor_assigned} onChange={set('mentor_assigned')} disabled={isReadOnly} className={INPUT} placeholder="Nombre del mentor" />
+              </div>
+              <div>
+                <label className={LABEL}>Teléfono del Responsable Legal</label>
+                <input type="text" value={form.parent_phone} onChange={set('parent_phone')} disabled={isReadOnly} className={INPUT} placeholder="+34 600 000 000" />
+              </div>
+              <div>
+                <label className={LABEL}>Relación con el Estudiante</label>
+                <select value={form.parent_relation} onChange={set('parent_relation')} disabled={isReadOnly} className={INPUT}>
+                  <option>Padre/Madre</option>
+                  <option>Padre</option>
+                  <option>Madre</option>
+                  <option>Tutor Legal</option>
+                  <option>Abuelo/a</option>
+                  <option>Otro</option>
+                </select>
+              </div>
+            </div>
+
             <div>
               <label className={LABEL}>Texto Introductorio Institucional</label>
               <textarea rows={4} value={form.institutional_intro || INTRO_DEFAULT} onChange={set('institutional_intro')} disabled={isReadOnly} className={TEXTAREA}
@@ -614,6 +670,26 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
               <textarea rows={4} value={form.coordinator_observations} onChange={set('coordinator_observations')} disabled={isReadOnly} className={TEXTAREA}
                 placeholder="Notas internas del coordinador: contexto familiar, acuerdos verbales, situaciones especiales, seguimiento requerido." />
             </div>
+
+            {/* Sección 08 — Materiales y Recursos */}
+            <div className="pt-2 pb-1 border-t border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">08 · Materiales y Recursos Asignados</p>
+            </div>
+            <div>
+              <label className={LABEL}>Módulos y Materiales Asignados</label>
+              <textarea rows={5} value={form.materials_text} onChange={set('materials_text')} disabled={isReadOnly} className={TEXTAREA}
+                placeholder={'Módulos físicos:\n• Kit A.C.E. — Mathematics 1081-1090\n• Kit A.C.E. — English 1076-1085\n• Diccionario Bíblico\n\nAccesos digitales:\n• Portal LMS Chanak\n• SIS — Student Information System\n• Carpeta Google Drive asignada\n• NotebookLM / GPT Life Skills'} />
+            </div>
+
+            {/* Sección 09 — Acuerdos Operativos */}
+            <div className="pt-2 pb-1 border-t border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">09 · Acuerdos Operativos</p>
+            </div>
+            <div>
+              <label className={LABEL}>La Familia / Supervisor se Compromete a</label>
+              <textarea rows={6} value={form.operational_agreements} onChange={set('operational_agreements')} disabled={isReadOnly} className={TEXTAREA}
+                placeholder={'• Supervisar el trabajo académico diario del estudiante.\n• Custodiar las claves de corrección y los PACE Tests.\n• Registrar calificaciones en el SIS con exactitud.\n• Subir evidencias de Life Skills y Extensión Local.\n• Asistir a reuniones mensuales con el mentor.\n• Comunicar incidencias académicas o familiares.'} />
+            </div>
           </div>
         )}
 
@@ -645,6 +721,32 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                 <div>
                   <label className={LABEL}>Fecha de Firma</label>
                   <input type="date" value={form.parent_signature_date} onChange={set('parent_signature_date')} disabled={isReadOnly} className={INPUT} />
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-xl p-5 space-y-3">
+                <h4 className="font-bold text-slate-700 border-b border-slate-100 pb-2">Estudiante</h4>
+                <div>
+                  <label className={LABEL}>Nombre del Estudiante</label>
+                  <input type="text" value={form.student_signature_name} onChange={set('student_signature_name')} disabled={isReadOnly} className={INPUT} placeholder="Nombre completo" />
+                </div>
+                <div>
+                  <label className={LABEL}>Fecha de Firma</label>
+                  <input type="date" value={form.student_signature_date} onChange={set('student_signature_date')} disabled={isReadOnly} className={INPUT} />
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-xl p-5 space-y-3">
+                <h4 className="font-bold text-slate-700 border-b border-slate-100 pb-2">Control de Versión</h4>
+                <div>
+                  <label className={LABEL}>Versión del PEI</label>
+                  <input type="text" value={form.version} onChange={set('version')} disabled={isReadOnly} className={INPUT} placeholder="1.0" />
+                </div>
+                <div>
+                  <label className={LABEL}>Fecha de Aprobación</label>
+                  <input type="date" value={form.issue_date} onChange={set('issue_date')} disabled={isReadOnly} className={INPUT} />
+                </div>
+                <div>
+                  <label className={LABEL}>Próxima Revisión</label>
+                  <input type="date" value={form.next_review_date} onChange={set('next_review_date')} disabled={isReadOnly} className={INPUT} />
                 </div>
               </div>
             </div>
