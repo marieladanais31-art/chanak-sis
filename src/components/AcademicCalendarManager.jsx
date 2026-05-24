@@ -98,21 +98,6 @@ export default function AcademicCalendarManager() {
     }
     setSaving(true);
 
-    // ── DIAGNÓSTICO pre-save (mismo patrón que InstitutionalSettings) ─────────
-    try {
-      const { data: { user: authUser }, error: authErr } = await supabase.auth.getUser();
-      console.group('[CalendarManager] Pre-save diagnostics');
-      console.log('auth.uid()      :', authUser?.id ?? '(no session)');
-      console.log('auth error      :', authErr?.message ?? 'none');
-      console.log('profile.id      :', authProfile?.id ?? '(undefined)');
-      console.log('profile.user_id :', authProfile?.user_id ?? '(undefined)');
-      console.log('profile.role    :', authProfile?.role ?? '(undefined)');
-      console.log('editing (id)    :', editing ?? '(INSERT / upsert)');
-      console.log('academic_year   :', form.academic_year);
-      console.groupEnd();
-    } catch (_) { /* no bloquear el guardado si el diagnóstico falla */ }
-    // ─────────────────────────────────────────────────────────────────────────
-
     const payload = {
       academic_year:  form.academic_year,
       start_date:     form.start_date     || null,
