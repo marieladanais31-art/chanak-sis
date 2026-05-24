@@ -1,4 +1,9 @@
-export const ACTIVE_SCHOOL_YEAR = '2025-2026';
+/** Año académico activo (en curso) */
+export const ACTIVE_SCHOOL_YEAR    = '2025-2026';
+/** Año académico histórico anterior */
+export const HISTORICAL_SCHOOL_YEAR = '2024-2025';
+/** Año académico futuro próximo (sin datos automáticos) */
+export const FUTURE_SCHOOL_YEAR    = '2026-2027';
 
 export const ACE_MASTERY_MINIMUM = 80;
 export const PACE_PASSING_SCORE = ACE_MASTERY_MINIMUM;
