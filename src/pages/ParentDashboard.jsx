@@ -217,7 +217,7 @@ function ParentBoletinesPanel({ studentChildren }) {
         transcript: tr,
         courses: coursesRes.data || [],
         student: child || { id: tr.student_id },
-        settings: await preloadImages(settingsRes.data),
+        settings: preparedSettings,
         creditsSummary: creditsRes.data || [],
         lang: tr.language || 'es',
       });
@@ -595,12 +595,12 @@ function ParentDocumentosPanel({ studentChildren }) {
         supabase.from('student_credits_summary').select('*').eq('student_id', transcript.student_id),
       ]);
       // preloadImages: converts logo_url, seal_url, director_signature_url to base64
-      const settings = await preloadImages(rawSettingsRes.data || null);
+      const preparedSettings = await preloadImages(rawSettingsRes.data || null);
       generateTranscriptPDF({
         transcript,
         courses: coursesRes.data || [],
         student: child || { id: transcript.student_id },
-        settings: await preloadImages(settingsRes.data),
+        settings: preparedSettings,
         creditsSummary: creditsRes.data || [],
         lang,
       });

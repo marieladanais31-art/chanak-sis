@@ -15,6 +15,7 @@ import {
   drawOfficialHeader,
   drawSectionLabel,
   getInstitutionFldoe,
+  getInstitutionInfo,
   PDF_BLACK,
   PDF_BLUE,
   PDF_BORDER,
@@ -49,7 +50,7 @@ const T = {
     coursework:     'Materias Cursadas',
     subject:        'Materia',
     block:          'Bloque',
-    paces:          'PACEs',
+    paces:          'Evaluaciones',
     credits:        'Créditos',
     finalGrade:     'Nota Final',
     statusLabel:    'Estado',
@@ -83,7 +84,7 @@ const T = {
     coursework:     'Coursework',
     subject:        'Subject',
     block:          'Block',
-    paces:          'PACEs',
+    paces:          'Assessments',
     credits:        'Credits',
     finalGrade:     'Final Grade',
     statusLabel:    'Status',
@@ -202,7 +203,9 @@ export function generateTranscriptPDF({
   const courseHead = showCredits
     ? [t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]
     : [t.subject, t.block, t.paces, t.finalGrade, t.statusLabel];
-  const emptyCourseRow = courseHead.map(() => '—');
+  const noGradesMsg = lang === 'en'
+    ? 'No grades published for this quarter.'
+    : 'No hay calificaciones publicadas para este trimestre.';
 
   const courseRows = (courses || []).map(c => {
     const row = [
@@ -218,30 +221,39 @@ export function generateTranscriptPDF({
     return row;
   });
 
-  autoTable(doc, {
-    startY: y,
-    head: [courseHead],
-    body: courseRows.length > 0 ? courseRows : [emptyCourseRow],
-    styles:          { fontSize: 8, cellPadding: 2, textColor: [...PDF_BLACK] },
-    headStyles:      { fillColor: [...PDF_BLUE], textColor: [...PDF_NAVY], fontStyle: 'bold', lineColor: [...PDF_BORDER], lineWidth: 0.2 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    tableLineColor:  [...PDF_BORDER],
-    tableLineWidth:  0.15,
-    columnStyles: {
-      0: { cellWidth: showCredits ? 52 : 62 },
-      1: { cellWidth: showCredits ? 34 : 40 },
-      2: { cellWidth: 22 },
-      3: { cellWidth: showCredits ? 16 : 28, halign: 'center' },
-      4: { cellWidth: showCredits ? 22 : 34, halign: 'center' },
-      5: { cellWidth: showCredits ? 25 : undefined, halign: 'center' },
-    },
-    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
-    didDrawPage: () => {
-      // Re-draw header on continuation pages created by autoTable
-      drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
-    },
-  });
-  y = doc.lastAutoTable.finalY + 10;
+  if (courseRows.length === 0) {
+    // Mensaje discreto — sin fila falsa con guiones
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(...PDF_GRAY);
+    doc.text(noGradesMsg, PDF_MARGIN, y + 6);
+    y += 14;
+  } else {
+    autoTable(doc, {
+      startY: y,
+      head: [courseHead],
+      body: courseRows,
+      styles:             { fontSize: 8, cellPadding: 2, textColor: [...PDF_BLACK] },
+      headStyles:         { fillColor: [...PDF_BLUE], textColor: [...PDF_NAVY], fontStyle: 'bold', lineColor: [...PDF_BORDER], lineWidth: 0.2 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      tableLineColor:     [...PDF_BORDER],
+      tableLineWidth:     0.15,
+      columnStyles: {
+        0: { cellWidth: showCredits ? 52 : 62 },
+        1: { cellWidth: showCredits ? 34 : 40 },
+        2: { cellWidth: 22 },
+        3: { cellWidth: showCredits ? 16 : 28, halign: 'center' },
+        4: { cellWidth: showCredits ? 22 : 34, halign: 'center' },
+        5: { cellWidth: showCredits ? 25 : undefined, halign: 'center' },
+      },
+      margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+      didDrawPage: () => {
+        drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
+      },
+    });
+    y = doc.lastAutoTable.finalY;
+  }
+  y += 10;
 
   // ── Resumen de créditos / GPA ───────────────────────────────────────────────
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
@@ -326,15 +338,16 @@ export function generateTranscriptPDF({
   y += 4;
 
   // Nombre y cargo del director
+  const instInfo = getInstitutionInfo(settings);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...PDF_NAVY);
-  doc.text(settings?.director_name || t.directorTitle, PDF_MARGIN, y);
+  doc.text(instInfo.directorName, PDF_MARGIN, y);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_GRAY);
-  doc.text(settings?.director_title || t.directorTitle, PDF_MARGIN, y + 5);
+  doc.text(instInfo.directorTitle, PDF_MARGIN, y + 5);
 
   // Fecha de emisión y referencia (lado derecho)
   doc.setFontSize(7.5);
@@ -343,10 +356,7 @@ export function generateTranscriptPDF({
   doc.text(`${t.refNumber}: ${refNumber}`, pW(doc) - PDF_MARGIN, y + 5, { align: 'right' });
 
   // ── Footer en todas las páginas ─────────────────────────────────────────────
-  applyOfficialFooterAllPages(doc, settings, {
-    pageLabel: t.page,
-    buildMark: true,
-  });
+  applyOfficialFooterAllPages(doc, settings, { pageLabel: t.page });
 
   // ── Guardar ─────────────────────────────────────────────────────────────────
   const studentLastName = (student?.last_name || 'student').replace(/\s+/g, '_');

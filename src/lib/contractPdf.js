@@ -11,8 +11,7 @@ import {
   addInstitutionSignature,
   applyOfficialFooterAllPages,
   drawOfficialHeader,
-  getInstitutionFldoe,
-  getInstitutionName,
+  getInstitutionInfo,
   normalizeDocumentLanguage,
   PDF_BLACK,
   PDF_BORDER,
@@ -119,8 +118,8 @@ function checkBreak(doc, contract, settings, lang, y, need = 25) {
 export function generateContractPDF({ contract, student, settings, lang: requestedLang }) {
   const lang = normalizeDocumentLanguage(requestedLang || contract?.language || 'es');
   const t    = I18N[lang] || I18N.es;
+  const info = getInstitutionInfo(settings);
   const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const M    = PDF_MARGIN;
 
   // ── Encabezado institucional (low-ink) ──────────────────────────────────────
   const docSubtitle = `${t.titlePrefix} — ${contract?.program || contract?.modality || ''}`.trim();
@@ -132,7 +131,7 @@ export function generateContractPDF({ contract, student, settings, lang: request
   const col2 = pW(doc) / 2 + 4;
 
   const pairs = [
-    [t.institution, getInstitutionName(settings), 'FLDOE', getInstitutionFldoe(settings)],
+    [t.institution, info.name, 'FLDOE', info.fldoe],
     [t.student,  studentName,                     t.year,     contract?.school_year || settings?.active_school_year || '—'],
     [t.family,   contract?.tutor_legal || contract?.family_name || '—', t.program, contract?.program || contract?.modality || '—'],
     [t.modality, contract?.modality || '—',       t.start,    contract?.start_date || '—'],
@@ -211,7 +210,7 @@ export function generateContractPDF({ contract, student, settings, lang: request
   const sigBlocks = [
     {
       x:    M,
-      name: contract?.director_signature_name || settings?.director_name || '______________________',
+      name: contract?.director_signature_name || info.directorName,
       date: contract?.director_signature_date,
       role: t.dirRole,
       drawImg: true,   // ← imagen de firma del director
@@ -234,32 +233,39 @@ export function generateContractPDF({ contract, student, settings, lang: request
     // Imagen de firma del director (si existe y corresponde)
     let imgDrawn = false;
     if (sig.drawImg) {
-      imgDrawn = addInstitutionSignature(doc, settings, sig.x + 3, y + 2, 38, 16);
+      imgDrawn = addInstitutionSignature(doc, settings, sig.x + 3, y + 3, 38, 16);
     }
 
-    const rowOffset = imgDrawn ? 20 : 10;
+    const lineY = imgDrawn ? y + 22 : y + 14;
 
-    // Línea de firma
+    // Línea horizontal de firma
+    doc.setDrawColor(...PDF_BORDER);
+    doc.setLineWidth(0.25);
+    doc.line(sig.x + 3, lineY, sig.x + sigW - 3, lineY);
+
+    // Si NO hay imagen: etiqueta "Firma:" discreta antes de la línea
+    if (!imgDrawn) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...PDF_GRAY);
+      doc.text(t.signLabel, sig.x + 3, lineY - 2);
+    }
+
+    // Nombre
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...PDF_GRAY);
-    doc.text(`${t.signLabel}`, sig.x + 3, y + rowOffset);
-    doc.setDrawColor(...PDF_BORDER);
-    doc.setLineWidth(0.2);
-    doc.line(sig.x + 16, y + rowOffset, sig.x + sigW - 3, y + rowOffset);
-
-    // Nombre
-    doc.text(`${t.nameLabel}`, sig.x + 3, y + rowOffset + 8);
+    doc.text(t.nameLabel, sig.x + 3, lineY + 7);
     doc.setTextColor(...PDF_BLACK);
-    doc.text(sig.name, sig.x + 19, y + rowOffset + 8);
+    doc.text(sig.name, sig.x + 19, lineY + 7);
 
     // Fecha
     doc.setTextColor(...PDF_GRAY);
-    doc.text(`${t.dateLabel}`, sig.x + 3, y + rowOffset + 16);
+    doc.text(t.dateLabel, sig.x + 3, lineY + 14);
     doc.setTextColor(...PDF_BLACK);
-    doc.text(String(sig.date || '______________________'), sig.x + 17, y + rowOffset + 16);
+    doc.text(String(sig.date || '______________________'), sig.x + 17, lineY + 14);
 
-    // Rol (centrado, negrita)
+    // Rol (centrado, negrita, abajo del bloque)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
     doc.setTextColor(...PDF_NAVY);
@@ -267,10 +273,7 @@ export function generateContractPDF({ contract, student, settings, lang: request
   });
 
   // ── Footer en todas las páginas ─────────────────────────────────────────────
-  applyOfficialFooterAllPages(doc, settings, {
-    pageLabel: t.page,
-    buildMark: true,
-  });
+  applyOfficialFooterAllPages(doc, settings, { pageLabel: t.page });
 
   // ── Guardar ─────────────────────────────────────────────────────────────────
   const ln   = student?.last_name?.toLowerCase().replace(/\s+/g, '_') || 'estudiante';
