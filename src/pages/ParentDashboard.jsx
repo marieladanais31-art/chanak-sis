@@ -867,20 +867,18 @@ export default function ParentDashboard() {
 
   const getChildPaymentsStatus = (childId) => {
     const childPayments = paymentStatus.filter((p) => p.student_id === childId);
-    const totalDue = childPayments.reduce((sum, p) => sum + Number(p.due_amount || 0), 0);
-    const totalPaid = childPayments.reduce((sum, p) => sum + Number(p.paid_amount || 0), 0);
-    const saldoPendiente = Math.max(0, totalDue - totalPaid);
-    const hasPendingBalance = childPayments.some(
-      (p) =>
-        ['pending', 'overdue'].includes((p.status || '').toLowerCase()) ||
-        Number(p.due_amount || 0) > Number(p.paid_amount || 0)
+    // Solo pending/overdue cuentan como saldo adeudado
+    const pendingPayments = childPayments.filter(
+      (p) => ['pending', 'overdue'].includes((p.status || '').toLowerCase())
     );
+    const saldoPendiente = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const hasPendingBalance = pendingPayments.length > 0;
 
     return {
-      totalDue,
-      totalPaid,
       saldoPendiente,
-      hasPendingBalance
+      hasPendingBalance,
+      pendingPayments,
+      childPayments,
     };
   };
 
@@ -1001,7 +999,7 @@ export default function ParentDashboard() {
 
       // Tablas complementarias — errores no fatales. Documentos oficiales vienen de módulos Admin.
       const [paymentStatusRes, paceProjectionRes, officialPeisRes, officialContractsRes, officialLettersRes, officialTranscriptsRes] = await Promise.all([
-        supabase.from('payment_status').select('id, student_id, billing_month, due_date, due_amount, paid_amount, status').in('student_id', studentIds),
+        supabase.from('student_payments').select('id, student_id, school_year, concept, payment_type, amount, currency, status, balance_status, due_date, paid_at, stripe_payment_link_url, notes').in('student_id', studentIds),
         supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
         supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
         supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed', 'published']),
@@ -1272,7 +1270,7 @@ export default function ParentDashboard() {
                                   🚨 Pagos Pendientes
                                 </p>
                                 <p className="text-xs font-bold text-red-600 mt-0.5">
-                                  Saldo total adeudado: ${saldoPendiente.toFixed(2)}
+                                  Saldo pendiente: {saldoPendiente.toFixed(2)} €
                                 </p>
                               </div>
                             </div>
@@ -1537,48 +1535,118 @@ export default function ParentDashboard() {
       {/* Payment Details Modal */}
       {isPaymentModalOpen && (() => {
         const child = children.find((c) => c.id === selectedChildId);
-        const { hasPendingBalance, saldoPendiente } = getChildPaymentsStatus(selectedChildId);
+        const { hasPendingBalance, saldoPendiente, childPayments } = getChildPaymentsStatus(selectedChildId);
+
+        const CONCEPT_LABELS_MODAL = {
+          matricula:              'Matrícula',
+          paquete_curricular:     'Paquete curricular',
+          mensualidad:            'Mensualidad',
+          materiales_adicionales: 'Materiales adicionales',
+          evaluacion:             'Evaluación',
+          otro:                   'Otro',
+        };
+        const STATUS_BADGE = {
+          pending:     'bg-amber-100 text-amber-700',
+          overdue:     'bg-red-100 text-red-700',
+          paid:        'bg-emerald-100 text-emerald-700',
+          scholarship: 'bg-blue-100 text-blue-700',
+          waived:      'bg-purple-100 text-purple-700',
+          cancelled:   'bg-slate-100 text-slate-500',
+          refunded:    'bg-orange-100 text-orange-700',
+        };
+        const STATUS_LABEL = {
+          pending:     'Pendiente',
+          overdue:     'Vencido',
+          paid:        'Pagado',
+          scholarship: 'Beca',
+          waived:      'Exonerado',
+          cancelled:   'Cancelado',
+          refunded:    'Reembolsado',
+        };
 
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-              <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
                 <h3 className="font-black text-lg flex items-center gap-2 text-slate-800">
-                  <CreditCard className="w-5 h-5 text-emerald-600" /> Detalles Financieros
+                  <CreditCard className="w-5 h-5 text-emerald-600" /> Pagos — {child?.first_name} {child?.last_name}
                 </h3>
                 <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
-                <p className="font-bold text-slate-800 text-center mb-4">
-                  {child?.first_name} {child?.last_name}
-                </p>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                  <div className="flex justify-between items-center pt-1">
-                    <span className="text-slate-800 font-black">Saldo Pendiente:</span>
-                    <span className={`text-2xl font-black ${hasPendingBalance ? 'text-red-600' : 'text-emerald-600'}`}>
-                      ${saldoPendiente.toFixed(2)}
-                    </span>
-                  </div>
+              <div className="p-5 overflow-y-auto flex-1 space-y-3">
+                {/* Saldo pendiente total */}
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-700 font-bold text-sm">Saldo pendiente total:</span>
+                  <span className={`text-xl font-black ${hasPendingBalance ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {saldoPendiente.toFixed(2)} €
+                  </span>
                 </div>
 
-                {hasPendingBalance ? (
-                  <div className="flex items-center justify-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 font-bold text-sm rounded-lg">
-                    <AlertCircle className="w-5 h-5" />
-                    🚨 ACCIÓN REQUERIDA: Realizar Pago
-                  </div>
+                {/* Lista de pagos */}
+                {childPayments.length === 0 ? (
+                  <p className="text-slate-400 text-sm italic text-center py-4">
+                    No hay pagos registrados para este estudiante.
+                  </p>
                 ) : (
-                  <div className="flex items-center justify-center gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm rounded-lg">
-                    <CheckCircle2 className="w-5 h-5" />
-                    Pagos al día. ¡Gracias!
+                  <div className="space-y-2">
+                    {childPayments.map((p) => {
+                      const status       = (p.status || 'pending').toLowerCase();
+                      const isPending    = ['pending', 'overdue'].includes(status);
+                      const isExempt     = ['scholarship', 'waived'].includes(status);
+                      const concept      = p.concept || p.payment_type || 'otro';
+                      const conceptLabel = CONCEPT_LABELS_MODAL[concept] || concept;
+                      const amount       = Number(p.amount || 0);
+                      const currency     = p.currency || 'EUR';
+                      const currencySymbol = currency === 'EUR' ? '€' : '$';
+
+                      return (
+                        <div key={p.id} className="border border-slate-200 rounded-xl p-4 bg-white space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-800 text-sm">{conceptLabel}</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[status] || 'bg-slate-100 text-slate-600'}`}>
+                              {STATUS_LABEL[status] || status}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-sm text-slate-600">
+                            <span className="font-black text-slate-800">{amount.toFixed(2)} {currencySymbol}</span>
+                            {p.due_date && (
+                              <span className="text-xs text-slate-400">
+                                Vence: {new Date(p.due_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Acciones según estado */}
+                          {isPending && p.stripe_payment_link_url ? (
+                            <a
+                              href={p.stripe_payment_link_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-colors"
+                            >
+                              <ExternalLink className="w-4 h-4" /> Pagar ahora
+                            </a>
+                          ) : isPending ? (
+                            <p className="text-xs text-slate-500 italic bg-slate-50 rounded-lg p-2 text-center">
+                              Pago pendiente. Contacte con administración para recibir el enlace de pago.
+                            </p>
+                          ) : isExempt ? (
+                            <p className="text-xs font-bold text-blue-600 bg-blue-50 rounded-lg p-2 text-center">
+                              Beca / Exonerado
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
                 <button
                   onClick={() => setIsPaymentModalOpen(false)}
                   className="w-full py-2.5 bg-slate-200 text-slate-800 rounded-lg font-bold hover:bg-slate-300 transition-colors shadow-sm"
