@@ -102,7 +102,8 @@ function ParentCalendarioPanel({ calendar }) {
   if (!calendar) {
     return (
       <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-500">
-        Calendario escolar pendiente de configuración.
+        <p className="font-bold text-slate-600 mb-1">Calendario no disponible</p>
+        <p className="text-sm">Aún no hay calendario escolar publicado para el año académico {ACTIVE_SCHOOL_YEAR}.</p>
       </div>
     );
   }
@@ -935,7 +936,7 @@ export default function ParentDashboard() {
         supabase
           .from('academic_calendars')
           .select('academic_year, start_date, end_date, q1_start_date, q1_end_date, q2_start_date, q2_end_date, q3_start_date, q3_end_date, break_notes, status')
-          .eq('status', 'active')
+          .eq('academic_year', ACTIVE_SCHOOL_YEAR)
           .maybeSingle(),
       ]);
 
