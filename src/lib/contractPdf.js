@@ -1,25 +1,43 @@
+/**
+ * contractPdf.js  v3 — Diseño de baja tinta
+ * ──────────────────────────────────────────
+ * Acuerdo de Prestación de Servicios Educativos / Educational Services Agreement  (ES | EN)
+ * jsPDF
+ *
+ * Diseño:
+ * - Sin bloques sólidos azules grandes.
+ * - Header: drawOfficialHeader (logo + texto + línea fina).
+ * - Secciones: drawSectionLabel (acento 2 mm + negrita + línea fina).
+ * - Tabla de partes: fondo gris muy claro, bordes grises finos.
+ * - Firmas: cajas con borde fino, sin barra de título navy.
+ * - Footer: línea fina + texto gris pequeño.
+ * - Paginación completa: Pág. X / Y.
+ */
+
 import jsPDF from 'jspdf';
 import {
-  addInstitutionLogo,
-  addInstitutionSeal,
+  addInstitutionSignature,
+  drawOfficialHeader,
+  drawSectionLabel,
+  applyOfficialFooterAllPages,
   getInstitutionAddress,
   getInstitutionEmail,
   getInstitutionFldoe,
   getInstitutionName,
   normalizeDocumentLanguage,
+  PDF_NAVY,
+  PDF_GRAY,
+  PDF_LGRAY,
+  PDF_BLACK,
+  PDF_BORDER,
+  PDF_FOOTER_H,
+  PDF_MARGIN,
 } from '@/lib/officialDocuments';
-
-const NAVY  = [25, 61, 109];
-const TEAL  = [32, 178, 170];
-const GRAY  = [100, 116, 139];
-const LGRAY = [248, 250, 252];
-const WHITE = [255, 255, 255];
-const BLACK = [30, 30, 30];
-
-const OFFICIAL_FOOTER = 'Chanak TrainUp Education, Inc. d/b/a Chanak International Academy · 4883 NW 107th Path, Doral, FL 33178, USA · administration@chanakacademy.org · chanakacademy.org · FLDOE #134620 · EIN 36-5154011 · 501(c)(3) Nonprofit';
 
 function pW(doc) { return doc.internal.pageSize.getWidth(); }
 function pH(doc) { return doc.internal.pageSize.getHeight(); }
+
+const M = PDF_MARGIN; // 14 mm
 
 // ── I18N ─────────────────────────────────────────────────────────────────────
 const I18N = {
@@ -85,8 +103,7 @@ const I18N = {
   },
 };
 
-// ── Default clause texts — WITHOUT embedded clause numbers ────────────────────
-// Section headings (I, II, III…) are rendered by the PDF generator itself.
+// ── Cláusulas por defecto ─────────────────────────────────────────────────────
 const DEFAULT_CLAUSES_ES = {
   legal_notice:
     'El presente acuerdo regula la prestación de servicios educativos internacionales por parte de Chanak International Academy, institución registrada en el Estado de Florida, EE.UU. Este documento no sustituye la escolarización obligatoria en el país de residencia del estudiante. La familia conserva plena responsabilidad legal sobre el cumplimiento de las obligaciones educativas locales aplicables.',
@@ -133,83 +150,18 @@ const DEFAULT_CLAUSES_EN = {
     "This agreement is governed by the laws of the State of Florida, USA. Disputes shall be submitted to the courts of Miami-Dade County, Florida, without prejudice to consumer rights under Spanish law.\n\nEither party may terminate this agreement with thirty (30) days' written notice. CHANAK may terminate immediately in the event of serious breach or academic evidence falsification. Termination does not entitle either party to a refund of amounts already paid, except in the event of breach solely attributable to CHANAK.",
 };
 
-// ── Header ────────────────────────────────────────────────────────────────────
-function header(doc, contract, settings, lang = 'es') {
-  const t = I18N[lang] || I18N.es;
-  const W = pW(doc);
-
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, W, 42, 'F');
-  doc.setTextColor(...WHITE);
-
-  // Logo (left) + Seal (right)
-  addInstitutionLogo(doc, settings, 10, 5, 21, 21);
-  addInstitutionSeal(doc, settings, W - 32, 5, 22, 22);
-
-  // Center text block
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text('CHANAK INTERNATIONAL ACADEMY', W / 2, 11, { align: 'center' });
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text(`FLDOE #${getInstitutionFldoe(settings)} · EIN 36-5154011`, W / 2, 17, { align: 'center' });
-  doc.text('MSA-CESS Official Candidate · 501(c)(3) Nonprofit · Florida, USA', W / 2, 21, { align: 'center' });
-  const contactLine = [
-    getInstitutionEmail(settings) || 'administration@chanakacademy.org',
-    settings?.website || 'chanakacademy.org',
-    getInstitutionAddress(settings),
-  ].filter(Boolean).join('  ·  ');
-  doc.text(contactLine, W / 2, 25, { align: 'center' });
-
-  // Document title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  const schoolYear = contract?.school_year || settings?.active_school_year || '';
-  const titleLine = `${t.titlePrefix} — ${t.subtitle}${schoolYear ? ' · ' + schoolYear : ''}`;
-  doc.text(titleLine, W / 2, 34, { align: 'center' });
-
-  // Teal divider
-  doc.setFillColor(...TEAL);
-  doc.rect(0, 41, W, 1.5, 'F');
-  doc.setTextColor(...BLACK);
-}
-
-// ── Section title bar (navy fill) ─────────────────────────────────────────────
-function secTitle(doc, y, txt) {
-  const W = pW(doc);
-  doc.setFillColor(...NAVY);
-  doc.rect(14, y, W - 28, 7.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...WHITE);
-  doc.text(txt, 17, y + 5.5);
-  doc.setTextColor(...BLACK);
-  return y + 11;
-}
-
-// ── Text block (renders without page-break awareness) ─────────────────────────
-function block(doc, y, text, M = 14) {
+// ── Bloque de texto paginado ──────────────────────────────────────────────────
+function blockPaged(doc, y, text, contract, settings, lang) {
   if (!text) return y;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.setTextColor(...BLACK);
-  const lines = doc.splitTextToSize(text, pW(doc) - M * 2);
-  doc.text(lines, M, y);
-  return y + lines.length * 4.5 + 3;
-}
-
-// ── Text block with inline page-break handling ────────────────────────────────
-function blockPaged(doc, y, text, contract, settings, lang, M = 14) {
-  if (!text) return y;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...BLACK);
+  doc.setTextColor(...PDF_BLACK);
   const lines = doc.splitTextToSize(text, pW(doc) - M * 2);
   for (const line of lines) {
-    if (y + 5 > pH(doc) - 22) {
+    if (y + 5 > pH(doc) - PDF_FOOTER_H - 8) {
       doc.addPage();
-      header(doc, contract, settings, lang);
-      y = 50;
+      drawOfficialHeader(doc, settings, { lang });
+      y = 36;
     }
     doc.text(line, M, y);
     y += 4.5;
@@ -217,127 +169,93 @@ function blockPaged(doc, y, text, contract, settings, lang, M = 14) {
   return y + 3;
 }
 
-// ── Page-break check ──────────────────────────────────────────────────────────
+// ── Control de salto de página ────────────────────────────────────────────────
 function checkBreak(doc, y, contract, settings, lang, need = 35) {
-  if (y + need > pH(doc) - 22) {
+  if (y + need > pH(doc) - PDF_FOOTER_H - 8) {
     doc.addPage();
-    header(doc, contract, settings, lang);
-    return 50;
+    drawOfficialHeader(doc, settings, { lang });
+    return 36;
   }
   return y;
 }
 
-// ── Footer with navy bar + split text ─────────────────────────────────────────
-function addPageNumbers(doc, settings, lang = 'es') {
-  const n = doc.getNumberOfPages();
-  const W = pW(doc);
-  const H = pH(doc);
-  const t = I18N[lang] || I18N.es;
-  for (let i = 1; i <= n; i++) {
-    doc.setPage(i);
-    // Navy bar
-    doc.setFillColor(...NAVY);
-    doc.rect(0, H - 12, W, 12, 'F');
-    // Footer text
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(5.5);
-    doc.setTextColor(...WHITE);
-    const footerStr = settings?.document_footer || OFFICIAL_FOOTER;
-    const footerLines = doc.splitTextToSize(footerStr, W - 24);
-    if (footerLines.length >= 2) {
-      doc.text(footerLines[0], W / 2, H - 9.5, { align: 'center' });
-      doc.text(footerLines.slice(1).join(' '), W / 2, H - 5.5, { align: 'center' });
-    } else {
-      doc.text(footerLines[0] || footerStr, W / 2, H - 6.5, { align: 'center' });
-    }
-    // Page number (right-aligned)
-    doc.setFontSize(6.5);
-    doc.text(`${t.page} ${i} / ${n}`, W - 5, H - 5.5, { align: 'right' });
-  }
-}
-
-// ── Main export ───────────────────────────────────────────────────────────────
+// ── Generador principal ───────────────────────────────────────────────────────
 export function generateContractPDF({ contract, student, settings, lang: requestedLang }) {
-  const lang = normalizeDocumentLanguage(requestedLang || contract?.language || 'es');
-  const t = I18N[lang] || I18N.es;
+  const lang     = normalizeDocumentLanguage(requestedLang || contract?.language || 'es');
+  const t        = I18N[lang] || I18N.es;
   const defaults = lang === 'en' ? DEFAULT_CLAUSES_EN : DEFAULT_CLAUSES_ES;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const M = 14;
-  const W = pW(doc);
+  const doc      = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W        = pW(doc);
+  const fldoe    = getInstitutionFldoe(settings);
 
-  header(doc, contract, settings, lang);
-  let y = 50;
+  // ── Header de primera página (con título + subtítulo) ─────────────────────
+  const schoolYear  = contract?.school_year || settings?.active_school_year || '';
+  const docTitle    = `${t.titlePrefix}${schoolYear ? ' — ' + schoolYear : ''}`;
+  let y = drawOfficialHeader(doc, settings, { docTitle, docSubtitle: t.subtitle, lang });
 
   // ── Aviso Legal ────────────────────────────────────────────────────────────
   const legalNoticeText = contract?.legal_notice || defaults.legal_notice;
   if (legalNoticeText) {
-    y = secTitle(doc, y, t.legalNotice);
+    y = checkBreak(doc, y, contract, settings, lang, 20);
+    y = drawSectionLabel(doc, y, t.legalNotice);
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8.5);
-    doc.setTextColor(...GRAY);
+    doc.setTextColor(...PDF_GRAY);
     const legalLines = doc.splitTextToSize(legalNoticeText, W - M * 2);
     doc.text(legalLines, M, y);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...BLACK);
+    doc.setTextColor(...PDF_BLACK);
     y += legalLines.length * 4.2 + 6;
   }
 
-  // ── Partes contratantes (data table) ──────────────────────────────────────
+  // ── Partes contratantes (tabla de datos) ──────────────────────────────────
   y = checkBreak(doc, y, contract, settings, lang, 60);
-  // Navy header bar
-  doc.setFillColor(...NAVY);
-  doc.rect(M, y, W - M * 2, 7.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...WHITE);
-  doc.text(t.parties, M + 3, y + 5.5);
-  doc.setTextColor(...BLACK);
-  y += 9;
+  y = drawSectionLabel(doc, y, t.parties);
 
   const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
-  const col2 = W / 2 + 4;
+  const col2  = W / 2 + 4;
+  const rowH  = 10;
 
   const tableRows = [
-    [t.institution, getInstitutionName(settings), 'FLDOE / EIN', `${getInstitutionFldoe(settings)} / 36-5154011`],
-    [t.student, studentName, t.year, contract?.school_year || settings?.active_school_year || '—'],
-    [t.family, contract?.tutor_legal || contract?.family_name || '—', t.program, contract?.program || 'Off-Campus'],
-    [t.start, contract?.start_date || '—', t.end, contract?.end_date || '—'],
-    [t.issue, contract?.issue_date || new Date().toISOString().split('T')[0], '', ''],
+    [t.institution, getInstitutionName(settings), 'FLDOE / EIN', `${fldoe} / 36-5154011`],
+    [t.student,  studentName,                     t.year,    contract?.school_year || settings?.active_school_year || '—'],
+    [t.family,   contract?.tutor_legal || contract?.family_name || '—', t.program, contract?.program || 'Off-Campus'],
+    [t.start,    contract?.start_date || '—',     t.end,     contract?.end_date || '—'],
+    [t.issue,    contract?.issue_date || new Date().toISOString().split('T')[0], '', ''],
   ];
 
-  const rowH = 10;
   const tableH = tableRows.length * rowH;
-  // Light gray background
-  doc.setFillColor(...LGRAY);
-  doc.setDrawColor(220, 226, 234);
+  doc.setFillColor(...PDF_LGRAY);
+  doc.setDrawColor(...PDF_BORDER);
   doc.setLineWidth(0.2);
   doc.rect(M, y, W - M * 2, tableH, 'FD');
 
   tableRows.forEach(([l1, v1, l2, v2], idx) => {
     const ry = y + idx * rowH;
-    // Row divider (skip first)
     if (idx > 0) {
-      doc.setDrawColor(220, 226, 234);
-      doc.setLineWidth(0.2);
+      doc.setDrawColor(...PDF_BORDER);
+      doc.setLineWidth(0.15);
       doc.line(M, ry, W - M, ry);
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6.5);
-    doc.setTextColor(...GRAY);
+    doc.setTextColor(...PDF_GRAY);
     doc.text((l1 || '') + ':', M + 2, ry + 3.5);
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(...BLACK);
+    doc.setTextColor(...PDF_BLACK);
     const v1Lines = doc.splitTextToSize(String(v1 || '—'), W / 2 - M - 6);
     doc.text(v1Lines, M + 2, ry + 7.5);
+
     if (l2) {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(6.5);
-      doc.setTextColor(...GRAY);
+      doc.setTextColor(...PDF_GRAY);
       doc.text(l2 + ':', col2, ry + 3.5);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
-      doc.setTextColor(...BLACK);
+      doc.setTextColor(...PDF_BLACK);
       doc.text(String(v2 || '—'), col2, ry + 7.5);
     }
   });
@@ -347,25 +265,25 @@ export function generateContractPDF({ contract, student, settings, lang: request
   const academicServices = contract?.academic_services || defaults.academic_services;
   if (academicServices) {
     y = checkBreak(doc, y, contract, settings, lang, 20);
-    y = secTitle(doc, y, t.sec1);
+    y = drawSectionLabel(doc, y, t.sec1);
     y = blockPaged(doc, y, academicServices, contract, settings, lang);
     y += 2;
   }
 
-  // ── II. Compromisos de la Institución ────────────────────────────────────
+  // ── II. Compromisos de la Institución ─────────────────────────────────────
   const chaResp = contract?.chanak_responsibilities || defaults.chanak_responsibilities;
   if (chaResp) {
     y = checkBreak(doc, y, contract, settings, lang, 20);
-    y = secTitle(doc, y, t.sec2);
+    y = drawSectionLabel(doc, y, t.sec2);
     y = blockPaged(doc, y, chaResp, contract, settings, lang);
     y += 2;
   }
 
-  // ── III. Responsabilidades de la Familia ─────────────────────────────────
+  // ── III. Responsabilidades de la Familia ──────────────────────────────────
   const famResp = contract?.family_responsibilities || defaults.family_responsibilities;
   if (famResp) {
     y = checkBreak(doc, y, contract, settings, lang, 20);
-    y = secTitle(doc, y, t.sec3);
+    y = drawSectionLabel(doc, y, t.sec3);
     y = blockPaged(doc, y, famResp, contract, settings, lang);
     y += 2;
   }
@@ -374,101 +292,116 @@ export function generateContractPDF({ contract, student, settings, lang: request
   const econCond = contract?.economic_conditions || defaults.economic_conditions;
   if (econCond) {
     y = checkBreak(doc, y, contract, settings, lang, 20);
-    y = secTitle(doc, y, t.sec4);
+    y = drawSectionLabel(doc, y, t.sec4);
     y = blockPaged(doc, y, econCond, contract, settings, lang);
     y += 2;
   }
 
   // ── V. Protección de Datos ────────────────────────────────────────────────
-  // Avoid duplicate: if the contract has legacy `notes` containing SÉPTIMA–DÉCIMA text,
-  // skip the data_protection section (it's embedded in notes, rendered in VI below).
+  // Compatibilidad retroactiva: si hay `notes` heredadas, no duplicar esta sección
   const hasLegacyNotes = !!(contract?.notes && contract.notes.trim());
-  const dataProtection = contract?.data_protection
-    || (hasLegacyNotes ? null : defaults.data_protection);
+  const dataProtection = contract?.data_protection || (hasLegacyNotes ? null : defaults.data_protection);
   if (dataProtection) {
     y = checkBreak(doc, y, contract, settings, lang, 20);
-    y = secTitle(doc, y, t.sec5);
+    y = drawSectionLabel(doc, y, t.sec5);
     y = blockPaged(doc, y, dataProtection, contract, settings, lang);
     y += 2;
   }
 
   // ── VI. Disposiciones Generales ───────────────────────────────────────────
-  // Falls back to legacy `notes` for backward compatibility with existing contracts.
   const governingLaw = contract?.governing_law || contract?.notes || defaults.governing_law;
   if (governingLaw) {
     y = checkBreak(doc, y, contract, settings, lang, 20);
-    y = secTitle(doc, y, t.sec6);
+    y = drawSectionLabel(doc, y, t.sec6);
     y = blockPaged(doc, y, governingLaw, contract, settings, lang);
     y += 2;
   }
 
   // ── Firmas ────────────────────────────────────────────────────────────────
-  const SIG_NEED = 62;
-  y = checkBreak(doc, y, contract, settings, lang, SIG_NEED);
-  y = secTitle(doc, y, t.signatures);
+  y = checkBreak(doc, y, contract, settings, lang, 64);
+  y = drawSectionLabel(doc, y, t.signatures);
   y += 4;
 
-  const sigW  = (W - M * 2 - 10) / 2;
-  const s2X   = M + sigW + 10;
-  const sigH  = 48;
+  const sigW   = (W - M * 2 - 10) / 2;
+  const s2X    = M + sigW + 10;
+  const sigH   = 50;
   const dirName = contract?.director_signature_name || settings?.director_name || 'Mariela Andrade';
-  const fldoe   = getInstitutionFldoe(settings);
 
-  // ── Chanak signature block ────────────────────────────────────────────────
-  doc.setFillColor(...LGRAY);
-  doc.setDrawColor(...NAVY);
+  // ── Caja Chanak — sin barra de título navy ────────────────────────────────
+  doc.setFillColor(252, 253, 255);
+  doc.setDrawColor(...PDF_BORDER);
   doc.setLineWidth(0.3);
   doc.rect(M, y, sigW, sigH, 'FD');
-  // Title bar
-  doc.setFillColor(...NAVY);
-  doc.rect(M, y, sigW, 8, 'F');
+
+  // Título de la caja (texto negrita, no fill)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...WHITE);
-  doc.text(t.signChanak, M + sigW / 2, y + 5.5, { align: 'center' });
-  // Body
-  doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(...GRAY);
+  doc.setTextColor(...PDF_NAVY);
+  doc.text(t.signChanak, M + sigW / 2, y + 7, { align: 'center' });
+
+  // Línea fina bajo el título
+  doc.setDrawColor(...PDF_BORDER);
+  doc.setLineWidth(0.2);
+  doc.line(M + 2, y + 9.5, M + sigW - 2, y + 9.5);
+
+  // FLDOE info
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(...PDF_GRAY);
   doc.text(`FLDOE #${fldoe} · EIN 36-5154011`, M + sigW / 2, y + 15, { align: 'center' });
+
+  // Etiqueta de firma
   doc.text(`${t.fieldSign}:`, M + 3, y + 22);
-  doc.line(M + 14, y + 22, M + sigW - 3, y + 22);
-  doc.setTextColor(...BLACK);
+
+  // Imagen de firma o línea
+  const sigDrawn = addInstitutionSignature(doc, settings, M + 14, y + 14, 34, 13);
+  doc.setDrawColor(...PDF_GRAY);
+  doc.setLineWidth(0.3);
+  doc.line(M + 14, y + (sigDrawn ? 28 : 23), M + sigW - 3, y + (sigDrawn ? 28 : 23));
+
+  doc.setTextColor(...PDF_BLACK);
   doc.setFontSize(8);
-  doc.text(`${t.fieldName}: ${dirName}`, M + 3, y + 30);
+  doc.text(`${t.fieldName}: ${dirName}`, M + 3, y + (sigDrawn ? 35 : 30));
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  doc.setTextColor(...NAVY);
-  doc.text(t.caoRole, M + 3, y + 36);
+  doc.setTextColor(...PDF_NAVY);
+  doc.text(t.caoRole, M + 3, y + 38);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(...GRAY);
-  doc.text(`${t.date}: ${contract?.director_signature_date || '_______________'}`, M + 3, y + 43);
+  doc.setTextColor(...PDF_GRAY);
+  doc.text(
+    `${t.date}: ${contract?.director_signature_date || '_______________'}`,
+    M + 3, y + 46,
+  );
 
-  // ── Family signature block ────────────────────────────────────────────────
-  doc.setFillColor(...LGRAY);
-  doc.setDrawColor(...NAVY);
+  // ── Caja Familia — sin barra de título navy ───────────────────────────────
+  doc.setFillColor(252, 253, 255);
+  doc.setDrawColor(...PDF_BORDER);
+  doc.setLineWidth(0.3);
   doc.rect(s2X, y, sigW, sigH, 'FD');
-  // Title bar
-  doc.setFillColor(...NAVY);
-  doc.rect(s2X, y, sigW, 8, 'F');
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...WHITE);
-  doc.text(t.signFamily, s2X + sigW / 2, y + 5.5, { align: 'center' });
-  // Body
+  doc.setFontSize(7.5);
+  doc.setTextColor(...PDF_NAVY);
+  doc.text(t.signFamily, s2X + sigW / 2, y + 7, { align: 'center' });
+
+  doc.setDrawColor(...PDF_BORDER);
+  doc.setLineWidth(0.2);
+  doc.line(s2X + 2, y + 9.5, s2X + sigW - 2, y + 9.5);
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(...GRAY);
-  doc.text(`${t.fieldName}: ___________________________`, s2X + 3, y + 16);
-  doc.text(`${t.fieldId}: _______________________`, s2X + 3, y + 23);
-  doc.text(`${t.fieldSign}:`, s2X + 3, y + 31);
-  doc.line(s2X + 14, y + 31, s2X + sigW - 3, y + 31);
-  doc.text(`${t.fieldPlace}: ________________________`, s2X + 3, y + 43);
+  doc.setTextColor(...PDF_GRAY);
+  doc.text(`${t.fieldName}: ___________________________`, s2X + 3, y + 18);
+  doc.text(`${t.fieldId}: _______________________`, s2X + 3, y + 26);
+  doc.text(`${t.fieldSign}:`, s2X + 3, y + 34);
+  doc.line(s2X + 14, y + 34, s2X + sigW - 3, y + 34);
+  doc.text(`${t.fieldPlace}: ________________________`, s2X + 3, y + 46);
 
-  // ── Page numbers + footer ─────────────────────────────────────────────────
-  addPageNumbers(doc, settings, lang);
+  // ── Footer en todas las páginas ───────────────────────────────────────────
+  applyOfficialFooterAllPages(doc, settings, { pageLabel: t.page });
 
+  // ── Guardar ───────────────────────────────────────────────────────────────
   const ln = student?.last_name?.toLowerCase().replace(/\s+/g, '_') || 'estudiante';
   const yr = (contract?.school_year || '').replace('-', '_');
   doc.save(`${lang === 'en' ? 'contract' : 'contrato'}_offcampus_${ln}_${yr}.pdf`);

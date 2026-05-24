@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
+import { preloadImages } from '@/lib/officialDocuments';
 import {
   ACTIVE_SCHOOL_YEAR,
   QUARTERS,
@@ -395,8 +396,9 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
   const handleDownloadPDF = async (lang = meta.language) => {
     setDl(true);
     try {
-      // Fetch student row for PDF
+      // Fetch student row and preload images for PDF
       const { data: student } = await supabase.from('students').select('*').eq('id', studentId).single();
+      const preparedSettings = await preloadImages(settings);
       const transcriptRow = {
         school_year: meta.school_year,
         quarter: meta.quarter,
@@ -407,7 +409,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         transcript: transcriptRow,
         courses,
         student: student || { id: studentId },
-        settings,
+        settings: preparedSettings,
         creditsSummary,
         lang,
       });

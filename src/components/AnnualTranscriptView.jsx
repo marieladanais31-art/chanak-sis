@@ -3,6 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Download, AlertTriangle, CheckCircle } from 'lucide-react';
 import { generateAnnualTranscriptPDF } from '@/lib/annualTranscriptPdf';
+import { preloadImages } from '@/lib/officialDocuments';
 import { getStudentSchoolStage, gradeToTranscriptLetter, TRANSCRIPT_GRADING_SCALE } from '@/lib/academicUtils';
 
 const NAVY = '#193D6D';
@@ -128,10 +129,11 @@ export default function AnnualTranscriptView({ studentId, studentName, onClose }
         })),
       }));
 
+      const preparedSettings = await preloadImages(settings);
       generateAnnualTranscriptPDF({
         student,
-        years: yearsForPdf,
-        settings,
+        years:       yearsForPdf,
+        settings:    preparedSettings,
         isHighSchool,
         lang,
       });
