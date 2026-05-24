@@ -14,8 +14,17 @@ const INPUT = 'w-full p-1.5 border border-slate-300 rounded-lg outline-none focu
 const PACE_TYPE_LABELS = { advance: 'Avance', leveling: 'Nivelación' };
 
 const EMPTY_FORM = {
-  subject_name: '', pace_number: '', quarter: 'Q1', pace_type: 'advance',
-  status: 'pending', grade_obtained: '', estimated_delivery_date: '',
+  subject_name:             '',
+  pace_number:              '',
+  quarter:                  'Q1',
+  pace_type:                'advance',
+  status:                   'pending',
+  grade_obtained:           '',
+  estimated_start_date:     '',
+  estimated_delivery_date:  '',
+  projected_completion_date:'',
+  tutor_notes:              '',
+  coordinator_notes:        '',
 };
 
 export default function PaceProjectionTable({ peiId, studentId, schoolYear, canEdit = false }) {
@@ -60,6 +69,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peiId, studentId, schoolYear]);
 
   useEffect(() => { load(); }, [load]);
@@ -101,13 +111,17 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
   const openEdit = (pace) => {
     setEditing(pace);
     setForm({
-      subject_name: pace.subject_name || '',
-      pace_number: pace.pace_number != null ? String(pace.pace_number) : '',
-      quarter: pace.quarter || 'Q1',
-      pace_type: pace.pace_type || 'advance',
-      status: pace.status || 'pending',
-      grade_obtained: pace.grade_obtained != null ? String(pace.grade_obtained) : '',
-      estimated_delivery_date: pace.estimated_delivery_date || '',
+      subject_name:              pace.subject_name || '',
+      pace_number:               pace.pace_number != null ? String(pace.pace_number) : '',
+      quarter:                   pace.quarter || 'Q1',
+      pace_type:                 pace.pace_type || 'advance',
+      status:                    pace.status || 'pending',
+      grade_obtained:            pace.grade_obtained != null ? String(pace.grade_obtained) : '',
+      estimated_start_date:      pace.estimated_start_date || '',
+      estimated_delivery_date:   pace.estimated_delivery_date || '',
+      projected_completion_date: pace.projected_completion_date || '',
+      tutor_notes:               pace.tutor_notes || '',
+      coordinator_notes:         pace.coordinator_notes || '',
     });
     setModalOpen(true);
   };
@@ -118,17 +132,21 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
     setSaving(true);
     try {
       const payload = {
-        pei_id: peiId,
-        student_id: studentId,
-        subject_name: form.subject_name.trim(),
-        pace_number: parseInt(form.pace_number) || 0,
-        quarter: form.quarter,
-        pace_type: form.pace_type,
-        school_year: schoolYear || '',
-        status: form.status,
-        grade_obtained: form.grade_obtained ? parseFloat(form.grade_obtained) : null,
-        estimated_delivery_date: form.estimated_delivery_date || null,
-        updated_at: new Date().toISOString(),
+        pei_id:                    peiId,
+        student_id:                studentId,
+        subject_name:              form.subject_name.trim(),
+        pace_number:               parseInt(form.pace_number) || 0,
+        quarter:                   form.quarter,
+        pace_type:                 form.pace_type,
+        school_year:               schoolYear || '',
+        status:                    form.status,
+        grade_obtained:            form.grade_obtained ? parseFloat(form.grade_obtained) : null,
+        estimated_start_date:      form.estimated_start_date     || null,
+        estimated_delivery_date:   form.estimated_delivery_date  || null,
+        projected_completion_date: form.projected_completion_date || null,
+        tutor_notes:               form.tutor_notes              || null,
+        coordinator_notes:         form.coordinator_notes        || null,
+        updated_at:                new Date().toISOString(),
       };
       if (editing) {
         const { error } = await supabase.from('pei_pace_projections').update(payload).eq('id', editing.id);
@@ -404,11 +422,35 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
                     onChange={e => setForm(f => ({...f, grade_obtained: e.target.value}))}
                     className={INPUT} placeholder="0–100" />
                 </div>
-                <div className="col-span-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Fecha inicio est.</label>
+                  <input type="date" value={form.estimated_start_date}
+                    onChange={e => setForm(f => ({...f, estimated_start_date: e.target.value}))}
+                    className={INPUT} />
+                </div>
+                <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">Fecha entrega est.</label>
                   <input type="date" value={form.estimated_delivery_date}
                     onChange={e => setForm(f => ({...f, estimated_delivery_date: e.target.value}))}
                     className={INPUT} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Fecha proyectada de cierre</label>
+                  <input type="date" value={form.projected_completion_date}
+                    onChange={e => setForm(f => ({...f, projected_completion_date: e.target.value}))}
+                    className={INPUT} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Notas del tutor</label>
+                  <textarea rows={2} value={form.tutor_notes}
+                    onChange={e => setForm(f => ({...f, tutor_notes: e.target.value}))}
+                    className={INPUT + ' resize-none'} placeholder="Observaciones del tutor sobre este PACE…" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Notas del coordinador</label>
+                  <textarea rows={2} value={form.coordinator_notes}
+                    onChange={e => setForm(f => ({...f, coordinator_notes: e.target.value}))}
+                    className={INPUT + ' resize-none'} placeholder="Observaciones del coordinador…" />
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
