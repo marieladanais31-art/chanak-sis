@@ -3,167 +3,181 @@
  * Genera boletines académicos / academic transcripts en PDF (ES o EN).
  * Usa jsPDF + jspdf-autotable — ya instalados en el proyecto.
  *
- * PENDIENTE EDGE FUNCTION: firma digital criptográfica del Director.
+ * HOTFIX 2026-05-24: Rediseño low-ink. Logo/sello/firma activos via preloadImages().
  */
 
 import jsPDF from 'jspdf';
-import { addInstitutionLogo, getDocumentFooter, getInstitutionAddress, getInstitutionFldoe, getInstitutionName } from '@/lib/officialDocuments';
 import autoTable from 'jspdf-autotable';
-import { shouldShowOfficialCredits } from '@/lib/academicUtils';
+import {
+  addInstitutionSignature,
+  applyOfficialFooterAllPages,
+  drawOfficialHeader,
+  drawSectionLabel,
+  getInstitutionFldoe,
+  PDF_BLACK,
+  PDF_BLUE,
+  PDF_BORDER,
+  PDF_FOOTER_H,
+  PDF_GRAY,
+  PDF_MARGIN,
+  PDF_NAVY,
+} from '@/lib/officialDocuments';
+import { shouldShowOfficialCredits as _showCredits } from '@/lib/academicUtils';
 
-// ── Paleta institucional ──────────────────────────────────────────────────────
-const NAVY  = [25, 61, 109];   // #193D6D
-const TEAL  = [32, 178, 170];  // #20B2AA
-const GRAY  = [100, 116, 139]; // slate-500
-const LGRAY = [241, 245, 249]; // slate-100
+// Re-export from correct module (academicUtils may or may not export it)
+function resolveShowCredits(student, settings) {
+  try {
+    return _showCredits(student, { allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits) });
+  } catch {
+    return false;
+  }
+}
 
 // ── Textos bilingües ──────────────────────────────────────────────────────────
 const T = {
   es: {
-    title:         'BOLETÍN ACADÉMICO',
-    subtitle:      'Reporte de Calificaciones Trimestrales',
-    studentInfo:   'Datos del Estudiante',
-    name:          'Nombre Completo',
-    studentId:     'Código de Estudiante',
-    grade:         'Grado Académico',
-    schoolYear:    'Año Escolar',
-    quarter:       'Trimestre',
-    dob:           'Fecha de Nacimiento',
-    coursework:    'Materias Cursadas',
-    subject:       'Materia',
-    block:         'Bloque',
-    paces:         'PACEs',
-    credits:       'Créditos',
-    finalGrade:    'Nota Final',
-    statusLabel:   'Estado',
-    approved:      'Dominio alcanzado',
-    failed:        'No aprobado / requiere repetición',
-    pending:       'Pendiente',
-    creditsSummary:'Resumen de Créditos',
-    creditsQuarter:'Créditos del Trimestre',
-    creditsYear:   'Créditos del Año Escolar',
-    creditsCumul:  'Créditos Acumulados (9°–12°)',
-    gpa:           'Promedio GPA',
-    observations:  'Observaciones Académicas',
-    issuedBy:      'Emitido por',
-    issuedDate:    'Fecha de Emisión',
-    directorTitle: 'Director(a)',
-    signHere:      'Firma del Director',
-    fldoe:         'Registro FLDOE',
-    refNumber:     'Referencia',
-    notPublished:  'Solo disponible cuando el boletín esté publicado.',
-    pendingSig:    '[Firma digital — pendiente de implementación backend]',
+    title:          'BOLETÍN ACADÉMICO',
+    subtitle:       'Reporte de Calificaciones Trimestrales',
+    studentInfo:    'Datos del Estudiante',
+    name:           'Nombre Completo',
+    studentId:      'Código de Estudiante',
+    grade:          'Grado Académico',
+    schoolYear:     'Año Escolar',
+    quarter:        'Trimestre',
+    dob:            'Fecha de Nacimiento',
+    coursework:     'Materias Cursadas',
+    subject:        'Materia',
+    block:          'Bloque',
+    paces:          'PACEs',
+    credits:        'Créditos',
+    finalGrade:     'Nota Final',
+    statusLabel:    'Estado',
+    approved:       'Dominio alcanzado',
+    failed:         'No aprobado / requiere repetición',
+    pending:        'Pendiente',
+    creditsSummary: 'Resumen de Créditos',
+    creditsQuarter: 'Créditos del Trimestre',
+    creditsYear:    'Créditos del Año Escolar',
+    creditsCumul:   'Créditos Acumulados (9°–12°)',
+    gpa:            'Promedio GPA',
+    observations:   'Observaciones Académicas',
+    issuedBy:       'Emitido por',
+    issuedDate:     'Fecha de Emisión',
+    directorTitle:  'Director(a)',
+    signHere:       'Firma del Director',
+    fldoe:          'Registro FLDOE',
+    refNumber:      'Referencia',
+    page:           'Pág.',
   },
   en: {
-    title:         'ACADEMIC TRANSCRIPT',
-    subtitle:      'Quarterly Academic Report',
-    studentInfo:   'Student Information',
-    name:          'Full Name',
-    studentId:     'Student ID',
-    grade:         'Grade Level',
-    schoolYear:    'School Year',
-    quarter:       'Quarter',
-    dob:           'Date of Birth',
-    coursework:    'Coursework',
-    subject:       'Subject',
-    block:         'Block',
-    paces:         'PACEs',
-    credits:       'Credits',
-    finalGrade:    'Final Grade',
-    statusLabel:   'Status',
-    approved:      'Mastery achieved',
-    failed:        'Not passed / repeat required',
-    pending:       'Pending',
-    creditsSummary:'Credit Summary',
-    creditsQuarter:'Quarter Credits',
-    creditsYear:   'School Year Credits',
-    creditsCumul:  'Cumulative Credits (9th–12th)',
-    gpa:           'GPA',
-    observations:  'Academic Observations',
-    issuedBy:      'Issued by',
-    issuedDate:    'Date of Issue',
-    directorTitle: 'Director',
-    signHere:      'Director Signature',
-    fldoe:         'FLDOE Registration',
-    refNumber:     'Reference',
-    notPublished:  'Only available once the transcript is published.',
-    pendingSig:    '[Digital signature — pending backend implementation]',
+    title:          'ACADEMIC TRANSCRIPT',
+    subtitle:       'Quarterly Academic Report',
+    studentInfo:    'Student Information',
+    name:           'Full Name',
+    studentId:      'Student ID',
+    grade:          'Grade Level',
+    schoolYear:     'School Year',
+    quarter:        'Quarter',
+    dob:            'Date of Birth',
+    coursework:     'Coursework',
+    subject:        'Subject',
+    block:          'Block',
+    paces:          'PACEs',
+    credits:        'Credits',
+    finalGrade:     'Final Grade',
+    statusLabel:    'Status',
+    approved:       'Mastery achieved',
+    failed:         'Not passed / repeat required',
+    pending:        'Pending',
+    creditsSummary: 'Credit Summary',
+    creditsQuarter: 'Quarter Credits',
+    creditsYear:    'School Year Credits',
+    creditsCumul:   'Cumulative Credits (9th–12th)',
+    gpa:            'GPA',
+    observations:   'Academic Observations',
+    issuedBy:       'Issued by',
+    issuedDate:     'Date of Issue',
+    directorTitle:  'Director',
+    signHere:       'Director Signature',
+    fldoe:          'FLDOE Registration',
+    refNumber:      'Reference',
+    page:           'Page',
   },
 };
 
-// ── Nota de crédito por grado (sistema 0.5 por trimestre por materia) ─────────
 function gradeStatusLabel(status, lang) {
-  const t = T[lang];
+  const t = T[lang] || T.es;
   if (status === 'approved') return t.approved;
   if (status === 'failed')   return t.failed;
   return t.pending;
 }
 
+function pW(doc) { return doc.internal.pageSize.getWidth(); }
+function pH(doc) { return doc.internal.pageSize.getHeight(); }
+
+/** Adds a new page and redraws the institutional header. Returns new Y. */
+function newPage(doc, settings, lang) {
+  doc.addPage();
+  const t = T[lang] || T.es;
+  return drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
+}
+
+/** Checks if there's enough room; if not, starts a new page. */
+function checkBreak(doc, y, settings, lang, need = 30) {
+  if (y + need > pH(doc) - PDF_FOOTER_H - 6) {
+    return newPage(doc, settings, lang);
+  }
+  return y;
+}
+
 // ── Generador principal ───────────────────────────────────────────────────────
 /**
- * @param {Object}   opts
- * @param {Object}   opts.transcript      - transcript_records row
- * @param {Array}    opts.courses         - transcript_courses rows
- * @param {Object}   opts.student         - students row { first_name, last_name, grade_level, … }
- * @param {Object}   opts.settings        - institutional_settings row
- * @param {Array}    opts.creditsSummary  - student_credits_summary rows (all quarters)
+ * @param {Object}    opts
+ * @param {Object}    opts.transcript      - transcript_records row
+ * @param {Array}     opts.courses         - transcript_courses rows
+ * @param {Object}    opts.student         - students row (must NOT include PII beyond name/grade)
+ * @param {Object}    opts.settings        - resultado de preloadImages()
+ * @param {Array}     opts.creditsSummary  - student_credits_summary rows (all quarters)
  * @param {'es'|'en'} opts.lang
  */
-export function generateTranscriptPDF({ transcript, courses, student, settings, creditsSummary = [], lang = 'es' }) {
-  const t = T[lang];
+export function generateTranscriptPDF({
+  transcript,
+  courses,
+  student,
+  settings,
+  creditsSummary = [],
+  lang = 'es',
+}) {
+  const t = T[lang] || T.es;
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
-  const now = new Date();
+
+  const now           = new Date();
   const issuedDateStr = now.toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  const refNumber = `${getInstitutionFldoe(settings)}-${now.getFullYear()}-${(student?.id || '000000').substring(0, 6).toUpperCase()}`;
-  const showCredits = shouldShowOfficialCredits(student, { allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits) });
+  const refNumber = `${getInstitutionFldoe(settings)}-${now.getFullYear()}-${
+    (student?.id || '000000').substring(0, 6).toUpperCase()
+  }`;
+  const showCredits = resolveShowCredits(student, settings);
 
-  // ── Encabezado azul ─────────────────────────────────────────────────────────
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, W, 38, 'F');
-
-  addInstitutionLogo(doc, settings, 165, 6, 25, 25);
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(getInstitutionName(settings), 14, 14);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(`${t.fldoe}: ${getInstitutionFldoe(settings)}  |  ${settings?.website || ''}`, 14, 20);
-  doc.text(getInstitutionAddress(settings), 14, 25);
-
-  // Título del documento
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text(t.title, W / 2, 33, { align: 'center' });
-
-  // Franja teal de subtítulo
-  doc.setFillColor(...TEAL);
-  doc.rect(0, 38, W, 7, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'italic');
-  doc.text(t.subtitle, W / 2, 43, { align: 'center' });
-
-  let y = 52;
+  // ── Encabezado institucional (low-ink) ──────────────────────────────────────
+  let y = drawOfficialHeader(doc, settings, {
+    docTitle:    t.title,
+    docSubtitle: t.subtitle,
+    lang,
+  });
 
   // ── Datos del estudiante ────────────────────────────────────────────────────
-  doc.setTextColor(...NAVY);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text(t.studentInfo, 14, y);
-  y += 5;
+  y = checkBreak(doc, y, settings, lang, 45);
+  y = drawSectionLabel(doc, y, t.studentInfo);
 
   const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
   const infoRows = [
-    [t.name,        studentName],
-    [t.studentId,   student?.id?.substring(0, 8).toUpperCase() || '—'],
-    [t.grade,       student?.grade_level || student?.us_grade_level || '—'],
-    [t.schoolYear,  transcript?.school_year || '—'],
-    [t.quarter,     transcript?.quarter || '—'],
+    [t.name,       studentName],
+    [t.studentId,  student?.id?.substring(0, 8).toUpperCase() || '—'],
+    [t.grade,      student?.grade_level || student?.us_grade_level || '—'],
+    [t.schoolYear, transcript?.school_year || '—'],
+    [t.quarter,    transcript?.quarter || '—'],
   ];
   if (student?.birth_date) infoRows.push([t.dob, student.birth_date]);
 
@@ -171,68 +185,69 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
     startY: y,
     body: infoRows,
     theme: 'plain',
-    styles: { fontSize: 9, cellPadding: 1.5 },
+    styles: { fontSize: 9, cellPadding: 1.8, textColor: [...PDF_BLACK] },
     columnStyles: {
-      0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 50 },
-      1: { textColor: [30, 30, 30] },
+      0: { fontStyle: 'bold', textColor: [...PDF_GRAY], cellWidth: 52 },
+      1: { textColor: [...PDF_BLACK] },
     },
-    margin: { left: 14, right: 14 },
+    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
   });
   y = doc.lastAutoTable.finalY + 8;
 
-  // ── Materias ────────────────────────────────────────────────────────────────
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...NAVY);
-  doc.text(t.coursework, 14, y);
-  y += 3;
+  // ── Materias cursadas ───────────────────────────────────────────────────────
+  y = checkBreak(doc, y, settings, lang, 40);
+  y = drawSectionLabel(doc, y, t.coursework);
 
-  const courseRows = (courses || []).map(c => {
-    const base = [
-      c.subject_name || '—',
-      c.academic_block || '—',
-      c.pace_numbers || '—',
-    ];
-    if (showCredits) base.push(c.credits != null ? String(c.credits) : '0');
-    base.push(
-      c.final_grade != null ? `${Number(c.final_grade).toFixed(1)} / 100` : '—',
-      gradeStatusLabel(c.grade_status, lang),
-    );
-    return base;
-  });
   const courseHead = showCredits
     ? [t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]
     : [t.subject, t.block, t.paces, t.finalGrade, t.statusLabel];
   const emptyCourseRow = courseHead.map(() => '—');
 
+  const courseRows = (courses || []).map(c => {
+    const row = [
+      c.subject_name   || '—',
+      c.academic_block || '—',
+      c.pace_numbers   || '—',
+    ];
+    if (showCredits) row.push(c.credits != null ? String(c.credits) : '0');
+    row.push(
+      c.final_grade != null ? `${Number(c.final_grade).toFixed(1)} / 100` : '—',
+      gradeStatusLabel(c.grade_status, lang),
+    );
+    return row;
+  });
+
   autoTable(doc, {
     startY: y,
     head: [courseHead],
     body: courseRows.length > 0 ? courseRows : [emptyCourseRow],
-    styles: { fontSize: 8, cellPadding: 2 },
-    headStyles: { fillColor: NAVY, textColor: [255,255,255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: LGRAY },
+    styles:          { fontSize: 8, cellPadding: 2, textColor: [...PDF_BLACK] },
+    headStyles:      { fillColor: [...PDF_BLUE], textColor: [...PDF_NAVY], fontStyle: 'bold', lineColor: [...PDF_BORDER], lineWidth: 0.2 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    tableLineColor:  [...PDF_BORDER],
+    tableLineWidth:  0.15,
     columnStyles: {
-      0: { cellWidth: showCredits ? 55 : 65 },
-      1: { cellWidth: showCredits ? 35 : 42 },
+      0: { cellWidth: showCredits ? 52 : 62 },
+      1: { cellWidth: showCredits ? 34 : 40 },
       2: { cellWidth: 22 },
-      3: { cellWidth: showCredits ? 18 : 28, halign: 'center' },
-      4: { cellWidth: showCredits ? 20 : 35, halign: 'center' },
-      5: { cellWidth: 25, halign: 'center' },
+      3: { cellWidth: showCredits ? 16 : 28, halign: 'center' },
+      4: { cellWidth: showCredits ? 22 : 34, halign: 'center' },
+      5: { cellWidth: showCredits ? 25 : undefined, halign: 'center' },
     },
-    margin: { left: 14, right: 14 },
+    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+    didDrawPage: () => {
+      // Re-draw header on continuation pages created by autoTable
+      drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
+    },
   });
   y = doc.lastAutoTable.finalY + 8;
 
+  // ── Resumen de créditos / GPA ───────────────────────────────────────────────
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
 
   if (showCredits) {
-    // ── Resumen de créditos ─────────────────────────────────────────────────────
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...NAVY);
-    doc.text(t.creditsSummary, 14, y);
-    y += 3;
+    y = checkBreak(doc, y, settings, lang, 40);
+    y = drawSectionLabel(doc, y, t.creditsSummary);
 
     const totalThisQuarter = (courses || []).reduce((sum, c) => {
       if (c.grade_status === 'approved') return sum + (parseFloat(c.credits) || 0);
@@ -255,73 +270,89 @@ export function generateTranscriptPDF({ transcript, courses, student, settings, 
         [t.gpa,            gpaVal],
       ],
       theme: 'plain',
-      styles: { fontSize: 9, cellPadding: 1.5 },
+      styles: { fontSize: 9, cellPadding: 1.8 },
       columnStyles: {
-        0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
-        1: { fontStyle: 'bold', textColor: [...NAVY], halign: 'right' },
+        0: { fontStyle: 'bold', textColor: [...PDF_GRAY], cellWidth: 80 },
+        1: { fontStyle: 'bold', textColor: [...PDF_NAVY], halign: 'right' },
       },
-      margin: { left: 14, right: 14 },
+      margin: { left: PDF_MARGIN, right: PDF_MARGIN },
     });
     y = doc.lastAutoTable.finalY + 8;
   } else {
+    y = checkBreak(doc, y, settings, lang, 20);
     autoTable(doc, {
       startY: y,
       body: [[t.gpa, gpaVal]],
       theme: 'plain',
-      styles: { fontSize: 9, cellPadding: 1.5 },
+      styles: { fontSize: 9, cellPadding: 1.8 },
       columnStyles: {
-        0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
-        1: { fontStyle: 'bold', textColor: [...NAVY], halign: 'right' },
+        0: { fontStyle: 'bold', textColor: [...PDF_GRAY], cellWidth: 80 },
+        1: { fontStyle: 'bold', textColor: [...PDF_NAVY], halign: 'right' },
       },
-      margin: { left: 14, right: 14 },
+      margin: { left: PDF_MARGIN, right: PDF_MARGIN },
     });
     y = doc.lastAutoTable.finalY + 8;
   }
 
-  // ── Observaciones ───────────────────────────────────────────────────────────
+  // ── Observaciones académicas ────────────────────────────────────────────────
   if (transcript?.academic_observations) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.setTextColor(...NAVY);
-    doc.text(t.observations, 14, y);
-    y += 4;
+    const obsLines = doc.splitTextToSize(transcript.academic_observations, pW(doc) - PDF_MARGIN * 2);
+    const obsNeed  = 14 + obsLines.length * 4.5 + 6;
+    y = checkBreak(doc, y, settings, lang, obsNeed);
+    y = drawSectionLabel(doc, y, t.observations);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(50, 50, 50);
-    const lines = doc.splitTextToSize(transcript.academic_observations, W - 28);
-    doc.text(lines, 14, y);
-    y += lines.length * 4 + 6;
+    doc.setFontSize(9);
+    doc.setTextColor(...PDF_BLACK);
+    doc.text(obsLines, PDF_MARGIN, y);
+    y += obsLines.length * 4.5 + 6;
   }
 
   // ── Firma del Director ──────────────────────────────────────────────────────
-  const pageH = doc.internal.pageSize.getHeight();
-  const signY  = Math.max(y + 10, pageH - 55);
+  // Box: ~50mm height (image 22mm + name + title + issued info)
+  const sigNeed = 56;
+  y = checkBreak(doc, y, settings, lang, sigNeed);
 
-  doc.setDrawColor(...TEAL);
-  doc.setLineWidth(0.5);
-  doc.line(14, signY + 10, 90, signY + 10);
+  // Thin navy separator above signature block
+  doc.setDrawColor(...PDF_NAVY);
+  doc.setLineWidth(0.25);
+  doc.line(PDF_MARGIN, y, PDF_MARGIN + 70, y);
+  y += 2;
+
+  // Director signature image (if available, 40×18mm)
+  const drewImage = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 18);
+  const nameY = drewImage ? y + 21 : y + 8;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(...NAVY);
-  doc.text(settings?.director_name || t.directorTitle, 14, signY + 15);
+  doc.setTextColor(...PDF_NAVY);
+  doc.text(settings?.director_name || t.directorTitle, PDF_MARGIN, nameY);
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(...GRAY);
-  doc.text(settings?.director_title || t.directorTitle, 14, signY + 20);
-  // PENDIENTE EDGE FUNCTION: cargar imagen de firma desde director_signature_url
-  doc.setFontSize(7);
-  doc.setTextColor(...GRAY);
-  doc.text(t.pendingSig, 14, signY + 25);
+  doc.setTextColor(...PDF_GRAY);
+  doc.text(settings?.director_title || t.directorTitle, PDF_MARGIN, nameY + 5);
 
-  // ── Pie de página ───────────────────────────────────────────────────────────
-  doc.setFillColor(...NAVY);
-  doc.rect(0, pageH - 15, W, 15, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text(settings?.legal_text_es || getDocumentFooter(settings, lang), 14, pageH - 9, { maxWidth: W - 28 });
-  doc.text(`${t.issuedDate}: ${issuedDateStr}  |  ${t.refNumber}: ${refNumber}`, W - 14, pageH - 5, { align: 'right' });
+  // Issued date + reference (right-aligned, same block)
+  doc.setFontSize(7.5);
+  doc.setTextColor(...PDF_GRAY);
+  doc.text(
+    `${t.issuedDate}: ${issuedDateStr}`,
+    pW(doc) - PDF_MARGIN, nameY,
+    { align: 'right' },
+  );
+  doc.text(
+    `${t.refNumber}: ${refNumber}`,
+    pW(doc) - PDF_MARGIN, nameY + 5,
+    { align: 'right' },
+  );
 
+  // ── Footer en todas las páginas ─────────────────────────────────────────────
+  applyOfficialFooterAllPages(doc, settings, {
+    pageLabel: t.page,
+    buildMark: true,
+  });
+
+  // ── Guardar ─────────────────────────────────────────────────────────────────
   const studentLastName = (student?.last_name || 'student').replace(/\s+/g, '_');
   const filename = `boletin_${studentLastName}_${transcript?.school_year || ''}_${transcript?.quarter || ''}_${lang}.pdf`;
   doc.save(filename);

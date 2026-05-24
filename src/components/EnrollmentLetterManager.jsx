@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { generateEnrollmentLetterPDF } from '@/lib/enrollmentLetterPdf';
+import { preloadImages } from '@/lib/officialDocuments';
 import {
   Save, Loader2, X, Download, ChevronRight,
   Mail, CheckCircle, Send, Eye
@@ -134,12 +135,13 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
   const handleDownload = async (lang = form.letter_language) => {
     setDownloading(true);
     try {
-      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const settings = await preloadImages(rawSettings);
       const { data: studentData } = await supabase.from('students').select('*').eq('id', studentId).single();
       generateEnrollmentLetterPDF({
         letter:   { ...form, id: letterId, letter_language: lang },
         student:  studentData || { id: studentId },
-        settings: settings || null,
+        settings,
         lang,
       });
     } catch {

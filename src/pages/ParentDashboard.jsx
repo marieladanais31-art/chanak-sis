@@ -30,6 +30,7 @@ import GradeEntriesManager from '@/components/GradeEntriesManager';
 import ParentEvidencePanel from '@/components/ParentEvidencePanel';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 import { generateTranscriptPDF } from '@/lib/transcriptPdf';
+import { preloadImages } from '@/lib/officialDocuments';
 
 /* ── Categorías: colores de badge ──────────────────────────────────────────── */
 const CAT_COLORS = {
@@ -200,7 +201,7 @@ function ParentBoletinesPanel({ studentChildren }) {
         transcript: tr,
         courses: coursesRes.data || [],
         student: child || { id: tr.student_id },
-        settings: settingsRes.data || null,
+        settings: await preloadImages(settingsRes.data),
         creditsSummary: creditsRes.data || [],
         lang: tr.language || 'es',
       });
@@ -424,11 +425,11 @@ function ParentDocumentosPanel({ studentChildren }) {
     try {
       const { generateContractPDF } = await import('@/lib/contractPdf');
       const child = studentChildren.find(c => c.id === contract.student_id);
-      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const { data: rawSettingsCon } = await supabase.from('institutional_settings').select('*').limit(1).single();
       generateContractPDF({
         contract,
         student: child || { first_name: '', last_name: '' },
-        settings: settings || null,
+        settings: await preloadImages(rawSettingsCon),
         lang,
       });
     } catch (err) {
@@ -443,11 +444,11 @@ function ParentDocumentosPanel({ studentChildren }) {
     try {
       const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
       const child = studentChildren.find(c => c.id === letter.student_id);
-      const { data: settings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const { data: rawSettingsLet } = await supabase.from('institutional_settings').select('*').limit(1).single();
       generateEnrollmentLetterPDF({
         letter,
         student: child || { first_name: '', last_name: '' },
-        settings: settings || null,
+        settings: await preloadImages(rawSettingsLet),
         lang,
       });
     } catch (err) {
@@ -470,7 +471,7 @@ function ParentDocumentosPanel({ studentChildren }) {
         transcript,
         courses: coursesRes.data || [],
         student: child || { id: transcript.student_id },
-        settings: settingsRes.data || null,
+        settings: await preloadImages(settingsRes.data),
         creditsSummary: creditsRes.data || [],
         lang,
       });
