@@ -21,6 +21,8 @@ import AcademicCalendarManager from '@/components/AcademicCalendarManager';
 import SisAlertsDashboard from '@/components/SisAlertsDashboard';
 import AdminOperationalLinks from '@/components/AdminOperationalLinks';
 import BulkPaceGradeUpload from '@/components/BulkPaceGradeUpload';
+import AdminPayments from '@/components/AdminPayments';
+import AdminEnrollmentRecords from '@/components/AdminEnrollmentRecords';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Loader2, Users, Building2, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +40,7 @@ export default function AdminPanel() {
     if (currentSection === 'dashboard') {
       loadDashboardData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSection]);
 
   const loadDashboardData = async () => {
@@ -88,6 +91,8 @@ export default function AdminPanel() {
       case 'settings': return 'Configuración';
       case 'alertas': return 'Alertas del Sistema';
       case 'enlaces-operativos': return 'Recursos y enlaces operativos';
+      case 'pagos-alumnos': return 'Registro de Pagos por Alumno';
+      case 'matriculas': return 'Estado de Matrícula';
       default: return 'Panel de Administración';
     }
   };
@@ -218,6 +223,8 @@ export default function AdminPanel() {
       case 'settings': return <AdminConfiguracion />;
       case 'alertas': return <SisAlertsDashboard />;
       case 'enlaces-operativos': return <AdminOperationalLinks />;
+      case 'pagos-alumnos': return <AdminPayments />;
+      case 'matriculas': return <AdminEnrollmentRecords />;
       default:
         return renderDashboard();
     }

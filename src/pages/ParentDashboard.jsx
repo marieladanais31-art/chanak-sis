@@ -673,6 +673,7 @@ export default function ParentDashboard() {
     }
 
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, navigate]);
 
   const hasOfficialPei = (childId) => officialDocuments.peis.some((d) => d.student_id === childId);
@@ -711,9 +712,23 @@ export default function ParentDashboard() {
 
   const getStudentStats = (childId) => {
     const childPaces = paceProjection.filter((p) => p.student_id === childId);
-    const completed = childPaces.filter((p) => p.status === 'completed').length;
+    // 'evaluated' o nota asignada = completado
+    const completed = childPaces.filter(
+      (p) => p.status === 'evaluated' || p.grade_obtained != null
+    ).length;
     const planned = childPaces.length;
-    const overdue = childPaces.filter((p) => p.status === 'overdue').length;
+    // 'delayed' o fecha vencida y no evaluado = atrasado
+    const today = new Date().toISOString().slice(0, 10);
+    const overdue = childPaces.filter(
+      (p) =>
+        p.status === 'delayed' ||
+        (
+          p.status !== 'evaluated' &&
+          p.grade_obtained == null &&
+          (p.due_date || p.completion_date) &&
+          (p.due_date || p.completion_date) < today
+        )
+    ).length;
 
     return {
       completed,
@@ -964,87 +979,28 @@ export default function ParentDashboard() {
 
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="flex gap-6">
-            <button
-              onClick={() => setActiveTab('children')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'children'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Users className="w-5 h-5" /> 👥 Mis Hijos
-            </button>
-            <button
-              onClick={() => setActiveTab('documentos')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'documentos'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Scale className="w-5 h-5" /> 📋 Documentos Oficiales
-            </button>
-            <button
-              onClick={() => setActiveTab('boletines')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'boletines'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              📄 Boletines
-            </button>
-            <button
-              onClick={() => setActiveTab('documentos')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'documentos'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              📁 Documentos
-            </button>
-            <button
-              onClick={() => setActiveTab('evidencias')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'evidencias'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <FileUp className="w-4 h-4" /> Evidencias
-            </button>
-            <button
-              onClick={() => setActiveTab('recursos')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'recursos'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Link2 className="w-4 h-4" /> Recursos
-            </button>
-            <button
-              onClick={() => setActiveTab('alertas')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'alertas'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Bell className="w-4 h-4" /> Alertas
-            </button>
-            <button
-              onClick={() => setActiveTab('calendario')}
-              className={`py-4 px-2 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'calendario'
-                  ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <CalendarDays className="w-4 h-4" /> Calendario
-            </button>
+          <div className="flex gap-1 overflow-x-auto scrollbar-none">
+            {[
+              { id: 'children',   label: '👥 Mis Hijos',         Icon: Users      },
+              { id: 'documentos', label: '📋 Documentos',         Icon: Scale      },
+              { id: 'boletines',  label: '📄 Boletines',          Icon: null       },
+              { id: 'evidencias', label: 'Evidencias',            Icon: FileUp     },
+              { id: 'recursos',   label: 'Recursos',              Icon: Link2      },
+              { id: 'alertas',    label: 'Alertas',               Icon: Bell       },
+              { id: 'calendario', label: 'Calendario',            Icon: CalendarDays },
+            ].map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`py-4 px-3 font-bold text-sm border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                  activeTab === id
+                    ? 'border-[rgb(25,61,109)] text-[rgb(25,61,109)]'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                {Icon && <Icon className="w-4 h-4" />} {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -1193,6 +1149,64 @@ export default function ParentDashboard() {
                           )}
                         </div>
                       </div>
+
+                      {/* ── PACEs proyectadas por trimestre ── */}
+                      {(() => {
+                        const childPaces = paceProjection.filter((p) => p.student_id === child.id);
+                        const today = new Date().toISOString().slice(0, 10);
+                        if (childPaces.length === 0) {
+                          return (
+                            <div className="px-6 pb-4">
+                              <p className="text-xs text-slate-400 italic">
+                                Aún no hay PACEs proyectadas para este estudiante. El equipo académico las configurará próximamente.
+                              </p>
+                            </div>
+                          );
+                        }
+                        const byQuarter = { Q1: [], Q2: [], Q3: [] };
+                        childPaces.forEach(p => {
+                          const q = p.quarter;
+                          if (byQuarter[q]) byQuarter[q].push(p);
+                        });
+                        return (
+                          <div className="px-6 pb-4 space-y-3">
+                            {['Q1','Q2','Q3'].map(q => {
+                              const paces = byQuarter[q];
+                              if (!paces.length) return null;
+                              return (
+                                <div key={q}>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Trimestre {q.replace('Q','')}</p>
+                                  <div className="space-y-1">
+                                    {paces.map(p => {
+                                      const isCompleted = p.status === 'evaluated' || p.grade_obtained != null;
+                                      const dueDate     = p.due_date || p.completion_date;
+                                      const isOverdue   = !isCompleted && dueDate && dueDate < today;
+                                      return (
+                                        <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                                          <span className="text-slate-700 truncate flex-1">
+                                            <span className="font-bold">{p.subject_name || '—'}</span>
+                                            {p.pace_number ? ` · #${p.pace_number}` : ''}
+                                          </span>
+                                          {dueDate && (
+                                            <span className="text-slate-400 shrink-0">{new Date(dueDate).toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}</span>
+                                          )}
+                                          <span className={`shrink-0 px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                                            isCompleted ? 'bg-emerald-100 text-emerald-700' :
+                                            isOverdue   ? 'bg-red-100 text-red-700' :
+                                                          'bg-slate-100 text-slate-500'
+                                          }`}>
+                                            {isCompleted ? '✓ Listo' : isOverdue ? '⚠ Atrasado' : 'Pendiente'}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
