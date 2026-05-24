@@ -160,6 +160,7 @@ export function generateTranscriptPDF({
     (student?.id || '000000').substring(0, 6).toUpperCase()
   }`;
   const showCredits = resolveShowCredits(student, settings);
+  const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
 
   // ── Encabezado institucional (low-ink) ──────────────────────────────────────
   let y = drawOfficialHeader(doc, settings, {
@@ -170,33 +171,6 @@ export function generateTranscriptPDF({
 
   // ── Datos del estudiante ────────────────────────────────────────────────────
   y = checkBreak(doc, y, settings, lang, 45);
-  y = drawSectionLabel(doc, y, t.studentInfo);
-
-  const showCredits = shouldShowOfficialCredits(student, {
-    allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits),
-  });
-  const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
-
-  // ── Helpers de paginación ──────────────────────────────────────────────────
-  function newPage() {
-    doc.addPage();
-    // Página de continuación: header sin título ni subtítulo (más compacto)
-    return drawOfficialHeader(doc, settings, { lang });
-  }
-
-  function checkBreak(y, need = 20) {
-    return y + need > SAFE_BOTTOM ? newPage() : y;
-  }
-
-  // ── Página 1: header completo con título y subtítulo ───────────────────────
-  let y = drawOfficialHeader(doc, settings, {
-    docTitle:    t.title,
-    docSubtitle: t.subtitle,
-    lang,
-  });
-
-  // ── Sección: datos del estudiante ──────────────────────────────────────────
-  y = checkBreak(y, 8);
   y = drawSectionLabel(doc, y, t.studentInfo);
 
   const infoRows = [
