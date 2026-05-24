@@ -202,6 +202,7 @@ export function generateTranscriptPDF({
   const courseHead = showCredits
     ? [t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]
     : [t.subject, t.block, t.paces, t.finalGrade, t.statusLabel];
+  const emptyCourseRow = courseHead.map(() => '—');
 
   const courseRows = (courses || []).map(c => {
     const row = [
@@ -241,10 +242,6 @@ export function generateTranscriptPDF({
     },
   });
   y = doc.lastAutoTable.finalY + 10;
-
-  // ── Sección: resumen de créditos / GPA ────────────────────────────────────
-  y = checkBreak(y, 28);
-  y = drawSectionLabel(doc, y, t.creditsSummary);
 
   // ── Resumen de créditos / GPA ───────────────────────────────────────────────
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
@@ -310,54 +307,40 @@ export function generateTranscriptPDF({
   }
 
   // ── Firma del Director ──────────────────────────────────────────────────────
-  // Box: ~50mm height (image 22mm + name + title + issued info)
-  const sigNeed = 56;
-  y = checkBreak(doc, y, settings, lang, sigNeed);
+  y = checkBreak(doc, y, settings, lang, 46);
 
-  // Thin navy separator above signature block
+  // Línea separadora fina
   doc.setDrawColor(...PDF_NAVY);
   doc.setLineWidth(0.25);
   doc.line(PDF_MARGIN, y, PDF_MARGIN + 70, y);
-  y += 2;
+  y += 3;
 
-  // Director signature image (if available, 40×18mm)
-  const drewImage = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 18);
-  const nameY = drewImage ? y + 21 : y + 8;
+  // Imagen de firma (una sola vez, 40×16 mm)
+  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 16);
+  y += drewSig ? 19 : 2;
 
-  // Imagen de firma (si existe) o espacio en blanco
-  const sigDrawn = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 44, 16);
-  y += sigDrawn ? 18 : 14;
-
-  // Línea de firma
+  // Línea horizontal de firma
   doc.setDrawColor(...PDF_NAVY);
   doc.setLineWidth(0.3);
   doc.line(PDF_MARGIN, y, 95, y);
-  y += 5;
+  y += 4;
 
-  // Nombre del director
+  // Nombre y cargo del director
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(...PDF_NAVY);
-  doc.text(settings?.director_name || t.directorTitle, PDF_MARGIN, nameY);
+  doc.text(settings?.director_name || t.directorTitle, PDF_MARGIN, y);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_GRAY);
-  doc.text(settings?.director_title || t.directorTitle, PDF_MARGIN, nameY + 5);
+  doc.text(settings?.director_title || t.directorTitle, PDF_MARGIN, y + 5);
 
-  // Issued date + reference (right-aligned, same block)
+  // Fecha de emisión y referencia (lado derecho)
   doc.setFontSize(7.5);
   doc.setTextColor(...PDF_GRAY);
-  doc.text(
-    `${t.issuedDate}: ${issuedDateStr}`,
-    pW(doc) - PDF_MARGIN, nameY,
-    { align: 'right' },
-  );
-  doc.text(
-    `${t.refNumber}: ${refNumber}`,
-    pW(doc) - PDF_MARGIN, nameY + 5,
-    { align: 'right' },
-  );
+  doc.text(`${t.issuedDate}: ${issuedDateStr}`, pW(doc) - PDF_MARGIN, y, { align: 'right' });
+  doc.text(`${t.refNumber}: ${refNumber}`, pW(doc) - PDF_MARGIN, y + 5, { align: 'right' });
 
   // ── Footer en todas las páginas ─────────────────────────────────────────────
   applyOfficialFooterAllPages(doc, settings, {

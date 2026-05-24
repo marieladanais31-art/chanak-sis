@@ -113,12 +113,12 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
 
   // ── Cuerpo del texto ────────────────────────────────────────────────────────
   const bodyText = letter?.confirmation_text || letter?.body_text || letter?.content || '';
-  y = block(doc, y, bodyText, PDF_MARGIN, 10);
-  y += 4;
+  y = block(doc, y, bodyText, PDF_MARGIN, 9);
+  y += 3;
 
   // ── Tabla de datos del alumno ────────────────────────────────────────────────
-  // 4 filas × 10mm/fila + 8mm padding superior = ~48mm total
-  const tableH  = 8 + 4 * 10;
+  // 4 filas × 8mm/fila + 7mm padding superior = ~39mm total
+  const tableH  = 7 + 4 * 8;
   const tableW  = W - PDF_MARGIN * 2;
   const col2    = W / 2 + 2;
   const studentName = student
@@ -144,35 +144,35 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
     [t.status,    t.confirmed,                  '', ''],
   ];
 
-  let ry = y + 7;
+  let ry = y + 6;
   dataRows.forEach(([l1, v1, l2, v2]) => {
     // Columna izquierda
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(...PDF_GRAY);
     doc.text(`${l1}:`, PDF_MARGIN + 4, ry);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
+    doc.setFontSize(9);
     const isConfirmed = v1 === t.confirmed || v2 === t.confirmed;
     doc.setTextColor(...(isConfirmed ? [20, 120, 60] : PDF_BLACK));
-    doc.text(String(v1), PDF_MARGIN + 4, ry + 4.5);
+    doc.text(String(v1), PDF_MARGIN + 4, ry + 4);
 
     // Columna derecha (si existe)
     if (l2) {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
+      doc.setFontSize(6.5);
       doc.setTextColor(...PDF_GRAY);
       doc.text(`${l2}:`, col2, ry);
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
+      doc.setFontSize(9);
       doc.setTextColor(...PDF_BLACK);
-      doc.text(String(v2), col2, ry + 4.5);
+      doc.text(String(v2), col2, ry + 4);
     }
 
-    ry += 10;
+    ry += 8;
   });
 
-  y += tableH + 6;
+  y += tableH + 4;
 
   // ── Notas adicionales ───────────────────────────────────────────────────────
   if (letter?.notes) {

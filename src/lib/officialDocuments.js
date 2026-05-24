@@ -57,16 +57,53 @@ export const splitStudentName = (studentName = '') => {
 // Siempre llamar preloadImages(settings) antes de generar cualquier PDF.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Convierte logo_url, seal_url y director_signature_url a base64 en memoria.
- * Retorna un nuevo objeto settings con _logo64, _seal64, _signature64.
- * DEBE llamarse antes de cualquier generador de PDF.
- */
+const _DEV = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// safeAddImage — inserta una imagen base64 sin romper el PDF si falla.
+// Detecta PNG/JPEG. Rechaza SVG/WEBP con fallback limpio.
+// ─────────────────────────────────────────────────────────────────────────────
+export function safeAddImage(doc, imageData, x, y, w, h, label = '') {
+  if (!imageData) return false;
+  if (typeof imageData !== 'string') return false;
+  if (!imageData.startsWith('data:image/')) return false;
+
+  // Detectar formato soportado por jsPDF
+  let fmt;
+  if      (imageData.startsWith('data:image/png'))  fmt = 'PNG';
+  else if (imageData.startsWith('data:image/jpeg') ||
+           imageData.startsWith('data:image/jpg'))  fmt = 'JPEG';
+  else {
+    // WEBP, SVG, GIF, etc. — jsPDF no los soporta nativamente
+    if (_DEV) console.warn(`[PDF safeAddImage] ${label || 'image'}: formato no soportado, omitido`);
+    return false;
+  }
+
+  try {
+    doc.addImage(imageData, fmt, x, y, w, h);
+    return true;
+  } catch (err) {
+    if (_DEV) console.warn(`[PDF safeAddImage] ${label || 'image'}: addImage falló`, err?.message);
+    // Intentar con el otro formato como último recurso
+    const altFmt = fmt === 'PNG' ? 'JPEG' : 'PNG';
+    try {
+      doc.addImage(imageData, altFmt, x, y, w, h);
+      return true;
+    } catch (_) { return false; }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// preloadImages — convierte URLs a base64 antes de generar PDFs.
+// Lee campos canónicos Y aliases habituales de institutional_settings.
+// DEBE llamarse antes de cualquier generador de PDF.
+// ─────────────────────────────────────────────────────────────────────────────
 export async function preloadImages(settings) {
   if (!settings) return settings;
 
   async function toBase64(url) {
     if (!url) return null;
+    if (typeof url !== 'string') return null;
     if (url.startsWith('data:')) return url;   // ya es base64
     try {
       const res = await fetch(url);
@@ -81,35 +118,47 @@ export async function preloadImages(settings) {
     } catch { return null; }
   }
 
+  // Campos canónicos + aliases usados históricamente en institutional_settings
+  const logoUrl = settings.logo_url      || settings.logo             ||
+                  settings.school_logo_url;
+  const sealUrl = settings.seal_url      || settings.seal             ||
+                  settings.institutional_seal_url;
+  const sigUrl  = settings.director_signature_url || settings.signature_url ||
+                  settings.director_signature;
+
   const [logo64, seal64, sig64] = await Promise.all([
-    toBase64(settings.logo_url),
-    toBase64(settings.seal_url),
-    toBase64(settings.director_signature_url),
+    toBase64(logoUrl),
+    toBase64(sealUrl),
+    toBase64(sigUrl),
   ]);
+
+  if (_DEV) {
+    console.log('[PDF SETTINGS CHECK]', {
+      hasRawLogoUrl:      Boolean(logoUrl),
+      hasRawSealUrl:      Boolean(sealUrl),
+      hasRawSignatureUrl: Boolean(sigUrl),
+      hasLogo64:          Boolean(logo64),
+      hasSeal64:          Boolean(seal64),
+      hasSignature64:     Boolean(sig64),
+      logoPrefix:         logo64?.slice(0, 30) || null,
+      sealPrefix:         seal64?.slice(0, 30) || null,
+      signaturePrefix:    sig64?.slice(0, 30)  || null,
+    });
+  }
 
   return { ...settings, _logo64: logo64, _seal64: seal64, _signature64: sig64 };
 }
 
 /** Inserta el logo institucional. Requiere preloadImages para que funcione. */
 export const addInstitutionLogo = (doc, settings, x, y, w, h) => {
-  const src = settings?._logo64 || settings?.logo_url;
-  if (!src) return;
-  try {
-    doc.addImage(src, 'PNG', x, y, w, h);
-  } catch {
-    try { doc.addImage(src, 'JPEG', x, y, w, h); } catch (_) {}
-  }
+  const src = settings?._logo64 || settings?.logo_url || settings?.logo || settings?.school_logo_url;
+  return safeAddImage(doc, src, x, y, w, h, 'logo');
 };
 
 /** Inserta el sello institucional. Requiere preloadImages para que funcione. */
 export const addInstitutionSeal = (doc, settings, x, y, w, h) => {
-  const src = settings?._seal64 || settings?.seal_url;
-  if (!src) return;
-  try {
-    doc.addImage(src, 'PNG', x, y, w, h);
-  } catch {
-    try { doc.addImage(src, 'JPEG', x, y, w, h); } catch (_) {}
-  }
+  const src = settings?._seal64 || settings?.seal_url || settings?.seal || settings?.institutional_seal_url;
+  return safeAddImage(doc, src, x, y, w, h, 'seal');
 };
 
 /**
@@ -118,17 +167,9 @@ export const addInstitutionSeal = (doc, settings, x, y, w, h) => {
  * @returns {boolean} true si se dibujó la imagen, false si no había imagen.
  */
 export const addInstitutionSignature = (doc, settings, x, y, w, h) => {
-  const src = settings?._signature64 || settings?.director_signature_url;
-  if (!src) return false;
-  try {
-    doc.addImage(src, 'PNG', x, y, w, h);
-    return true;
-  } catch {
-    try {
-      doc.addImage(src, 'JPEG', x, y, w, h);
-      return true;
-    } catch (_) { return false; }
-  }
+  const src = settings?._signature64 || settings?.director_signature_url ||
+              settings?.signature_url || settings?.director_signature;
+  return safeAddImage(doc, src, x, y, w, h, 'signature');
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
