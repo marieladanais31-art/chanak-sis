@@ -225,13 +225,12 @@ export default function ContractManager({ studentId, studentName, contractId: in
     setDownloading(true);
     try {
       const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
-      // Pre-cargar logo y sello como base64 — jsPDF no puede cargar URLs remotas
       const settings = await preloadImages(rawSettings);
       const [first, ...rest] = (studentName || '').split(' ');
       generateContractPDF({
         contract: { ...form, id: contractId, language: lang },
         student:  { first_name: first || studentName, last_name: rest.join(' ') },
-        settings: settings || null,
+        settings,
         lang,
       });
     } catch {

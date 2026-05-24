@@ -194,16 +194,13 @@ export default function EnrollmentLetterManager({ studentId, studentName, letter
   const handleDownload = async (lang = form.letter_language) => {
     setDownloading(true);
     try {
-      const [{ data: rawSettings }, { data: studentData }] = await Promise.all([
-        supabase.from('institutional_settings').select('*').limit(1).single(),
-        supabase.from('students').select('*').eq('id', studentId).single(),
-      ]);
-      // Pre-cargar logo y sello como base64 — jsPDF no puede cargar URLs remotas
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
       const settings = await preloadImages(rawSettings);
+      const { data: studentData } = await supabase.from('students').select('*').eq('id', studentId).single();
       generateEnrollmentLetterPDF({
         letter:   { ...form, id: letterId, letter_language: lang },
         student:  studentData || { id: studentId },
-        settings: settings || null,
+        settings,
         lang,
       });
     } catch {

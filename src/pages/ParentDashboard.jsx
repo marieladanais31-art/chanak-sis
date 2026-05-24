@@ -552,12 +552,11 @@ function ParentDocumentosPanel({ studentChildren }) {
     try {
       const { generateContractPDF } = await import('@/lib/contractPdf');
       const child = studentChildren.find(c => c.id === contract.student_id);
-      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
-      const settings = await preloadImages(rawSettings);
+      const { data: rawSettingsCon } = await supabase.from('institutional_settings').select('*').limit(1).single();
       generateContractPDF({
         contract,
         student: child || { first_name: '', last_name: '' },
-        settings: settings || null,
+        settings: await preloadImages(rawSettingsCon),
         lang,
       });
     } catch (err) {
@@ -572,12 +571,11 @@ function ParentDocumentosPanel({ studentChildren }) {
     try {
       const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
       const child = studentChildren.find(c => c.id === letter.student_id);
-      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
-      const settings = await preloadImages(rawSettings);
+      const { data: rawSettingsLet } = await supabase.from('institutional_settings').select('*').limit(1).single();
       generateEnrollmentLetterPDF({
         letter,
         student: child || { first_name: '', last_name: '' },
-        settings: settings || null,
+        settings: await preloadImages(rawSettingsLet),
         lang,
       });
     } catch (err) {
@@ -597,12 +595,12 @@ function ParentDocumentosPanel({ studentChildren }) {
         supabase.from('student_credits_summary').select('*').eq('student_id', transcript.student_id),
       ]);
       // preloadImages: converts logo_url, seal_url, director_signature_url to base64
-      const settings = await preloadImages(rawSettingsRes.data || null);
+      const preparedSettings = await preloadImages(rawSettingsRes.data || null);
       generateTranscriptPDF({
         transcript,
         courses: coursesRes.data || [],
         student: child || { id: transcript.student_id },
-        settings,
+        settings: preparedSettings,
         creditsSummary: creditsRes.data || [],
         lang,
       });

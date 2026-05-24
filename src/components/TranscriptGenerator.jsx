@@ -398,7 +398,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     try {
       // Fetch student row and preload images for PDF
       const { data: student } = await supabase.from('students').select('*').eq('id', studentId).single();
-      const preparedSettings = await preloadImages(settings);
+      const settingsWithImages = await preloadImages(settings);
       const transcriptRow = {
         school_year: meta.school_year,
         quarter: meta.quarter,
@@ -409,7 +409,7 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         transcript: transcriptRow,
         courses,
         student: student || { id: studentId },
-        settings: preparedSettings,
+        settings: settingsWithImages,
         creditsSummary,
         lang,
       });
