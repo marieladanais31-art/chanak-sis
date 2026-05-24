@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import {
   addInstitutionLogo,
   addInstitutionSeal,
+  addInstitutionSignature,
   getInstitutionAddress,
   getInstitutionEmail,
   getInstitutionFldoe,
@@ -430,12 +431,15 @@ export function generateContractPDF({ contract, student, settings, lang: request
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...GRAY);
-  doc.text(`FLDOE #${fldoe} · EIN 36-5154011`, M + sigW / 2, y + 15, { align: 'center' });
-  doc.text(`${t.fieldSign}:`, M + 3, y + 22);
-  doc.line(M + 14, y + 22, M + sigW - 3, y + 22);
+  doc.text(`FLDOE #${fldoe} · EIN 36-5154011`, M + sigW / 2, y + 14, { align: 'center' });
+  doc.text(`${t.fieldSign}:`, M + 3, y + 21);
+
+  // Signature image if available, else line
+  const sigDrawn = addInstitutionSignature(doc, settings, M + 14, y + 13, 34, 13);
+  doc.line(M + 14, y + (sigDrawn ? 27 : 22), M + sigW - 3, y + (sigDrawn ? 27 : 22));
   doc.setTextColor(...BLACK);
   doc.setFontSize(8);
-  doc.text(`${t.fieldName}: ${dirName}`, M + 3, y + 30);
+  doc.text(`${t.fieldName}: ${dirName}`, M + 3, y + (sigDrawn ? 33 : 30));
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...NAVY);

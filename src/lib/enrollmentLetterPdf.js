@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import {
   addInstitutionLogo,
   addInstitutionSeal,
+  addInstitutionSignature,
   getDocumentFooter,
   getInstitutionEmail,
   getInstitutionFldoe,
@@ -303,14 +304,17 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
   doc.text(`${t.signature}:`, M + 3, y + 14);
+
+  // Signature image if available, else dashed line
+  const sigDrawn = addInstitutionSignature(doc, settings, M + 18, y + 6, 36, 14);
   doc.setDrawColor(...GRAY);
   doc.setLineWidth(0.3);
-  doc.line(M + 18, y + 14, M + sigW - 3, y + 14);
+  doc.line(M + 18, y + (sigDrawn ? 21 : 14), M + sigW - 3, y + (sigDrawn ? 21 : 14));
 
-  doc.text(`${t.name}:`, M + 3, y + 23);
+  doc.text(`${t.name}:`, M + 3, y + (sigDrawn ? 28 : 23));
   doc.setTextColor(...BLACK);
   const dirName = letter?.director_signature_name || settings?.director_name || 'Mariela Andrade';
-  doc.text(dirName, M + 15, y + 23);
+  doc.text(dirName, M + 15, y + (sigDrawn ? 28 : 23));
 
   doc.setTextColor(...GRAY);
   doc.text(`${t.date}:`, M + 3, y + 32);

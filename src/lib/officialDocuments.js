@@ -68,12 +68,13 @@ export async function preloadImages(settings) {
     } catch { return null; }
   }
 
-  const [logo64, seal64] = await Promise.all([
+  const [logo64, seal64, sig64] = await Promise.all([
     toBase64(settings.logo_url),
     toBase64(settings.seal_url),
+    toBase64(settings.director_signature_url),
   ]);
 
-  return { ...settings, _logo64: logo64, _seal64: seal64 };
+  return { ...settings, _logo64: logo64, _seal64: seal64, _signature64: sig64 };
 }
 
 /** Inserta el logo institucional usando base64 pre-cargado. */
@@ -95,6 +96,25 @@ export const addInstitutionSeal = (doc, settings, x, y, w, h) => {
     doc.addImage(src, 'PNG', x, y, w, h);
   } catch {
     try { doc.addImage(src, 'JPEG', x, y, w, h); } catch (_) {}
+  }
+};
+
+/**
+ * Inserta la imagen de firma del director usando base64 pre-cargado.
+ * Requiere que `preloadImages` haya sido llamado antes (populate `_signature64`).
+ * Si no hay imagen disponible, no dibuja nada (el caller debe mostrar fallback).
+ */
+export const addInstitutionSignature = (doc, settings, x, y, w, h) => {
+  const src = settings?._signature64 || settings?.director_signature_url;
+  if (!src) return false;          // indica que no se dibujó imagen
+  try {
+    doc.addImage(src, 'PNG', x, y, w, h);
+    return true;
+  } catch {
+    try {
+      doc.addImage(src, 'JPEG', x, y, w, h);
+      return true;
+    } catch (_) { return false; }
   }
 };
 
