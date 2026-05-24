@@ -1,51 +1,46 @@
 /**
- * transcriptPdf.js
- * Genera boletines académicos / academic transcripts en PDF (ES o EN).
- * Usa jsPDF + jspdf-autotable.
+ * transcriptPdf.js  v3 — Diseño de baja tinta
+ * ─────────────────────────────────────────────
+ * Boletines académicos / Academic Transcripts  (ES | EN)
+ * jsPDF + jspdf-autotable
  *
- * Mejoras v2:
- * - Sello institucional en header
- * - Footer en TODAS las páginas (no solo la última)
- * - Encabezado repetido en páginas 2+ vía willDrawPage
- * - Firma del director: imagen si existe en settings, línea limpia si no
- * - Protección de overflow (margin.bottom + checkBreak antes de bloques)
- * - Numeración de páginas: Pág. X / Y
+ * Diseño:
+ * - Sin bloques sólidos azules grandes.
+ * - Header: logo + texto + línea fina (drawOfficialHeader).
+ * - Secciones: acento lateral 2 mm + texto negrita (drawSectionLabel).
+ * - Footer: línea fina + texto gris (applyOfficialFooterAllPages).
+ * - Cabecera de tabla: azul muy claro, no navy oscuro.
+ * - Firma: imagen si existe, línea limpia si no.
+ * - Header repetido en páginas 2+ via willDrawPage.
+ * - Paginación completa: Pág. X / Y.
  */
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
-  addInstitutionLogo,
-  addInstitutionSeal,
   addInstitutionSignature,
-  getDocumentFooter,
-  getInstitutionAddress,
-  getInstitutionEmail,
-  getInstitutionFldoe,
+  drawOfficialHeader,
+  drawSectionLabel,
+  applyOfficialFooterAllPages,
   getInstitutionName,
+  getInstitutionFldoe,
+  PDF_NAVY,
+  PDF_GRAY,
+  PDF_LGRAY,
+  PDF_BLACK,
+  PDF_BLUE,
+  PDF_BORDER,
+  PDF_FOOTER_H,
+  PDF_MARGIN,
 } from '@/lib/officialDocuments';
 import { shouldShowOfficialCredits } from '@/lib/academicUtils';
-
-// ── Paleta institucional ──────────────────────────────────────────────────────
-const NAVY  = [25, 61, 109];
-const TEAL  = [32, 178, 170];
-const GRAY  = [100, 116, 139];
-const LGRAY = [241, 245, 249];
-const WHITE = [255, 255, 255];
-const BLACK = [30, 30, 30];
-
-const OFFICIAL_FOOTER =
-  'Chanak TrainUp Education, Inc. d/b/a Chanak International Academy · ' +
-  '4883 NW 107th Path, Doral, FL 33178, USA · ' +
-  'administration@chanakacademy.org · chanakacademy.org · ' +
-  'FLDOE #134620 · EIN 36-5154011 · 501(c)(3) Nonprofit';
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
 const T = {
   es: {
     title:          'BOLETÍN ACADÉMICO',
     subtitle:       'Reporte de Calificaciones Trimestrales',
-    studentInfo:    'Datos del Estudiante',
+    studentInfo:    'DATOS DEL ESTUDIANTE',
     name:           'Nombre Completo',
     studentId:      'Código de Estudiante',
     grade:          'Grado Académico',
@@ -68,10 +63,8 @@ const T = {
     creditsCumul:   'Créditos Acumulados (9°–12°)',
     gpa:            'Promedio GPA',
     observations:   'OBSERVACIONES ACADÉMICAS',
-    issuedBy:       'Emitido por',
     issuedDate:     'Fecha de Emisión',
     directorTitle:  'Director(a)',
-    signHere:       'Firma del Director',
     fldoe:          'FLDOE',
     refNumber:      'Ref',
     page:           'Pág.',
@@ -79,7 +72,7 @@ const T = {
   en: {
     title:          'ACADEMIC TRANSCRIPT',
     subtitle:       'Quarterly Academic Report',
-    studentInfo:    'Student Information',
+    studentInfo:    'STUDENT INFORMATION',
     name:           'Full Name',
     studentId:      'Student ID',
     grade:          'Grade Level',
@@ -102,10 +95,8 @@ const T = {
     creditsCumul:   'Cumulative Credits (9th–12th)',
     gpa:            'GPA',
     observations:   'ACADEMIC OBSERVATIONS',
-    issuedBy:       'Issued by',
     issuedDate:     'Date of Issue',
     directorTitle:  'Director',
-    signHere:       'Director Signature',
     fldoe:          'FLDOE',
     refNumber:      'Ref',
     page:           'Page',
@@ -119,108 +110,13 @@ function gradeStatusLabel(status, lang) {
   return t.pending;
 }
 
-// ── Draw page header ── called on page 1 manually and by willDrawPage ──────────
-function drawTranscriptHeader(doc, settings, t) {
-  const W = doc.internal.pageSize.getWidth();
-
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, W, 40, 'F');
-
-  // Logo (left) · Seal (right)
-  addInstitutionLogo(doc, settings, 10, 7, 21, 21);
-  addInstitutionSeal(doc, settings, W - 34, 7, 22, 22);
-
-  // Institution name
-  doc.setTextColor(...WHITE);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text(getInstitutionName(settings).toUpperCase(), W / 2, 14, { align: 'center' });
-
-  // Sub-info
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.text(
-    `${t.fldoe} #${getInstitutionFldoe(settings)}  ·  MSA-CESS Candidate  ·  501(c)(3) Nonprofit  ·  Florida, USA`,
-    W / 2, 20, { align: 'center' },
-  );
-  const contactLine = [
-    getInstitutionAddress(settings),
-    getInstitutionEmail(settings) || 'administration@chanakacademy.org',
-  ].filter(Boolean).join('  ·  ');
-  doc.text(contactLine || 'administration@chanakacademy.org  ·  chanakacademy.org', W / 2, 25, { align: 'center' });
-
-  // Document title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(t.title, W / 2, 33, { align: 'center' });
-
-  // Teal subtitle stripe
-  doc.setFillColor(...TEAL);
-  doc.rect(0, 39, W, 7, 'F');
-  doc.setTextColor(...WHITE);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7.5);
-  doc.text(t.subtitle, W / 2, 44, { align: 'center' });
-
-  doc.setTextColor(...BLACK);
-}
-
-// ── Section title bar (navy fill) ─────────────────────────────────────────────
-function secBar(doc, y, txt) {
-  const W = doc.internal.pageSize.getWidth();
-  doc.setFillColor(...NAVY);
-  doc.rect(14, y, W - 28, 7, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...WHITE);
-  doc.text(txt, 17, y + 5);
-  doc.setTextColor(...BLACK);
-  return y + 10;
-}
-
-// ── Apply footer + page numbers to ALL pages ──────────────────────────────────
-function applyFooterAllPages(doc, settings, t, refNumber, issuedDateStr) {
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
-  const n = doc.getNumberOfPages();
-  const footerText = settings?.document_footer || OFFICIAL_FOOTER;
-
-  for (let i = 1; i <= n; i++) {
-    doc.setPage(i);
-    doc.setFillColor(...NAVY);
-    doc.rect(0, H - 14, W, 14, 'F');
-    doc.setTextColor(...WHITE);
-    doc.setFont('helvetica', 'normal');
-
-    // Footer text — split to 2 lines if long
-    doc.setFontSize(5.5);
-    const fLines = doc.splitTextToSize(footerText, W - 24);
-    if (fLines.length >= 2) {
-      doc.text(fLines[0], W / 2, H - 9.5, { align: 'center' });
-      doc.text(fLines.slice(1).join(' '), W / 2, H - 5.5, { align: 'center' });
-    } else {
-      doc.text(fLines[0] || footerText, W / 2, H - 7, { align: 'center' });
-    }
-
-    // Page number (right)
-    doc.setFontSize(6);
-    doc.text(`${t.page} ${i} / ${n}`, W - 5, H - 5.5, { align: 'right' });
-
-    // Issued date + ref (first page only, left)
-    if (i === 1) {
-      doc.setFontSize(5.5);
-      doc.text(`${t.issuedDate}: ${issuedDateStr}  |  ${t.refNumber}: ${refNumber}`, 5, H - 5.5);
-    }
-  }
-}
-
 // ── Generador principal ───────────────────────────────────────────────────────
 /**
- * @param {Object}    opts.transcript     - transcript_records row
- * @param {Array}     opts.courses        - transcript_courses rows
- * @param {Object}    opts.student        - students row
- * @param {Object}    opts.settings       - institutional_settings row (preloadImages applied)
- * @param {Array}     opts.creditsSummary - student_credits_summary rows
+ * @param {Object}    opts.transcript     - fila transcript_records
+ * @param {Array}     opts.courses        - filas transcript_courses
+ * @param {Object}    opts.student        - fila students
+ * @param {Object}    opts.settings       - institutional_settings (preloadImages aplicado)
+ * @param {Array}     opts.creditsSummary - filas student_credits_summary
  * @param {'es'|'en'} opts.lang
  */
 export function generateTranscriptPDF({
@@ -230,10 +126,9 @@ export function generateTranscriptPDF({
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
-  const FOOTER_H  = 14;              // footer bar height
-  const MARGIN_TOP = 50;             // content start Y after header
-  const SAFE_BOTTOM = H - FOOTER_H - 6;  // max Y before footer
+  const SAFE_BOTTOM = H - PDF_FOOTER_H - 6;
 
+  // Datos de referencia
   const now = new Date();
   const issuedDateStr = now.toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -241,27 +136,34 @@ export function generateTranscriptPDF({
   const refNumber =
     `${getInstitutionFldoe(settings)}-${now.getFullYear()}-` +
     `${(student?.id || '000000').substring(0, 6).toUpperCase()}`;
+
   const showCredits = shouldShowOfficialCredits(student, {
     allowMiddleSchoolCredits: Boolean(settings?.allow_middle_school_credits),
   });
   const studentName = `${student?.first_name || ''} ${student?.last_name || ''}`.trim() || '—';
 
-  // ── Helper: new page with header ───────────────────────────────────────────
+  // ── Helpers de paginación ──────────────────────────────────────────────────
   function newPage() {
     doc.addPage();
-    drawTranscriptHeader(doc, settings, t);
-    return MARGIN_TOP;
+    // Página de continuación: header sin título ni subtítulo (más compacto)
+    return drawOfficialHeader(doc, settings, { lang });
   }
 
   function checkBreak(y, need = 20) {
     return y + need > SAFE_BOTTOM ? newPage() : y;
   }
 
-  // ── Page 1 header ──────────────────────────────────────────────────────────
-  drawTranscriptHeader(doc, settings, t);
-  let y = MARGIN_TOP;
+  // ── Página 1: header completo con título y subtítulo ───────────────────────
+  let y = drawOfficialHeader(doc, settings, {
+    docTitle:    t.title,
+    docSubtitle: t.subtitle,
+    lang,
+  });
 
-  // ── Student info table ─────────────────────────────────────────────────────
+  // ── Sección: datos del estudiante ──────────────────────────────────────────
+  y = checkBreak(y, 8);
+  y = drawSectionLabel(doc, y, t.studentInfo);
+
   const infoRows = [
     [t.name,       studentName],
     [t.studentId,  student?.id?.substring(0, 8).toUpperCase() || '—'],
@@ -271,29 +173,28 @@ export function generateTranscriptPDF({
   ];
   if (student?.birth_date) infoRows.push([t.dob, student.birth_date]);
 
-  // Light border box around student info
-  const infoH = infoRows.length * 8 + 4;
-  doc.setFillColor(...LGRAY);
-  doc.setDrawColor(210, 220, 235);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(14, y - 2, W - 28, infoH, 2, 2, 'FD');
+  const infoH = infoRows.length * 8 + 6;
+  doc.setFillColor(...PDF_LGRAY);
+  doc.setDrawColor(...PDF_BORDER);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(PDF_MARGIN, y - 1, W - PDF_MARGIN * 2, infoH, 2, 2, 'FD');
 
   autoTable(doc, {
-    startY: y,
-    body: infoRows,
-    theme: 'plain',
+    startY: y + 1,
+    body:   infoRows,
+    theme:  'plain',
     styles: { fontSize: 9, cellPadding: 1.8 },
     columnStyles: {
-      0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 52 },
-      1: { textColor: BLACK },
+      0: { fontStyle: 'bold', textColor: PDF_GRAY, cellWidth: 52 },
+      1: { textColor: PDF_BLACK },
     },
-    margin: { left: 16, right: 16, bottom: FOOTER_H + 6 },
+    margin: { left: PDF_MARGIN + 2, right: PDF_MARGIN + 2, bottom: PDF_FOOTER_H + 6 },
   });
-  y = doc.lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable.finalY + 10;
 
-  // ── Coursework section ─────────────────────────────────────────────────────
-  y = checkBreak(y, 20);
-  y = secBar(doc, y, t.coursework);
+  // ── Sección: materias cursadas ─────────────────────────────────────────────
+  y = checkBreak(y, 22);
+  y = drawSectionLabel(doc, y, t.coursework);
 
   const courseRows = (courses || []).map(c => {
     const base = [c.subject_name || '—', c.academic_block || '—', c.pace_numbers || '—'];
@@ -312,9 +213,22 @@ export function generateTranscriptPDF({
     startY: y,
     head:   [courseHead],
     body:   courseRows.length > 0 ? courseRows : [courseHead.map(() => '—')],
-    styles:          { fontSize: 8, cellPadding: 2.2 },
-    headStyles:      { fillColor: NAVY, textColor: WHITE, fontStyle: 'bold', fontSize: 8 },
-    alternateRowStyles: { fillColor: LGRAY },
+    // Estilo de baja tinta: cabecera azul muy claro, no navy oscuro
+    styles: {
+      fontSize:    8,
+      cellPadding: 2.2,
+      lineColor:   [210, 222, 234],
+      lineWidth:   0.15,
+    },
+    headStyles: {
+      fillColor:   PDF_BLUE,
+      textColor:   PDF_NAVY,
+      fontStyle:   'bold',
+      fontSize:    8,
+      lineColor:   PDF_BORDER,
+      lineWidth:   0.2,
+    },
+    alternateRowStyles: { fillColor: [248, 250, 253] },
     columnStyles: {
       0: { cellWidth: showCredits ? 54 : 64 },
       1: { cellWidth: showCredits ? 33 : 40 },
@@ -323,19 +237,20 @@ export function generateTranscriptPDF({
       4: { cellWidth: showCredits ? 22 : 33, halign: 'center' },
       ...(showCredits ? { 5: { cellWidth: 28, halign: 'center' } } : {}),
     },
-    margin: { left: 14, right: 14, bottom: FOOTER_H + 6 },
-    // Redraw institutional header whenever autoTable creates a new page
+    // Espacio para footer discreto (12 mm)
+    margin: { top: 32, left: PDF_MARGIN, right: PDF_MARGIN, bottom: PDF_FOOTER_H + 6 },
+    // Header institucional en páginas de continuación (slim, sin título)
     willDrawPage: (data) => {
       if (data.pageNumber > 1) {
-        drawTranscriptHeader(doc, settings, t);
+        drawOfficialHeader(doc, settings, { lang });
       }
     },
   });
-  y = doc.lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable.finalY + 10;
 
-  // ── GPA / Credits summary ──────────────────────────────────────────────────
-  y = checkBreak(y, 25);
-  y = secBar(doc, y, t.creditsSummary);
+  // ── Sección: resumen de créditos / GPA ────────────────────────────────────
+  y = checkBreak(y, 28);
+  y = drawSectionLabel(doc, y, t.creditsSummary);
 
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
 
@@ -360,10 +275,10 @@ export function generateTranscriptPDF({
       theme: 'plain',
       styles: { fontSize: 9, cellPadding: 1.8 },
       columnStyles: {
-        0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
-        1: { fontStyle: 'bold', textColor: NAVY, halign: 'right' },
+        0: { fontStyle: 'bold', textColor: PDF_GRAY, cellWidth: 80 },
+        1: { fontStyle: 'bold', textColor: PDF_NAVY, halign: 'right' },
       },
-      margin: { left: 14, right: 14, bottom: FOOTER_H + 6 },
+      margin: { left: PDF_MARGIN, right: PDF_MARGIN, bottom: PDF_FOOTER_H + 6 },
     });
   } else {
     autoTable(doc, {
@@ -372,71 +287,74 @@ export function generateTranscriptPDF({
       theme: 'plain',
       styles: { fontSize: 9, cellPadding: 1.8 },
       columnStyles: {
-        0: { fontStyle: 'bold', textColor: GRAY, cellWidth: 80 },
-        1: { fontStyle: 'bold', textColor: NAVY, halign: 'right' },
+        0: { fontStyle: 'bold', textColor: PDF_GRAY, cellWidth: 80 },
+        1: { fontStyle: 'bold', textColor: PDF_NAVY, halign: 'right' },
       },
-      margin: { left: 14, right: 14, bottom: FOOTER_H + 6 },
+      margin: { left: PDF_MARGIN, right: PDF_MARGIN, bottom: PDF_FOOTER_H + 6 },
     });
   }
-  y = doc.lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable.finalY + 10;
 
-  // ── Observations ───────────────────────────────────────────────────────────
+  // ── Sección: observaciones académicas ─────────────────────────────────────
   if (transcript?.academic_observations) {
-    y = checkBreak(y, 20);
-    y = secBar(doc, y, t.observations);
+    y = checkBreak(y, 22);
+    y = drawSectionLabel(doc, y, t.observations);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(50, 50, 50);
-    const obsLines = doc.splitTextToSize(transcript.academic_observations, W - 28);
+    const obsLines = doc.splitTextToSize(transcript.academic_observations, W - PDF_MARGIN * 2);
     for (const line of obsLines) {
       y = checkBreak(y, 5);
-      doc.text(line, 14, y);
+      doc.text(line, PDF_MARGIN, y);
       y += 4.5;
     }
     y += 4;
   }
 
-  // ── Signature block ────────────────────────────────────────────────────────
-  // Need ~52 mm: teal divider + signature image/blank + line + name + title
-  y = checkBreak(y, 52);
-  y += 6;
+  // ── Bloque de firma ────────────────────────────────────────────────────────
+  // Espacio necesario: línea fina + firma (~16mm) + línea + nombre + título ≈ 48mm
+  y = checkBreak(y, 48);
+  y += 8;
 
-  // Teal divider left half
-  doc.setDrawColor(...TEAL);
-  doc.setLineWidth(0.6);
-  doc.line(14, y, W / 2 - 14, y);
-  y += 6;
-
-  // Signature image if available, else blank space
-  const sigDrawn = addInstitutionSignature(doc, settings, 14, y, 44, 18);
-  y += sigDrawn ? 20 : 16;
-
-  // Signature line
-  doc.setDrawColor(...NAVY);
+  // Línea decorativa fina (izquierda tercio)
+  doc.setDrawColor(...PDF_BORDER);
   doc.setLineWidth(0.4);
-  doc.line(14, y, 95, y);
+  doc.line(PDF_MARGIN, y, W / 2 - 14, y);
+  y += 6;
+
+  // Imagen de firma (si existe) o espacio en blanco
+  const sigDrawn = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 44, 16);
+  y += sigDrawn ? 18 : 14;
+
+  // Línea de firma
+  doc.setDrawColor(...PDF_NAVY);
+  doc.setLineWidth(0.3);
+  doc.line(PDF_MARGIN, y, 95, y);
   y += 5;
 
-  // Director name
+  // Nombre del director
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(...NAVY);
-  doc.text(settings?.director_name || 'Mariela Andrade', 14, y);
+  doc.setFontSize(9);
+  doc.setTextColor(...PDF_NAVY);
+  doc.text(settings?.director_name || 'Mariela Andrade', PDF_MARGIN, y);
   y += 5;
 
-  // Title + institution
+  // Cargo e institución
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(...GRAY);
-  doc.text(settings?.director_title || t.directorTitle, 14, y);
+  doc.setTextColor(...PDF_GRAY);
+  doc.text(settings?.director_title || t.directorTitle, PDF_MARGIN, y);
   y += 4;
-  doc.text(getInstitutionName(settings), 14, y);
+  doc.text(getInstitutionName(settings), PDF_MARGIN, y);
 
-  // ── Footer + page numbers on ALL pages ─────────────────────────────────────
-  applyFooterAllPages(doc, settings, t, refNumber, issuedDateStr);
+  // ── Footer discreto en TODAS las páginas ──────────────────────────────────
+  applyOfficialFooterAllPages(doc, settings, {
+    pageLabel: t.page,
+    refLine:   `${t.issuedDate}: ${issuedDateStr}  ·  ${t.refNumber}: ${refNumber}`,
+  });
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Guardar ────────────────────────────────────────────────────────────────
   const lastName = (student?.last_name || 'student').replace(/\s+/g, '_');
   doc.save(
     `boletin_${lastName}_${transcript?.school_year || ''}_${transcript?.quarter || ''}_${lang}.pdf`,

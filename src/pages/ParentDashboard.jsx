@@ -201,11 +201,23 @@ function ParentBoletinesPanel({ studentChildren }) {
         supabase.from('institutional_settings').select('*').limit(1).single(),
         supabase.from('student_credits_summary').select('*').eq('student_id', tr.student_id),
       ]);
+      const preparedSettings = await preloadImages(settingsRes.data);
+      if (import.meta.env.DEV) {
+        console.warn('[PDF SETTINGS CHECK]', {
+          generator:       'ParentBoletinesPanel',
+          hasLogo:         Boolean(preparedSettings?._logo64),
+          hasSeal:         Boolean(preparedSettings?._seal64),
+          hasSignature:    Boolean(preparedSettings?._signature64),
+          rawLogoUrl:      Boolean(preparedSettings?.logo_url),
+          rawSealUrl:      Boolean(preparedSettings?.seal_url),
+          rawSignatureUrl: Boolean(preparedSettings?.director_signature_url),
+        });
+      }
       generateTranscriptPDF({
         transcript: tr,
         courses: coursesRes.data || [],
         student: child || { id: tr.student_id },
-        settings: settingsRes.data || null,
+        settings: preparedSettings,
         creditsSummary: creditsRes.data || [],
         lang: tr.language || 'es',
       });
