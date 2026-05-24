@@ -14,7 +14,6 @@ import {
   applyOfficialFooterAllPages,
   drawOfficialHeader,
   drawSectionLabel,
-  getInstitutionFldoe,
   getInstitutionInfo,
   PDF_BLACK,
   PDF_BLUE,
@@ -157,7 +156,7 @@ export function generateTranscriptPDF({
   const issuedDateStr = now.toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  const refNumber = `${getInstitutionFldoe(settings)}-${now.getFullYear()}-${
+  const refNumber = `${getInstitutionInfo(settings).fldoe}-${now.getFullYear()}-${
     (student?.id || '000000').substring(0, 6).toUpperCase()
   }`;
   const showCredits = resolveShowCredits(student, settings);
@@ -327,9 +326,9 @@ export function generateTranscriptPDF({
   doc.line(PDF_MARGIN, y, PDF_MARGIN + 70, y);
   y += 3;
 
-  // Imagen de firma (una sola vez, 40×16 mm)
+  // Imagen de firma (una sola vez, 40×16 mm); si no hay imagen, reservar espacio para línea limpia
   const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 16);
-  y += drewSig ? 19 : 2;
+  y += drewSig ? 19 : 16;
 
   // Línea horizontal de firma
   doc.setDrawColor(...PDF_NAVY);

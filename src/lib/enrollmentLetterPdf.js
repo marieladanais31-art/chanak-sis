@@ -9,6 +9,7 @@ import {
   addInstitutionSignature,
   applyOfficialFooterAllPages,
   drawOfficialHeader,
+  formatMsaStatus,
   getInstitutionInfo,
   normalizeDocumentLanguage,
   PDF_BLACK,
@@ -80,29 +81,30 @@ const I18N = {
   },
 };
 
-function buildBodyText(studentName, schoolYear, info, lang) {
+function buildBodyText(studentName, schoolYear, info, lang, msaFull) {
   if (lang === 'en') {
     return [
       `This is to certify that ${studentName} is currently enrolled as an active student at ${info.name} for the academic year ${schoolYear || '—'}.`,
-      `The student holds an active academic record with an assigned mentor and full access to the institutional academic management system of ${info.name}.`,
-      `${info.name} is registered with the Florida Department of Education (FLDOE School Number ${info.fldoe}) as a private educational institution in the State of Florida, United States of America, and holds the status of ${info.msa}.`,
+      `The student is part of the K–12 International Academic Programme of ${info.name}, holding an active academic record with an assigned mentor and full access to the institutional academic management system.`,
+      `${info.name} is registered with the Florida Department of Education (FLDOE School Number ${info.fldoe}) as a private educational institution in the State of Florida, United States of America. The institution holds the status of ${msaFull}.`,
       `This certificate is issued at the request of the family for academic, administrative, and informational purposes. It may be verified by contacting the institution directly at ${info.email}.`,
     ];
   }
   return [
-    `Por medio de la presente, ${info.name} certifica que el/la estudiante ${studentName} figura como alumno/a activo/a y matriculado/a para el año académico ${schoolYear || '—'}.`,
-    `El/la estudiante cuenta con expediente académico activo, mentor asignado y acceso pleno al sistema de gestión académica de ${info.name}.`,
-    `${info.name} está registrada ante el Florida Department of Education (FLDOE School Number ${info.fldoe}) como institución educativa privada en el Estado de Florida, Estados Unidos de América, con la condición de ${info.msa}.`,
-    `La presente certificación se expide a solicitud de la familia para fines académicos, administrativos e informativos, y puede verificarse contactando directamente con la administración en ${info.email}.`,
+    `Por medio de la presente, ${info.name} certifica que el/la estudiante ${studentName} figura como estudiante activo/a y matriculado/a para el año académico ${schoolYear || '—'}.`,
+    `La institución confirma que el/la estudiante forma parte de su programa académico internacional K–12, con expediente académico activo y seguimiento institucional dentro del sistema de gestión académica de ${info.name}.`,
+    `${info.name} está registrada ante el Florida Department of Education (FLDOE School Number ${info.fldoe}) como institución educativa privada en el Estado de Florida, Estados Unidos de América, y ostenta la condición de ${msaFull}.`,
+    `La presente certificación se expide a solicitud de la familia para fines académicos, administrativos e informativos, y puede verificarse contactando directamente con la administración institucional.`,
   ];
 }
 
 export function generateEnrollmentLetterPDF({ letter, student, settings, lang: requestedLang }) {
-  const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const lang = normalizeDocumentLanguage(requestedLang || letter?.letter_language || 'es');
-  const t    = I18N[lang] || I18N.es;
-  const info = getInstitutionInfo(settings);
-  const W    = pW(doc);
+  const doc     = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const lang    = normalizeDocumentLanguage(requestedLang || letter?.letter_language || 'es');
+  const t       = I18N[lang] || I18N.es;
+  const info    = getInstitutionInfo(settings);
+  const msaFull = formatMsaStatus(settings, lang, false);
+  const W       = pW(doc);
 
   // ── Encabezado ──────────────────────────────────────────────────────────────
   let y = drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
@@ -139,7 +141,7 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
   if (customBody && !hasOffCampus) {
     y = paragraph(doc, y, customBody, PDF_MARGIN, 10.5);
   } else {
-    const paras = buildBodyText(studentName, letter?.school_year, info, lang);
+    const paras = buildBodyText(studentName, letter?.school_year, info, lang, msaFull);
     for (const p of paras) {
       y = paragraph(doc, y, p, PDF_MARGIN, 10.5);
       y += 1;

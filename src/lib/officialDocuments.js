@@ -28,11 +28,29 @@ export function getInstitutionInfo(settings) {
     website:       settings?.website            || settings?.web_url                  || 'chanakacademy.org',
     fldoe:         settings?.fldoe_number       || settings?.fldoe_registration       || settings?.fldoe || '134620',
     ein:           settings?.ein               || settings?.ein_number                || '36-5154011',
-    msa:           settings?.msa_status                                              || 'MSA-CESS Official Candidate',
+    msa:           formatMsaStatus(settings, 'en', true),
     footer:        settings?.document_footer    || settings?.footer_text              || null,
     directorName:  settings?.director_name      || settings?.head_of_school_name      || 'Mariela Andrade',
     directorTitle: settings?.director_title     || settings?.head_of_school_title     || 'Head of School',
   };
+}
+
+/**
+ * Normaliza el estado MSA para documentos oficiales.
+ * Evita mostrar valores crudos como "candidate", "candidacy", "official_candidate".
+ *
+ * @param {Object}          settings  - settings row (necesita msa_status)
+ * @param {'es'|'en'}       lang
+ * @param {boolean}         short     - true → forma corta para líneas ajustadas (encabezado)
+ */
+export function formatMsaStatus(settings, lang = 'es', short = false) {
+  const raw = (settings?.msa_status || '').toLowerCase().trim();
+  // Si ya es una frase larga en DB, devolver tal cual
+  if (raw.length >= 20) return settings.msa_status;
+  // Normalizar valores cortos/crudos
+  if (short) return 'MSA-CESS Official Candidate';
+  if (lang === 'en') return 'MSA-CESS Official Candidate for Accreditation';
+  return 'Candidata oficial a acreditación ante MSA-CESS';
 }
 
 // Compatibilidad con código antiguo que llama a los getters individuales
@@ -108,16 +126,22 @@ export function safeAddImage(doc, imageData, x, y, w, h, label = '') {
 export async function preloadImages(settings) {
   if (!settings) return settings;
 
-  // Convierte URL a base64. Rechaza respuestas HTML (Google Drive, auth redirects).
+  /**
+   * Convierte URL/ruta a base64.
+   * - Devuelve null si la respuesta es HTML (Google Drive / auth redirect).
+   * - Devuelve null si content-type no empieza con image/.
+   */
   async function toBase64(url) {
     if (!url) return null;
     if (typeof url !== 'string') return null;
-    if (url.startsWith('data:')) return url;   // ya es base64
+    if (url.startsWith('data:image/')) return url;   // ya es base64 válido
+    if (url.startsWith('data:')) return null;         // base64 de otro tipo, no usar
     try {
       const res = await fetch(url);
       if (!res.ok) return null;
       const ct = res.headers.get('content-type') || '';
-      if (ct.includes('text/html')) return null;   // Google Drive / login redirect
+      if (ct.includes('text/html')) return null;      // Google Drive / login redirect
+      if (!ct.startsWith('image/')) return null;      // no es imagen
       const blob = await res.blob();
       return await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -128,29 +152,48 @@ export async function preloadImages(settings) {
     } catch { return null; }
   }
 
-  // Intenta primary URL; si falla, usa fallback local.
-  async function resolve(primary, localFallback) {
-    const r = await toBase64(primary);
-    if (r) return r;
-    return toBase64(localFallback);
+  /**
+   * Prueba cada candidato en orden y devuelve el primer base64 válido.
+   * Los últimos candidatos deben ser siempre las rutas locales /brand/*.
+   */
+  async function resolveFirst(candidates) {
+    for (const url of candidates) {
+      if (!url) continue;
+      const result = await toBase64(url);
+      if (result) return result;
+    }
+    return null;
   }
 
-  // Cadena de resolución: campos canónicos + aliases + asset local
-  const logoUrl = settings.logo_url       || settings.logo              || settings.school_logo_url;
-  const sealUrl = settings.seal_url       || settings.seal              || settings.institutional_seal_url;
-  const sigUrl  = settings.director_signature_url || settings.signature_url || settings.director_signature;
+  const logo64 = await resolveFirst([
+    settings.logo_url,
+    settings.logo,
+    settings.school_logo_url,
+    '/brand/chanak-logo.png',
+  ]);
 
-  const [logo64, seal64, sig64] = await Promise.all([
-    resolve(logoUrl,  '/brand/chanak-logo.png'),
-    resolve(sealUrl,  '/brand/chanak-seal.png'),
-    resolve(sigUrl,   '/brand/director-signature.png'),
+  const seal64 = await resolveFirst([
+    settings.seal_url,
+    settings.seal,
+    settings.institutional_seal_url,
+    '/brand/chanak-seal.png',
+  ]);
+
+  const sig64 = await resolveFirst([
+    settings.director_signature_url,
+    settings.signature_url,
+    settings.director_signature,
+    '/brand/director-signature.png',
   ]);
 
   if (_DEV) {
     console.warn('[PDF ASSETS CHECK]', {
-      hasLogo64:      Boolean(logo64),
-      hasSeal64:      Boolean(seal64),
-      hasSignature64: Boolean(sig64),
+      hasLogo64:       Boolean(logo64),
+      hasSeal64:       Boolean(seal64),
+      hasSignature64:  Boolean(sig64),
+      logoPrefix:      logo64?.slice(0, 20),
+      sealPrefix:      seal64?.slice(0, 20),
+      signaturePrefix: sig64?.slice(0, 20),
     });
   }
 
