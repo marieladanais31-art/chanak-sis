@@ -6,6 +6,7 @@
 
 import jsPDF from 'jspdf';
 import {
+  addInstitutionSeal,
   addInstitutionSignature,
   applyOfficialFooterAllPages,
   drawOfficialHeader,
@@ -206,9 +207,9 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
     y = paragraph(doc, y, letter.notes, PDF_MARGIN, 9);
   }
 
-  // ── Firma del Director ──────────────────────────────────────────────────────
-  // ensureSpace: si no caben 48mm, abrir nueva página
-  y = ensureSpace(doc, y, 48, settings, lang, t.title);
+  // ── Firma del Director + Sello ──────────────────────────────────────────────
+  // Espacio mínimo: sep(3) + sig(19) + línea + padding(4) + texto(10) + sello(24) = 70mm
+  y = ensureSpace(doc, y, 70, settings, lang, t.title);
   y += 6;
 
   doc.setDrawColor(...PDF_NAVY);
@@ -217,7 +218,7 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
   y += 3;
 
   const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 16);
-  y += drewSig ? 19 : 2;
+  y += drewSig ? 19 : 16;
 
   // Línea de firma
   doc.setDrawColor(...PDF_NAVY);
@@ -245,6 +246,9 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
   doc.setFontSize(8.5);
   doc.setTextColor(...PDF_NAVY);
   doc.text(info.name, W - PDF_MARGIN, y, { align: 'right' });
+
+  // Sello institucional debajo del nombre/cargo (validación visual)
+  addInstitutionSeal(doc, settings, PDF_MARGIN, y + 14, 20, 20);
 
   // ── Footer ──────────────────────────────────────────────────────────────────
   applyOfficialFooterAllPages(doc, settings, { pageLabel: t.page });

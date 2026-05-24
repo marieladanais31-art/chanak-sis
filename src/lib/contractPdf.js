@@ -8,6 +8,7 @@
 
 import jsPDF from 'jspdf';
 import {
+  addInstitutionSeal,
   addInstitutionSignature,
   applyOfficialFooterAllPages,
   drawOfficialHeader,
@@ -197,10 +198,11 @@ export function generateContractPDF({ contract, student, settings, lang: request
   }
 
   // ── Firmas ───────────────────────────────────────────────────────────────────
-  // Director box: 42mm (image 18 + margen + nombre + fecha)
-  // Parent box:   42mm (uniforme)
+  // Director box: 42mm. Sello debajo: 3mm gap + 22mm = 25mm extra.
+  // Total mínimo desde y: secTitle(11) + padding(4) + sigBoxH(42) + sello(25) = 82mm
   const sigBoxH = 42;
-  y = checkBreak(doc, contract, settings, lang, y, sigBoxH + 20);
+  const sealSz  = 22;                       // tamaño del sello (ancho = alto)
+  y = checkBreak(doc, contract, settings, lang, y, sigBoxH + 38);
   y = secTitle(doc, y, t.signatures);
   y += 4;
 
@@ -271,6 +273,10 @@ export function generateContractPDF({ contract, student, settings, lang: request
     doc.setTextColor(...PDF_NAVY);
     doc.text(sig.role, sig.x + sigW / 2, y + sigBoxH - 2, { align: 'center' });
   });
+
+  // Sello institucional debajo del bloque Chanak (lado izquierdo, centrado en sigW)
+  const sealX = M + (sigW - sealSz) / 2;
+  addInstitutionSeal(doc, settings, sealX, y + sigBoxH + 3, sealSz, sealSz);
 
   // ── Footer en todas las páginas ─────────────────────────────────────────────
   applyOfficialFooterAllPages(doc, settings, { pageLabel: t.page });

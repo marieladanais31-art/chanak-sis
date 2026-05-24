@@ -265,9 +265,7 @@ export function drawOfficialHeader(doc, settings, opts = {}) {
 
   // Logo (izquierda, 17×17 mm)
   addInstitutionLogo(doc, settings, 10, 6, 17, 17);
-
-  // Sello (derecha, 17×17 mm, discreto)
-  addInstitutionSeal(doc, settings, W - 27, 6, 17, 17);
+  // Sello: se coloca en el bloque de firma del director, no en el encabezado.
 
   const info = getInstitutionInfo(settings);
 

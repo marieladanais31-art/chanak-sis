@@ -10,6 +10,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
+  addInstitutionSeal,
   addInstitutionSignature,
   applyOfficialFooterAllPages,
   drawOfficialHeader,
@@ -317,8 +318,9 @@ export function generateTranscriptPDF({
     y += obsLines.length * 4.5 + 6;
   }
 
-  // ── Firma del Director ──────────────────────────────────────────────────────
-  y = checkBreak(doc, y, settings, lang, 46);
+  // ── Firma del Director + Sello ──────────────────────────────────────────────
+  // Espacio: sep(3) + sig(19) + línea + padding(4) + texto(5) + sello(24) = 64mm
+  y = checkBreak(doc, y, settings, lang, 64);
 
   // Línea separadora fina
   doc.setDrawColor(...PDF_NAVY);
@@ -353,6 +355,9 @@ export function generateTranscriptPDF({
   doc.setTextColor(...PDF_GRAY);
   doc.text(`${t.issuedDate}: ${issuedDateStr}`, pW(doc) - PDF_MARGIN, y, { align: 'right' });
   doc.text(`${t.refNumber}: ${refNumber}`, pW(doc) - PDF_MARGIN, y + 5, { align: 'right' });
+
+  // Sello institucional debajo del nombre/cargo (validación visual)
+  addInstitutionSeal(doc, settings, PDF_MARGIN, y + 9, 20, 20);
 
   // ── Footer en todas las páginas ─────────────────────────────────────────────
   applyOfficialFooterAllPages(doc, settings, { pageLabel: t.page });
