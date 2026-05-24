@@ -221,19 +221,34 @@ export default function AdminPayments() {
 
     setSaving(true);
     try {
+      // Normalizar campos nuevos y legacy para evitar NOT NULL constraint errors
+      const normalizedConcept = form.concept || 'mensualidad';
+      const normalizedAmount  = parseFloat(form.amount) || 0;
+      const isPaidStatus      = ['paid', 'scholarship', 'waived'].includes(form.status);
+
       const payload = {
+        // ── Campos nuevos ──
         student_id:              form.student_id,
         school_year:             form.school_year,
-        concept:                 form.concept,
-        amount:                  parseFloat(form.amount) || 0,
+        concept:                 normalizedConcept,
+        amount:                  normalizedAmount,
         currency:                form.currency || 'EUR',
         status:                  form.status,
         due_date:                form.due_date || null,
-        paid_at:                 form.paid_at ? new Date(form.paid_at).toISOString() : null,
+        paid_at:                 isPaidStatus
+                                   ? (form.paid_at ? new Date(form.paid_at).toISOString() : null)
+                                   : null,
         stripe_payment_link_url: form.stripe_payment_link_url || null,
         payment_method:          form.payment_method || null,
         notes:                   form.notes || null,
         updated_by:              authUser?.id || null,
+        // ── Columnas legacy NOT NULL ──
+        payment_type:            normalizedConcept,
+        program_type:            'off_campus',
+        amount_cents:            Math.round(normalizedAmount * 100),
+        balance_status:          form.status || 'pending',
+        final_amount:            normalizedAmount,
+        total_due:               normalizedAmount,
       };
 
       if (editTarget) {
