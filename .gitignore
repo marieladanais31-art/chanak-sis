@@ -5,3 +5,10 @@ dist/
 .DS_Store
 npm-debug.log*
 .claude/
+
+# Backups locales — nunca subir al repo
+backups/
+*.sql.gz
+backup_*.sql
+dump_*.sql
+*.dump

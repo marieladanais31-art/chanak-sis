@@ -61,7 +61,70 @@ Supabase realiza backups automáticos diarios con retención según el plan:
 
 **Acción requerida:** Verificar el plan actual en https://supabase.com/dashboard → Settings → Billing y asegurar que sea al menos **Pro** antes del cierre del año escolar 2025-2026 (julio 2026).
 
-### 3.2 Backup manual mensual (procedimiento)
+### 3.2 Aviso crítico: Supabase Storage NO está cubierto por backup SQL
+
+> **Importante:** Los backups automáticos de Supabase solo incluyen la base de datos PostgreSQL.
+> Los archivos almacenados en **Supabase Storage** (buckets `pei_files`, `evidence_files`,
+> `academic-evidence`, `contract_pdfs`) **NO quedan respaldados** por los dumps `.sql`.
+> Deben respaldarse por separado según el procedimiento 3.3.
+
+---
+
+### 3.2-B Backup manual semanal (SQL)
+
+Ejecutar cada domingo por la tarde (o el último día hábil de la semana):
+
+```bash
+# Desde Supabase Dashboard → Database → Backups → "Create a new backup"
+# O desde CLI (requiere acceso service_role de solo lectura):
+supabase db dump --project-ref <PROJECT_REF> -f backup_semanal_$(date +%Y%m%d).sql
+gzip backup_semanal_$(date +%Y%m%d).sql
+```
+
+**Destino:** `Google Drive > Chanak SIS Backups > Database SQL > YYYY-MM/`
+
+> ⚠️ **NUNCA compartir el `service_role` key fuera del equipo técnico.** Este key omite toda RLS
+> y permite leer/modificar cualquier tabla. Guardarlo exclusivamente en el gestor de contraseñas
+> del equipo y en las variables de entorno del servidor de CI/CD. Nunca en código ni en mensajes.
+
+---
+
+### 3.2-C Estructura de Google Drive recomendada
+
+```
+Chanak SIS Backups/
+├── Database SQL/
+│   └── YYYY-MM/
+│       ├── backup_semanal_YYYYMMDD.sql.gz
+│       └── backup_mensual_YYYYMMDD.sql.gz
+├── Documents PDFs/
+│   └── YYYY-MM/
+├── Historical Documents/
+│   └── 2024-2025/
+├── PEI Published/
+│   └── YYYY-MM/
+├── Report Cards/
+│   └── YYYY-MM/
+├── Contracts Signed/
+│   └── YYYY-MM/
+└── Evidence Files/
+    └── YYYY-MM/
+```
+
+---
+
+### 3.3-D Tag de versión operativa
+
+Cuando el SIS se considere listo para uso real en producción, crear el siguiente tag en Git:
+
+```bash
+git tag -a v1.0-sis-operativo -m "Chanak SIS v1.0 — listo para operación Hub Jávea y Torrevieja"
+git push origin v1.0-sis-operativo
+```
+
+---
+
+### 3.4 Backup manual mensual (procedimiento)
 
 Ejecutar el último fin de semana de cada mes:
 
@@ -82,7 +145,7 @@ UNION ALL SELECT 'pei_proj', COUNT(*) FROM pei_pace_projections
 UNION ALL SELECT 'payments', COUNT(*) FROM student_payments;
 ```
 
-### 3.3 Backup de archivos (Supabase Storage)
+### 3.5 Backup de archivos (Supabase Storage)
 
 Los buckets `pei_files`, `evidence_files`, `contract_pdfs` deben respaldarse mensualmente:
 
