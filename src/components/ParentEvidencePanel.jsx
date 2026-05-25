@@ -1,44 +1,60 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, FileUp, Loader2, Paperclip, RefreshCw, Send } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, FileUp, Loader2, Paperclip, RefreshCw, Send } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
 
-const EVIDENCE_TYPES = [
-  'PACE Test',
-  'Self Test',
-  'Proyecto',
-  'Life Skills',
-  'Extensión Local',
+// ── Grupos estructurales de evidencia ────────────────────────────────────────
+const EVIDENCE_GROUPS = [
+  {
+    value: 'PACE Test',
+    label: 'PACE Test',
+    hint:  'Evaluación PACE completada. Mínimo 80/100 para alcanzar dominio.',
+    requiresPaceNumber: true,
+  },
+  {
+    value: 'Local Extension',
+    label: 'Local Extension',
+    hint:  'Extensión curricular local (Lengua y Literatura, Historia local, Geografía local…).',
+    requiresPaceNumber: false,
+  },
+  {
+    value: 'Life Skills',
+    label: 'Life Skills',
+    hint:  'Habilidades para la vida (Tecnología, Ed. Física, Arte/Música, Life Skills Inicial…).',
+    requiresPaceNumber: false,
+  },
 ];
 
+// ── Estados de revisión ───────────────────────────────────────────────────────
 const STATUS_META = {
   pending_review: {
-    label: 'Pendiente de revisión',
+    label:     'Pendiente de revisión',
     className: 'bg-amber-50 text-amber-700 border-amber-200',
   },
   approved: {
-    label: 'Aprobada',
+    label:     'Aprobada',
     className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
   correction_requested: {
-    label: 'Corrección solicitada',
+    label:     'Corrección solicitada',
     className: 'bg-orange-50 text-orange-700 border-orange-200',
   },
   rejected: {
-    label: 'Rechazada',
+    label:     'Rechazada',
     className: 'bg-red-50 text-red-700 border-red-200',
   },
 };
 
 const INITIAL_FORM = {
-  student_id: '',
+  student_id:       '',
   student_subject_id: '',
-  quarter: 'Q1',
-  pace_number: '',
-  score: '',
-  evidence_type: 'PACE Test',
-  comment: '',
-  file: null,
+  quarter:          'Q1',
+  evidence_group:   'PACE Test',
+  pace_number:      '',
+  score:            '',
+  comment:          '',
+  file:             null,
+  drive_url:        '',
 };
 
 function getStudentName(student) {
@@ -58,12 +74,16 @@ function getFileExtension(fileName) {
   return parts.length > 1 ? parts.pop() : 'bin';
 }
 
+function isValidUrl(url) {
+  return /^https?:\/\/.+\..+/.test(url.trim());
+}
+
 export default function ParentEvidencePanel({ studentChildren, studentSubjects, initialStudentId }) {
-  const [form, setForm] = useState(INITIAL_FORM);
+  const [form,        setForm]        = useState(INITIAL_FORM);
   const [submissions, setSubmissions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [message,     setMessage]     = useState(null);
 
   const childIds = useMemo(() => (studentChildren || []).map((child) => child.id), [studentChildren]);
 
@@ -74,7 +94,6 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         subject.school_year === ACTIVE_SCHOOL_YEAR &&
         subject.quarter === form.quarter
     );
-
     return dedupeAcademicSubjects(filtered).sort((a, b) => {
       const aOrder = a.subject_order ?? 999;
       const bOrder = b.subject_order ?? 999;
@@ -84,13 +103,14 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
   }, [form.quarter, form.student_id, studentSubjects]);
 
   const selectedSubject = availableSubjects.find((subject) => subject.id === form.student_subject_id);
+  const selectedGroup   = EVIDENCE_GROUPS.find((g) => g.value === form.evidence_group) || EVIDENCE_GROUPS[0];
 
+  // ── Inicializar estudiante ──────────────────────────────────────────────────
   useEffect(() => {
     if (!studentChildren || studentChildren.length === 0) {
       setForm(INITIAL_FORM);
       return;
     }
-
     setForm((current) => {
       const preferredStudentId = studentChildren.some((child) => child.id === initialStudentId)
         ? initialStudentId
@@ -100,6 +120,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     });
   }, [initialStudentId, studentChildren]);
 
+  // ── Sincronizar materia al cambiar disponibles ─────────────────────────────
   useEffect(() => {
     setForm((current) => {
       const subjectStillValid = availableSubjects.some((subject) => subject.id === current.student_subject_id);
@@ -107,28 +128,33 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     });
   }, [availableSubjects]);
 
+  // ── Cargar historial ────────────────────────────────────────────────────────
   const loadSubmissions = async () => {
     if (!childIds.length) {
       setSubmissions([]);
       setLoading(false);
       return;
     }
-
     setLoading(true);
     const { data, error } = await supabase
       .from('academic_evidence_submissions')
-      .select('id, student_id, student_subject_id, subject_name, school_year, quarter, pace_number, score, evidence_type, comment, attachment_url, attachment_path, review_status, academic_outcome, reviewer_comment, created_at, reviewed_at')
+      .select(
+        'id, student_id, student_subject_id, subject_name, school_year, quarter, ' +
+        'pace_number, score, evidence_type, evidence_group, comment, ' +
+        'attachment_url, attachment_path, drive_url, ' +
+        'review_status, academic_outcome, reviewer_comment, created_at, reviewed_at'
+      )
       .in('student_id', childIds)
       .order('created_at', { ascending: false });
 
     if (error) {
       const esRLS = error.code === '42501' || (error.message || '').includes('policy');
       setMessage({
-        type: 'warning',
+        type:  'warning',
         title: 'No se pudieron cargar evidencias anteriores.',
-        text: esRLS
+        text:  esRLS
           ? 'Revisa la vinculación familiar (family_students). El formulario de envío sigue disponible.'
-          : `No se pudo conectar con el historial de evidencias. El formulario sigue disponible. (${error.message || error.code || 'error desconocido'})`,
+          : `No se pudo conectar con el historial. El formulario sigue disponible. (${error.message || error.code || 'error desconocido'})`,
       });
       setSubmissions([]);
     } else {
@@ -145,38 +171,50 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadSubmissions();
-  }, [childIds.join('|')]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadSubmissions(); }, [childIds.join('|')]);
 
-  const updateForm = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
+  const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
+  // ── Subir archivo adjunto ───────────────────────────────────────────────────
   const uploadAttachment = async (submissionDraftId) => {
     if (!form.file) return { attachmentPath: null, attachmentUrl: null };
-
     const extension = getFileExtension(form.file.name);
-    const safeName = form.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `${form.student_id}/${ACTIVE_SCHOOL_YEAR}/${submissionDraftId}-${Date.now()}-${safeName || `evidence.${extension}`}`;
-
-    const { error } = await supabase.storage
-      .from('academic-evidence')
-      .upload(path, form.file, { upsert: false });
-
+    const safeName  = form.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path      = `${form.student_id}/${ACTIVE_SCHOOL_YEAR}/${submissionDraftId}-${Date.now()}-${safeName || `evidence.${extension}`}`;
+    const { error } = await supabase.storage.from('academic-evidence').upload(path, form.file, { upsert: false });
     if (error) throw error;
-
     return { attachmentPath: path, attachmentUrl: null };
   };
 
+  // ── Enviar evidencia ────────────────────────────────────────────────────────
   const handleSubmit = async (event) => {
     event.preventDefault();
     setMessage(null);
 
-    const hasScore = form.score !== '';
-    const score = hasScore ? Number(form.score) : null;
+    const evidenceGroup  = form.evidence_group || 'PACE Test';
+    const isPaceTest     = evidenceGroup === 'PACE Test';
+    const hasScore       = form.score !== '';
+    const score          = hasScore ? Number(form.score) : null;
+    const driveUrl       = form.drive_url.trim();
+    const hasFile        = Boolean(form.file);
+    const hasDriveUrl    = Boolean(driveUrl);
+
+    // ── Validaciones ──────────────────────────────────────────────────────────
     if (!form.student_id || !form.student_subject_id || !selectedSubject) {
-      setMessage({ type: 'error', title: 'Datos incompletos', text: 'Selecciona estudiante y materia desde student_subjects.' });
+      setMessage({ type: 'error', title: 'Datos incompletos', text: 'Selecciona estudiante y materia.' });
+      return;
+    }
+    if (isPaceTest && !form.pace_number) {
+      setMessage({ type: 'error', title: 'N.º de evaluación obligatorio', text: 'Para PACE Test debes indicar el número de evaluación/PACE.' });
+      return;
+    }
+    if (!hasFile && !hasDriveUrl) {
+      setMessage({ type: 'error', title: 'Adjunto requerido', text: 'Adjunta un archivo o proporciona un enlace de Google Drive.' });
+      return;
+    }
+    if (hasDriveUrl && !isValidUrl(driveUrl)) {
+      setMessage({ type: 'error', title: 'Enlace inválido', text: 'El enlace de Google Drive debe comenzar con https://' });
       return;
     }
     if (hasScore && (!Number.isFinite(score) || score < 0 || score > 100)) {
@@ -187,26 +225,28 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const draftId = crypto.randomUUID();
+      const draftId            = crypto.randomUUID();
       const { attachmentPath, attachmentUrl } = await uploadAttachment(draftId);
-      const belowPaceMinimum = hasScore && form.evidence_type === 'PACE Test' && score < 80;
+      const belowPaceMinimum   = hasScore && isPaceTest && score < 80;
 
       const payload = {
-        id: draftId,
-        student_id: form.student_id,
-        student_subject_id: form.student_subject_id,
-        submitted_by: user?.id || null,
-        subject_name: selectedSubject.subject_name,
-        school_year: ACTIVE_SCHOOL_YEAR,
-        quarter: form.quarter,
-        pace_number: form.pace_number ? Number(form.pace_number) : null,
+        id:                  draftId,
+        student_id:          form.student_id,
+        student_subject_id:  form.student_subject_id,
+        submitted_by:        user?.id || null,
+        subject_name:        selectedSubject.subject_name,
+        school_year:         ACTIVE_SCHOOL_YEAR,
+        quarter:             form.quarter,
+        evidence_group:      evidenceGroup,
+        evidence_type:       evidenceGroup,   // mirrors evidence_group para compatibilidad SQL
+        pace_number:         (isPaceTest && form.pace_number) ? Number(form.pace_number) : null,
         score,
-        evidence_type: form.evidence_type,
-        comment: form.comment || null,
-        attachment_path: attachmentPath,
-        attachment_url: attachmentUrl,
-        review_status: 'pending_review',
-        academic_outcome: belowPaceMinimum ? 'requires_repeat' : 'pending_review',
+        comment:             form.comment || null,
+        attachment_path:     attachmentPath,
+        attachment_url:      attachmentUrl,
+        drive_url:           hasDriveUrl ? driveUrl : null,
+        review_status:       'pending_review',
+        academic_outcome:    belowPaceMinimum ? 'requires_repeat' : 'pending_review',
       };
 
       const { error: insertError } = await supabase.from('academic_evidence_submissions').insert(payload);
@@ -214,16 +254,16 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
 
       setForm((current) => ({
         ...INITIAL_FORM,
-        student_id: current.student_id,
-        quarter: current.quarter,
-        evidence_type: current.evidence_type,
+        student_id:     current.student_id,
+        quarter:        current.quarter,
+        evidence_group: current.evidence_group,
       }));
       setMessage({
-        type: 'success',
+        type:  'success',
         title: 'Evidencia enviada',
-        text: belowPaceMinimum
-          ? 'La evidencia quedó pendiente de revisión oficial por Chanak. El score menor de 80 queda señalado como requires_repeat, pero la familia no aprueba ni rechaza notas.'
-          : 'La evidencia quedó pendiente de revisión oficial por Chanak. No se insertó como nota final.',
+        text:  belowPaceMinimum
+          ? 'Evidencia recibida (score < 80 marcado como requires_repeat). Chanak revisará oficialmente.'
+          : 'Evidencia enviada y pendiente de revisión oficial por Chanak. No se registra como nota final hasta que sea aprobada.',
       });
       await loadSubmissions();
     } catch (error) {
@@ -241,22 +281,30 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     );
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
+
+      {/* ── Texto de ayuda prescrito ── */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 text-blue-900">
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
           <div>
-            <h2 className="font-black text-lg">Evidencias Académicas Off Campus</h2>
-            <p className="text-sm font-medium mt-1">
-              La familia reporta datos verídicos como supervisor primario. Chanak valida oficialmente las calificaciones;
-              este formulario no aprueba ni inserta notas finales.
+            <h2 className="font-black text-lg">Cómo reportar evidencias Off Campus</h2>
+            <ul className="text-sm font-medium mt-2 space-y-1 list-disc list-inside">
+              <li><strong>PACE Test</strong> — reportar por asignatura; indica el número de evaluación. Adjunta el test escaneado o enlace Drive.</li>
+              <li><strong>Local Extension</strong> — reportar por asignatura (historia local, lengua, geografía…). Adjunta foto, documento o enlace Drive.</li>
+              <li><strong>Life Skills</strong> — reportar por asignatura (tecnología, arte, ed. física…). Adjunta foto, documento o enlace Drive.</li>
+            </ul>
+            <p className="text-xs font-bold mt-3 text-blue-800">
+              Puedes adjuntar un archivo, un enlace de Google Drive, o ambos. Al menos uno es obligatorio.
+              Chanak valida oficialmente cada evidencia antes de registrarla como nota final.
             </p>
-            <p className="text-xs font-bold mt-2">Regla: las notas son sobre 100. Evaluación de tipo PACE Test: requiere mínimo 80 para alcanzar dominio.</p>
           </div>
         </div>
       </div>
 
+      {/* ── Mensaje de estado ── */}
       {message && (
         <div className={`rounded-xl border p-4 text-sm font-bold ${
           message.type === 'success'
@@ -270,13 +318,16 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         </div>
       )}
 
+      {/* ── Formulario ── */}
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+
+        {/* Estudiante + Quarter */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Estudiante</label>
             <select
               value={form.student_id}
-              onChange={(event) => updateForm('student_id', event.target.value)}
+              onChange={(e) => updateForm('student_id', e.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
             >
               {studentChildren.map((student) => (
@@ -284,31 +335,31 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
               ))}
             </select>
           </div>
-
           <div>
-            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Quarter</label>
+            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Trimestre (Quarter)</label>
             <select
               value={form.quarter}
-              onChange={(event) => updateForm('quarter', event.target.value)}
+              onChange={(e) => updateForm('quarter', e.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
             >
-              {QUARTERS.map((quarter) => (
-                <option key={quarter.id} value={quarter.id}>{quarter.id}</option>
+              {QUARTERS.map((q) => (
+                <option key={q.id} value={q.id}>{q.id}</option>
               ))}
             </select>
           </div>
         </div>
 
+        {/* Materia */}
         <div>
-          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Materia desde student_subjects</label>
+          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Asignatura</label>
           <select
             value={form.student_subject_id}
-            onChange={(event) => updateForm('student_subject_id', event.target.value)}
+            onChange={(e) => updateForm('student_subject_id', e.target.value)}
             className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
             disabled={availableSubjects.length === 0}
           >
             {availableSubjects.length === 0 ? (
-              <option value="">No hay materias para {form.quarter}</option>
+              <option value="">Sin asignaturas para {form.quarter}</option>
             ) : availableSubjects.map((subject) => (
               <option key={subject.id} value={subject.id}>
                 {subject.subject_name} · {subject.academic_block || subject.pillar_type || 'Bloque académico'}
@@ -317,70 +368,117 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
           </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Grupo de evidencia */}
+        <div>
+          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Tipo de evidencia</label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {EVIDENCE_GROUPS.map((group) => (
+              <button
+                key={group.value}
+                type="button"
+                onClick={() => {
+                  updateForm('evidence_group', group.value);
+                  if (!group.requiresPaceNumber) updateForm('pace_number', '');
+                }}
+                className={`p-3 rounded-xl border-2 text-left transition-all ${
+                  form.evidence_group === group.value
+                    ? 'border-[#193D6D] bg-blue-50'
+                    : 'border-slate-200 bg-white hover:border-slate-400'
+                }`}
+              >
+                <p className={`font-black text-sm ${form.evidence_group === group.value ? 'text-[#193D6D]' : 'text-slate-700'}`}>
+                  {group.label}
+                </p>
+                <p className="text-xs text-slate-500 font-medium mt-1 leading-snug">{group.hint}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* N.º de evaluación — solo para PACE Test */}
+        {selectedGroup.requiresPaceNumber && (
           <div>
-            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">N.º de Evaluación (PACE)</label>
+            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+              N.º de Evaluación / PACE <span className="text-red-500">*</span>
+            </label>
             <input
               type="number"
               min="1"
               step="1"
               value={form.pace_number}
-              onChange={(event) => updateForm('pace_number', event.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
+              onChange={(e) => updateForm('pace_number', e.target.value)}
+              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 max-w-xs"
               placeholder="Ej. 1049"
+              required
             />
+            <p className="text-xs text-slate-400 mt-1 font-medium">Número del PACE evaluado (obligatorio para PACE Test).</p>
           </div>
+        )}
 
+        {/* Score + Comentario */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Score / 100 opcional</label>
+            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+              Score / 100 <span className="text-slate-400 font-medium">(opcional)</span>
+            </label>
             <input
               type="number"
               min="0"
               max="100"
               step="0.01"
               value={form.score}
-              onChange={(event) => updateForm('score', event.target.value)}
+              onChange={(e) => updateForm('score', e.target.value)}
               className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
-              placeholder="0–100 (opcional)"
+              placeholder="0 – 100"
+            />
+            {selectedGroup.requiresPaceNumber && (
+              <p className="text-xs text-amber-700 font-bold mt-1">PACE Test: mínimo 80 para dominio.</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Comentario</label>
+            <textarea
+              value={form.comment}
+              onChange={(e) => updateForm('comment', e.target.value)}
+              className="w-full min-h-[84px] rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800"
+              placeholder="Observaciones de la familia, contexto, condiciones de evaluación…"
             />
           </div>
-
-          <div>
-            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Tipo</label>
-            <select
-              value={form.evidence_type}
-              onChange={(event) => updateForm('evidence_type', event.target.value)}
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
-            >
-              {EVIDENCE_TYPES.map((type) => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
+        {/* Enlace Google Drive */}
         <div>
-          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Comentario</label>
-          <textarea
-            value={form.comment}
-            onChange={(event) => updateForm('comment', event.target.value)}
-            className="w-full min-h-[110px] rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800"
-            placeholder="Observaciones de la familia, contexto, evidencia o necesidades de revisión."
+          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+            Enlace de Google Drive <span className="text-slate-400 font-medium">(obligatorio si no adjuntas archivo)</span>
+          </label>
+          <input
+            type="url"
+            value={form.drive_url}
+            onChange={(e) => updateForm('drive_url', e.target.value)}
+            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800"
+            placeholder="https://drive.google.com/file/d/…"
           />
+          <p className="text-xs text-slate-400 mt-1 font-medium">
+            Comparte el archivo desde Google Drive con permisos de visualización y pega el enlace aquí.
+          </p>
         </div>
 
+        {/* Archivo adjunto */}
         <div>
-          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Archivo adjunto opcional</label>
+          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+            Archivo adjunto <span className="text-slate-400 font-medium">(obligatorio si no hay enlace Drive)</span>
+          </label>
           <label className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-bold text-slate-600 cursor-pointer hover:border-[#20B2AA] hover:bg-teal-50 transition-colors">
             <FileUp className="w-5 h-5 text-[#20B2AA]" />
             <span>{form.file ? form.file.name : 'Seleccionar archivo (PDF, imagen o documento)'}</span>
-            <input type="file" className="hidden" onChange={(event) => updateForm('file', event.target.files?.[0] || null)} />
+            <input type="file" className="hidden" onChange={(e) => updateForm('file', e.target.files?.[0] || null)} />
           </label>
         </div>
 
+        {/* Submit */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
           <p className="text-xs text-slate-500 font-bold">
-            Todas las evidencias se guardan como pending_review; Chanak revisa y decide si aprueba, solicita corrección o rechaza.
+            Todas las evidencias se guardan como <em>pendiente de revisión</em>. Chanak decide si aprueba, solicita corrección o rechaza.
           </p>
           <button
             type="submit"
@@ -393,11 +491,12 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         </div>
       </form>
 
+      {/* ── Historial de evidencias ── */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
           <div>
             <h3 className="font-black text-slate-800 text-lg">Historial de evidencias</h3>
-            <p className="text-xs text-slate-500 font-bold">Solo evidencias de estudiantes vinculados por family_students.</p>
+            <p className="text-xs text-slate-500 font-bold">Solo evidencias de estudiantes vinculados en family_students.</p>
           </div>
           <button
             type="button"
@@ -415,30 +514,43 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         ) : (
           <div className="divide-y divide-slate-100">
             {submissions.map((submission) => {
-              const student = studentChildren.find((child) => child.id === submission.student_id);
-              const meta = STATUS_META[submission.review_status] || STATUS_META.pending_review;
+              const student       = studentChildren.find((child) => child.id === submission.student_id);
+              const meta          = STATUS_META[submission.review_status] || STATUS_META.pending_review;
+              const displayGroup  = submission.evidence_group || submission.evidence_type || 'Evidencia';
+              const hasAttachment = Boolean(submission.signed_attachment_url || submission.attachment_url);
+              const hasDriveLink  = Boolean(submission.drive_url);
+
               return (
-                <div key={submission.id} className="p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div className="space-y-1">
+                <div key={submission.id} className="p-5 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-black text-slate-800">{submission.subject_name}</p>
                       <span className={`px-2 py-0.5 rounded-full border text-xs font-black ${meta.className}`}>{meta.label}</span>
                       {submission.academic_outcome === 'requires_repeat' && (
-                        <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-black border border-orange-200">requires_repeat</span>
+                        <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-black border border-orange-200">
+                          requires_repeat
+                        </span>
                       )}
                     </div>
                     <p className="text-sm text-slate-600 font-bold">
-                      {getStudentName(student)} · {submission.quarter} · {submission.evidence_type} · Score {submission.score != null ? `${submission.score}/100` : 'sin score'}
+                      {getStudentName(student)} · {submission.quarter} ·{' '}
+                      <span className="font-black text-slate-800">{displayGroup}</span>
                       {submission.pace_number ? ` · Evaluación #${submission.pace_number}` : ''}
+                      {submission.score != null ? ` · Score ${submission.score}/100` : ''}
                     </p>
-                    {submission.comment && <p className="text-sm text-slate-500">{submission.comment}</p>}
+                    {submission.comment && (
+                      <p className="text-sm text-slate-500">{submission.comment}</p>
+                    )}
                     {submission.reviewer_comment && (
                       <p className="text-sm text-[#193D6D] font-bold">Comentario Chanak: {submission.reviewer_comment}</p>
                     )}
                   </div>
-                  <div className="flex flex-col items-start lg:items-end gap-2 text-xs text-slate-500 font-bold">
+
+                  <div className="flex flex-col items-start lg:items-end gap-2 text-xs text-slate-500 font-bold shrink-0">
                     <span>{formatDate(submission.created_at)}</span>
-                    {(submission.signed_attachment_url || submission.attachment_url) && (
+
+                    {/* Adjunto */}
+                    {hasAttachment && (
                       <a
                         href={submission.signed_attachment_url || submission.attachment_url}
                         target="_blank"
@@ -448,7 +560,22 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
                         <Paperclip className="w-3.5 h-3.5" /> Ver adjunto
                       </a>
                     )}
-                    {submission.review_status === 'approved' && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+
+                    {/* Enlace Drive */}
+                    {hasDriveLink && (
+                      <a
+                        href={submission.drive_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Ver en Drive
+                      </a>
+                    )}
+
+                    {submission.review_status === 'approved' && (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    )}
                   </div>
                 </div>
               );
