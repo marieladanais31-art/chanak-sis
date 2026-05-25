@@ -252,7 +252,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
               La familia reporta datos verídicos como supervisor primario. Chanak valida oficialmente las calificaciones;
               este formulario no aprueba ni inserta notas finales.
             </p>
-            <p className="text-xs font-bold mt-2">Regla: las notas son sobre 100; PACE Test aprobado requiere mínimo 80.</p>
+            <p className="text-xs font-bold mt-2">Regla: las notas son sobre 100. Evaluación de tipo PACE Test: requiere mínimo 80 para alcanzar dominio.</p>
           </div>
         </div>
       </div>
@@ -319,7 +319,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">PACE number</label>
+            <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">N.º de Evaluación (PACE)</label>
             <input
               type="number"
               min="1"
@@ -429,7 +429,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
                     </div>
                     <p className="text-sm text-slate-600 font-bold">
                       {getStudentName(student)} · {submission.quarter} · {submission.evidence_type} · Score {submission.score != null ? `${submission.score}/100` : 'sin score'}
-                      {submission.pace_number ? ` · PACE ${submission.pace_number}` : ''}
+                      {submission.pace_number ? ` · Evaluación #${submission.pace_number}` : ''}
                     </p>
                     {submission.comment && <p className="text-sm text-slate-500">{submission.comment}</p>}
                     {submission.reviewer_comment && (

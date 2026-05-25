@@ -213,7 +213,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       setLoaded(true);
     } catch (err) {
       console.error('[BulkPaceGradeUpload] Error loading rows:', err);
-      toast({ title: 'Error', description: err.message || 'No se pudieron cargar los PACEs.', variant: 'destructive' });
+      toast({ title: 'Error', description: err.message || 'No se pudieron cargar las evaluaciones.', variant: 'destructive' });
     } finally {
       setLoadingRows(false);
     }
@@ -416,9 +416,9 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             <Upload className="w-5 h-5 text-[#193D6D]" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-slate-800">Carga Masiva de PACEs</h2>
+            <h2 className="text-lg font-black text-slate-800">Carga Masiva de Evaluaciones</h2>
             <p className="text-sm text-slate-500">
-              Registra las calificaciones de los PACEs proyectados del trimestre de forma rápida.
+              Registra las calificaciones de las evaluaciones proyectadas del trimestre de forma rápida.
             </p>
           </div>
         </div>
@@ -495,7 +495,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             {loadingRows
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <BookOpen className="w-4 h-4" />}
-            Cargar PACEs proyectados
+            Cargar evaluaciones proyectadas
           </button>
           {loaded && (
             <button
@@ -520,8 +520,8 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
             {hasProjections
-              ? <>Fuente: <strong>PEI — pei_pace_projections</strong>. Mostrando <strong>{rows.length}</strong> PACEs proyectados para <strong>{selectedQuarter}</strong> · <strong>{schoolYear}</strong>.</>
-              : <>No hay proyección PEI para este trimestre. Fuente: <strong>student_subjects</strong>. Ingresa el número de PACE manualmente si corresponde.</>
+              ? <>Fuente: <strong>PEI — pei_pace_projections</strong>. Mostrando <strong>{rows.length}</strong> evaluaciones proyectadas para <strong>{selectedQuarter}</strong> · <strong>{schoolYear}</strong>.</>
+              : <>No hay proyección PEI para este trimestre. Fuente: <strong>student_subjects</strong>. Ingresa el número de evaluación manualmente si corresponde.</>
             }
           </span>
         </div>
@@ -542,7 +542,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       {loaded && rows.length === 0 && (
         <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
           <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="font-bold text-slate-700">Sin PACEs encontrados</p>
+          <p className="font-bold text-slate-700">Sin evaluaciones encontradas</p>
           <p className="text-sm mt-1">
             No hay proyecciones PEI ni materias registradas para{' '}
             <strong>{selectedQuarter}</strong> · <strong>{schoolYear}</strong>.
@@ -561,7 +561,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           {/* Table header */}
           <div className="bg-[#193D6D] text-white px-4 py-3 grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-wider">
             <div className="col-span-3">Materia</div>
-            <div className="col-span-1 text-center">PACE</div>
+            <div className="col-span-1 text-center">Eval.</div>
             <div className="col-span-2 text-center">Nota actual</div>
             <div className="col-span-2 text-center">Nueva nota</div>
             <div className="col-span-2 text-center">Estado</div>
