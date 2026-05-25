@@ -357,7 +357,7 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
           {corrections.map((item) => (
             <div key={item.id} className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-800">
               <p className="text-xs font-black uppercase tracking-wider">{getChildName(item.student_id)} · {item.subject_name}</p>
-              <p className="font-bold mt-1">{item.evidence_type}{item.pace_number ? ` · PACE ${item.pace_number}` : ''}</p>
+              <p className="font-bold mt-1">{item.evidence_type}{item.pace_number ? ` · Evaluación #${item.pace_number}` : ''}</p>
               <p className="text-sm font-medium mt-1">{item.reviewer_comment || 'Chanak solicitó corrección o repetición de esta evidencia.'}</p>
             </div>
           ))}
@@ -366,11 +366,11 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
 
       {overduePaces.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-black text-slate-800 flex items-center gap-2"><Hourglass className="w-5 h-5 text-red-500" /> PACEs atrasados según proyección</h3>
+          <h3 className="font-black text-slate-800 flex items-center gap-2"><Hourglass className="w-5 h-5 text-red-500" /> Evaluaciones atrasadas según proyección</h3>
           {overduePaces.map((pace) => (
             <div key={pace.id} className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800">
               <p className="text-xs font-black uppercase tracking-wider">{getChildName(pace.student_id)} · {pace.quarter || 'Quarter pendiente'}</p>
-              <p className="font-bold mt-1">{pace.subject_name || 'Materia'}{pace.pace_number ? ` · PACE ${pace.pace_number}` : ''}</p>
+              <p className="font-bold mt-1">{pace.subject_name || 'Materia'}{pace.pace_number ? ` · Evaluación #${pace.pace_number}` : ''}</p>
               <p className="text-sm font-medium mt-1">Fecha proyectada: {pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date || 'sin fecha'}</p>
             </div>
           ))}
@@ -1109,13 +1109,14 @@ export default function ParentDashboard() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
             {[
-              { id: 'children',   label: '👥 Mis Hijos',         Icon: Users      },
-              { id: 'documentos', label: '📋 Documentos',         Icon: Scale      },
-              { id: 'boletines',  label: '📄 Boletines',          Icon: null       },
-              { id: 'evidencias', label: 'Evidencias',            Icon: FileUp     },
-              { id: 'recursos',   label: 'Recursos',              Icon: Link2      },
-              { id: 'alertas',    label: 'Alertas',               Icon: Bell       },
-              { id: 'calendario', label: 'Calendario',            Icon: CalendarDays },
+              { id: 'children',      label: '👥 Mis Hijos',         Icon: Users        },
+              { id: 'documentos',    label: '📋 Documentos',         Icon: Scale        },
+              { id: 'evaluaciones',  label: '📊 Evaluaciones',       Icon: BookOpen     },
+              { id: 'boletines',     label: '📄 Boletines',          Icon: null         },
+              { id: 'evidencias',    label: 'Evidencias',            Icon: FileUp       },
+              { id: 'recursos',      label: 'Recursos',              Icon: Link2        },
+              { id: 'alertas',       label: 'Alertas',               Icon: Bell         },
+              { id: 'calendario',    label: 'Calendario',            Icon: CalendarDays },
             ].map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -1236,10 +1237,10 @@ export default function ParentDashboard() {
                               <Activity className="w-8 h-8 shrink-0" style={{ color: '#193D6D' }} />
                               <div>
                                 <p className="text-sm font-black uppercase tracking-wider" style={{ color: '#193D6D' }}>
-                                  Progreso PACE
+                                  Progreso de Evaluaciones
                                 </p>
                                 <p className="text-xs font-bold mt-0.5" style={{ color: '#20B2AA' }}>
-                                  PACE Actual: {currentPaceRecord.pace_number || 'N/A'} | Estado:{' '}
+                                  Evaluación actual: #{currentPaceRecord.pace_number || 'N/A'} | Estado:{' '}
                                   {currentPaceRecord.status || 'N/A'}
                                   <br />
                                   Proyección: {formatDate(currentPaceRecord.due_date || currentPaceRecord.completion_date)}
@@ -1255,8 +1256,8 @@ export default function ParentDashboard() {
                                 </p>
                                 <p className="text-xs font-bold text-slate-500 mt-0.5">
                                   {stats.planned > 0
-                                    ? `${stats.completed}/${stats.planned} PACEs proyectados`
-                                    : 'Sin datos de PACE proyectados'}
+                                    ? `${stats.completed}/${stats.planned} evaluaciones proyectadas`
+                                    : 'Sin evaluaciones proyectadas'}
                                 </p>
                               </div>
                             </div>
@@ -1286,7 +1287,7 @@ export default function ParentDashboard() {
                           return (
                             <div className="px-6 pb-4">
                               <p className="text-xs text-slate-400 italic">
-                                Aún no hay PACEs proyectadas para este estudiante. El equipo académico las configurará próximamente.
+                                Aún no hay evaluaciones proyectadas para este estudiante. El equipo académico las configurará próximamente.
                               </p>
                             </div>
                           );
@@ -1470,8 +1471,100 @@ export default function ParentDashboard() {
               </div>
             )}
 
+            {activeTab === 'evaluaciones' && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 text-blue-900">
+                  <div className="flex items-start gap-3">
+                    <BookOpen className="w-5 h-5 mt-0.5 shrink-0 text-blue-600" />
+                    <div>
+                      <h2 className="font-black text-lg">Evaluaciones por trimestre</h2>
+                      <p className="text-sm font-medium mt-1">
+                        Aquí puedes consultar las notas parciales de las materias de tu hijo/a.
+                        Las calificaciones son registradas por los tutores y validadas por la coordinación de Chanak Academy.
+                        Este registro es un proceso interno de seguimiento académico; el boletín oficial lo emite Chanak al cierre de cada trimestre.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {children.map((child) => {
+                  const childSubjects = getChildSubjects(child.id, selectedAcademicQuarter);
+                  return (
+                    <div key={child.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="font-black text-slate-800 text-lg">{child.first_name} {child.last_name}</h3>
+                          <p className="text-xs text-slate-500 font-bold mt-0.5">{child.grade_level || ''}{child.grade_level && child.us_grade_level ? ' · ' : ''}{child.us_grade_level || ''}</p>
+                        </div>
+                        <select
+                          value={selectedAcademicQuarter}
+                          onChange={(e) => setSelectedAcademicQuarter(e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-700"
+                        >
+                          {QUARTERS.map((q) => <option key={q.id} value={q.id}>{q.id}</option>)}
+                        </select>
+                      </div>
+                      {childSubjects.length === 0 ? (
+                        <div className="p-10 text-center text-slate-400 text-sm italic">
+                          Sin materias registradas para {selectedAcademicQuarter}.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {childSubjects.map((subject) => {
+                            const statusMap = {
+                              approved:           { label: 'Aprobado',          cls: 'bg-emerald-100 text-emerald-700' },
+                              submitted:          { label: 'En revisión',       cls: 'bg-amber-100 text-amber-700' },
+                              rejected:           { label: 'Observado',         cls: 'bg-red-100 text-red-700' },
+                              revision_requested: { label: 'Corrección solicit.', cls: 'bg-orange-100 text-orange-700' },
+                              draft:              { label: 'Pendiente',         cls: 'bg-slate-100 text-slate-500' },
+                            };
+                            const st = statusMap[subject.grade_submission_status || 'draft'];
+                            return (
+                              <button
+                                key={subject.id}
+                                onClick={() => {
+                                  setSelectedStudentSubjectForEntries(subject);
+                                  setSelectedChildId(child.id);
+                                  setIsGradeEntriesModalOpen(true);
+                                }}
+                                className="w-full p-4 text-left hover:bg-slate-50 transition-colors group"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="font-bold text-slate-800 group-hover:text-[#193D6D]">{subject.subject_name}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                      {subject.academic_block || subject.category || 'General'}
+                                      {subject.grade != null ? ` · Promedio: ${Number(subject.grade).toFixed(1)}` : ''}
+                                    </p>
+                                  </div>
+                                  <span className={`shrink-0 text-xs font-black px-2.5 py-1 rounded-full ${st.cls}`}>{st.label}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {activeTab === 'boletines' && (
-              <ParentBoletinesPanel studentChildren={children} />
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700">
+                  <div className="flex items-start gap-3">
+                    <FileText className="w-5 h-5 mt-0.5 shrink-0 text-slate-500" />
+                    <div>
+                      <h2 className="font-black text-lg text-slate-800">Boletines oficiales</h2>
+                      <p className="text-sm font-medium mt-1">
+                        Los boletines académicos son documentos oficiales emitidos por Chanak Academy una vez cerrado el trimestre.
+                        Solo la coordinación puede publicarlos. Cuando estén disponibles podrás descargarlos en formato PDF.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <ParentBoletinesPanel studentChildren={children} />
+              </div>
             )}
 
             {activeTab === 'documentos' && (
@@ -1479,11 +1572,26 @@ export default function ParentDashboard() {
             )}
 
             {activeTab === 'evidencias' && (
-              <ParentEvidencePanel
-                studentChildren={children}
-                studentSubjects={studentSubjects}
-                initialStudentId={selectedChildId}
-              />
+              <div className="space-y-4">
+                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5 text-teal-900">
+                  <div className="flex items-start gap-3">
+                    <FileUp className="w-5 h-5 mt-0.5 shrink-0 text-teal-600" />
+                    <div>
+                      <h2 className="font-black text-lg">Reporte de evidencias académicas</h2>
+                      <p className="text-sm font-medium mt-1">
+                        La familia actúa como supervisor primario de aprendizaje. Aquí puedes reportar las evidencias de las
+                        evaluaciones completadas por tu hijo/a. Chanak Academy revisa y valida cada evidencia antes de registrarla
+                        oficialmente. Este formulario no crea notas finales directamente.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <ParentEvidencePanel
+                  studentChildren={children}
+                  studentSubjects={studentSubjects}
+                  initialStudentId={selectedChildId}
+                />
+              </div>
             )}
 
             {activeTab === 'recursos' && (

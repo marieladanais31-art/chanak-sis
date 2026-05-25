@@ -350,10 +350,9 @@ export function drawSectionLabel(doc, y, title, leftMargin = PDF_MARGIN) {
  * @param {Object}  [opts]
  * @param {string}  [opts.pageLabel='Pág.']
  * @param {string}  [opts.refLine]   - mostrado en página 1 (izquierda)
- * @param {boolean} [opts.buildMark] - marcador temporal de build (retirar antes de merge)
  */
 export function applyOfficialFooterAllPages(doc, settings, opts = {}) {
-  const { pageLabel = 'Pág.', refLine = '', buildMark = false } = opts;
+  const { pageLabel = 'Pág.', refLine = '' } = opts;
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const n = doc.getNumberOfPages();
@@ -389,13 +388,6 @@ export function applyOfficialFooterAllPages(doc, settings, opts = {}) {
       doc.setFontSize(5.5);
       doc.setTextColor(...PDF_GRAY);
       doc.text(refLine, 10, H - 4.5);
-    }
-
-    // Marcador temporal de build (retirar antes de merge)
-    if (buildMark) {
-      doc.setFontSize(4.5);
-      doc.setTextColor(180, 180, 180);
-      doc.text('PDF BUILD HOTFIX 2026-05-24', W / 2, H - 0.5, { align: 'center' });
     }
 
     doc.setTextColor(...PDF_BLACK);
