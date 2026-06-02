@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowLeft, CheckCircle2, ExternalLink,
-  FileUp, Loader2, Paperclip, RefreshCw, Send,
+  Loader2, Paperclip, RefreshCw, Send,
 } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { ACTIVE_SCHOOL_YEAR, QUARTERS, dedupeAcademicSubjects } from '@/lib/academicUtils';
@@ -74,8 +74,9 @@ function getFileExtension(fileName) {
   return parts.length > 1 ? parts.pop() : 'bin';
 }
 
-function isValidUrl(url) {
-  return /^https?:\/\/.+\..+/.test(url.trim());
+/** Valida que sea un enlace de Google Drive o Google Docs */
+function isValidDriveUrl(url) {
+  return /^https:\/\/(drive|docs)\.google\.com\/.+/.test(url.trim());
 }
 
 export default function ParentEvidencePanel({ studentChildren, studentSubjects, initialStudentId }) {
@@ -211,16 +212,9 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
 
   const updateForm = (field, value) => setForm((cur) => ({ ...cur, [field]: value }));
 
-  // ── Subir archivo adjunto ───────────────────────────────────────────────────
-  const uploadAttachment = async (draftId) => {
-    if (!form.file) return { attachmentPath: null, attachmentUrl: null };
-    const ext      = getFileExtension(form.file.name);
-    const safeName = form.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path     = `${form.student_id}/${ACTIVE_SCHOOL_YEAR}/${draftId}-${Date.now()}-${safeName || `evidence.${ext}`}`;
-    const { error } = await supabase.storage.from('academic-evidence').upload(path, form.file, { upsert: false });
-    if (error) throw error;
-    return { attachmentPath: path, attachmentUrl: null };
-  };
+  // Upload de archivo local desactivado — se usa solo Google Drive
+  // eslint-disable-next-line no-unused-vars
+  const uploadAttachment = async (_draftId) => ({ attachmentPath: null, attachmentUrl: null });
 
   // ── Enviar evidencia ────────────────────────────────────────────────────────
   const handleSubmit = async (event) => {
@@ -232,7 +226,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
     const hasScore      = form.score !== '';
     const score         = hasScore ? Number(form.score) : null;
     const driveUrl      = form.drive_url.trim();
-    const hasFile       = Boolean(form.file);
+    const hasFile       = false; // upload local desactivado — solo Drive
     const hasDriveUrl   = Boolean(driveUrl);
 
     if (!form.student_id || !form.student_subject_id || !selectedSubject) {
@@ -248,8 +242,8 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
       setMessage({ type: 'error', title: 'Datos incompletos', text: 'Ingresa al menos una nota (score) o adjunta un archivo o enlace de Drive.' });
       return;
     }
-    if (hasDriveUrl && !isValidUrl(driveUrl)) {
-      setMessage({ type: 'error', title: 'Enlace inválido', text: 'El enlace debe comenzar con https://' });
+    if (hasDriveUrl && !isValidDriveUrl(driveUrl)) {
+      setMessage({ type: 'error', title: 'Enlace de Drive inválido', text: 'Introduce un enlace de Google Drive o Google Docs (https://drive.google.com/... o https://docs.google.com/...).' });
       return;
     }
     if (hasScore && (!Number.isFinite(score) || score < 0 || score > 100)) {
@@ -324,17 +318,19 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
           <div>
-            <h2 className="font-black text-lg">Registrar evaluación y/o evidencia</h2>
+            <h2 className="font-black text-lg">Registrar evaluación y/o evidencia Drive</h2>
             <p className="text-sm font-medium mt-1 text-blue-800">
-              Puede registrar la nota de una evaluación aunque todavía no tenga evidencia documental. El adjunto (archivo o Drive) es <strong>opcional</strong>: puede añadirse después. Chanak revisará y validará oficialmente antes de registrar la nota final.
+              Suba la evidencia a la carpeta de Google Drive del estudiante y pegue aquí el enlace compartido.
+              La nota puede registrarse aunque la evidencia Drive se añada después.
+              Chanak revisará y validará oficialmente antes de registrar la nota final.
             </p>
             <ul className="text-sm font-medium mt-2 space-y-1 list-disc list-inside">
-              <li><strong>PACE Test</strong> — selecciona la evaluación del PEI, ingresa la nota y/o adjunta el test escaneado o enlace Drive.</li>
-              <li><strong>Local Extension</strong> — ingresa nota y/o adjunta foto, documento o enlace Drive por asignatura.</li>
-              <li><strong>Life Skills</strong> — ingresa nota y/o adjunta evidencia por asignatura (tecnología, arte, ed. física…).</li>
+              <li><strong>PACE Test</strong> — selecciona la evaluación proyectada, ingresa la nota y/o pega el enlace Drive del test.</li>
+              <li><strong>Local Extension</strong> — reportar por asignatura y <em>mes</em>. Pega el enlace Drive de la tarea mensual.</li>
+              <li><strong>Life Skills</strong> — reportar por <em>trimestre</em>. Pega el enlace Drive del proyecto trimestral.</li>
             </ul>
             <p className="text-xs font-bold mt-3 text-blue-800">
-              Mínimo requerido: nota (score) O archivo O enlace Drive. Los tres juntos es lo ideal.
+              Mínimo requerido: nota (score) O enlace Drive. Solo se aceptan enlaces de Google Drive o Google Docs.
             </p>
           </div>
         </div>
@@ -532,7 +528,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         {/* Enlace Google Drive */}
         <div>
           <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
-            Enlace de Google Drive <span className="text-slate-400 font-medium">(opcional)</span>
+            Enlace de Google Drive <span className="text-slate-400 font-medium">(obligatorio si hay evidencia documental)</span>
           </label>
           <input
             type="url"
@@ -542,26 +538,47 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
             placeholder="https://drive.google.com/file/d/…"
           />
           <p className="text-xs text-slate-400 mt-1 font-medium">
-            Comparte el archivo con permisos de visualización y pega el enlace aquí.
+            Solo se aceptan https://drive.google.com/... o https://docs.google.com/...
+            Comparte con permisos "Cualquiera con el enlace puede ver".
           </p>
         </div>
 
-        {/* Archivo adjunto */}
-        <div>
-          <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
-            Archivo adjunto <span className="text-slate-400 font-medium">(opcional)</span>
-          </label>
-          <label className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-bold text-slate-600 cursor-pointer hover:border-[#20B2AA] hover:bg-teal-50 transition-colors">
-            <FileUp className="w-5 h-5 text-[#20B2AA]" />
-            <span>{form.file ? form.file.name : 'Seleccionar archivo (PDF, imagen o documento)'}</span>
-            <input type="file" className="hidden" onChange={(e) => updateForm('file', e.target.files?.[0] || null)} />
-          </label>
-        </div>
+        {/* Estructura recomendada de carpetas Drive */}
+        <details className="rounded-xl border border-slate-200 bg-slate-50">
+          <summary className="px-4 py-3 text-xs font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-700">
+            📁 Estructura recomendada de carpetas Google Drive
+          </summary>
+          <div className="px-4 pb-4 pt-1">
+            <pre className="text-[10px] text-slate-600 font-mono leading-relaxed whitespace-pre-wrap">{`ESTUDIANTE / 2025-2026
+├── 01_CORE_ACE
+│   ├── Math          → Q1 / Q2 / Q3
+│   ├── English       → Q1 / Q2 / Q3
+│   ├── Word Building → Q1 / Q2 / Q3
+│   ├── Science       → Q1 / Q2 / Q3
+│   └── Social Studies→ Q1 / Q2 / Q3
+├── 02_EXTENSION_LOCAL
+│   ├── Lengua_y_Literatura → Sep / Oct / Nov / Dic / Ene / Feb / Mar / Abr / May / Jun
+│   ├── Local_History       → (igual por mes)
+│   └── Local_Geography     → (igual por mes)
+├── 03_LIFE_SKILLS
+│   ├── Art_Music          → Q1 / Q2 / Q3
+│   ├── Technology         → Q1 / Q2 / Q3
+│   ├── Physical_Education → Q1 / Q2 / Q3
+│   └── Life_Skills_Level1 → Q1 / Q2 / Q3
+├── 04_DOCUMENTOS_OFICIALES
+├── 05_BOLETINES
+├── 06_CONTRATOS_Y_CARTAS
+└── 07_EVIDENCIAS_GENERALES`}</pre>
+            <p className="text-[10px] text-slate-400 mt-2 font-medium">
+              Extensión Local → una tarea por mes. Life Skills → un proyecto por trimestre.
+            </p>
+          </div>
+        </details>
 
         {/* Submit */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
           <p className="text-xs text-slate-500 font-bold">
-            Se requiere al menos nota (score), archivo o enlace Drive. El adjunto es opcional: puede añadirse después.
+            Se requiere al menos nota (score) o enlace Drive. No se aceptan subidas de archivo locales.
             Chanak valida y aprueba oficialmente antes de registrar la nota final.
           </p>
           <button

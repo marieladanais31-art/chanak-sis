@@ -196,64 +196,93 @@ export function generateTranscriptPDF({
   });
   y = doc.lastAutoTable.finalY + 8;
 
-  // ── Materias cursadas ───────────────────────────────────────────────────────
+  // ── Materias cursadas — agrupadas por bloque, sin numeración interna ──────────
   y = checkBreak(doc, y, settings, lang, 40);
   y = drawSectionLabel(doc, y, t.coursework);
 
-  const courseHead = showCredits
-    ? [t.subject, t.block, t.paces, t.credits, t.finalGrade, t.statusLabel]
-    : [t.subject, t.block, t.paces, t.finalGrade, t.statusLabel];
   const noGradesMsg = lang === 'en'
     ? 'No grades published for this quarter.'
     : 'No hay calificaciones publicadas para este trimestre.';
 
-  const courseRows = (courses || []).map(c => {
-    const row = [
-      c.subject_name   || '—',
-      c.academic_block || '—',
-      c.pace_numbers   || '—',
-    ];
-    if (showCredits) row.push(c.credits != null ? String(c.credits) : '0');
-    row.push(
-      c.final_grade != null ? `${Number(c.final_grade).toFixed(1)} / 100` : '—',
-      gradeStatusLabel(c.grade_status, lang),
-    );
-    return row;
-  });
+  const BLOCK_ORDER_PDF = ['Core A.C.E.', 'Extensión Local', 'Life Skills', 'Life Skills / Desarrollo Integral', 'Electives'];
+  const BLOCK_COLORS = {
+    'Core A.C.E.':                      [25, 61, 109],   // navy
+    'Extensión Local':                   [32, 178, 170],  // teal
+    'Life Skills':                       [217, 119, 6],   // amber
+    'Life Skills / Desarrollo Integral': [217, 119, 6],
+    'Electives':                         [100, 116, 139], // slate
+  };
 
-  if (courseRows.length === 0) {
-    // Mensaje discreto — sin fila falsa con guiones
+  const getCourseBlock = (c) => {
+    const b = (c.academic_block || '').trim();
+    for (const key of BLOCK_ORDER_PDF) if (b.toLowerCase().includes(key.toLowerCase())) return key;
+    return b || 'Core A.C.E.';
+  };
+
+  // Agrupar cursos por bloque
+  const grouped = {};
+  (courses || []).forEach(c => {
+    const blk = getCourseBlock(c);
+    if (!grouped[blk]) grouped[blk] = [];
+    grouped[blk].push(c);
+  });
+  const orderedBlocks = BLOCK_ORDER_PDF.filter(b => grouped[b]);
+  // Añadir bloques no reconocidos al final
+  Object.keys(grouped).forEach(b => { if (!orderedBlocks.includes(b)) orderedBlocks.push(b); });
+
+  if ((courses || []).length === 0) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(...PDF_GRAY);
     doc.text(noGradesMsg, PDF_MARGIN, y + 6);
     y += 14;
   } else {
-    autoTable(doc, {
-      startY: y,
-      head: [courseHead],
-      body: courseRows,
-      styles:             { fontSize: 8, cellPadding: 2, textColor: [...PDF_BLACK] },
-      headStyles:         { fillColor: [...PDF_BLUE], textColor: [...PDF_NAVY], fontStyle: 'bold', lineColor: [...PDF_BORDER], lineWidth: 0.2 },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
-      tableLineColor:     [...PDF_BORDER],
-      tableLineWidth:     0.15,
-      columnStyles: {
-        0: { cellWidth: showCredits ? 52 : 62 },
-        1: { cellWidth: showCredits ? 34 : 40 },
-        2: { cellWidth: 22 },
-        3: { cellWidth: showCredits ? 16 : 28, halign: 'center' },
-        4: { cellWidth: showCredits ? 22 : 34, halign: 'center' },
-        5: { cellWidth: showCredits ? 25 : undefined, halign: 'center' },
-      },
-      margin: { left: PDF_MARGIN, right: PDF_MARGIN },
-      didDrawPage: () => {
-        drawOfficialHeader(doc, settings, { docTitle: t.title, lang });
-      },
+    // Cabecera de columnas (sin columna de evaluaciones internas)
+    const colHead = showCredits
+      ? [t.subject, t.credits, t.finalGrade, t.statusLabel]
+      : [t.subject, t.finalGrade, t.statusLabel];
+
+    const colStyles = showCredits
+      ? { 0: { cellWidth: 80 }, 1: { cellWidth: 18, halign: 'center' }, 2: { cellWidth: 28, halign: 'center' }, 3: { halign: 'center' } }
+      : { 0: { cellWidth: 95 }, 1: { cellWidth: 35, halign: 'center' }, 2: { halign: 'center' } };
+
+    // Renderizar cada bloque como sección separada
+    orderedBlocks.forEach(blk => {
+      const blkCourses = grouped[blk] || [];
+      if (!blkCourses.length) return;
+
+      const blkColor = BLOCK_COLORS[blk] || [100, 116, 139];
+      const blkRows  = blkCourses.map(c => {
+        const row = [c.subject_name || '—'];
+        if (showCredits) row.push(c.credits != null ? String(c.credits) : '0');
+        row.push(
+          c.final_grade != null ? `${Number(c.final_grade).toFixed(1)} / 100` : '—',
+          gradeStatusLabel(c.grade_status, lang),
+        );
+        return row;
+      });
+
+      y = checkBreak(doc, y, settings, lang, 20 + blkRows.length * 8);
+      autoTable(doc, {
+        startY: y,
+        head: [
+          [{ content: blk, colSpan: colHead.length, styles: { fillColor: blkColor, textColor: [255,255,255], fontStyle: 'bold', fontSize: 8 } }],
+          colHead,
+        ],
+        body: blkRows,
+        styles:             { fontSize: 8, cellPadding: 2, textColor: [...PDF_BLACK] },
+        headStyles:         { fillColor: [232, 240, 254], textColor: [...PDF_NAVY], fontStyle: 'bold', lineColor: [...PDF_BORDER], lineWidth: 0.2 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        tableLineColor:     [...PDF_BORDER],
+        tableLineWidth:     0.15,
+        columnStyles:       colStyles,
+        margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+        didDrawPage: () => { drawOfficialHeader(doc, settings, { docTitle: t.title, lang }); },
+      });
+      y = doc.lastAutoTable.finalY + 4;
     });
-    y = doc.lastAutoTable.finalY;
   }
-  y += 10;
+  y += 6;
 
   // ── Resumen de créditos / GPA ───────────────────────────────────────────────
   const gpaVal = transcript?.gpa != null ? Number(transcript.gpa).toFixed(2) : '—';
@@ -319,8 +348,9 @@ export function generateTranscriptPDF({
   }
 
   // ── Firma del Director + Sello ──────────────────────────────────────────────
-  // Espacio: sep(3) + sig(19) + línea + padding(4) + texto(5) + sello(24) = 64mm
-  y = checkBreak(doc, y, settings, lang, 64);
+  // Espacio total: sep(3) + sig(22) + línea(2) + padding(4) + nombre(5) + cargo(5) + sello(24) + margen(15) = 80mm
+  // El bloque completo se mantiene unido — nunca queda la firma sola en la siguiente página.
+  y = checkBreak(doc, y, settings, lang, 80);
 
   // Línea separadora fina
   doc.setDrawColor(...PDF_NAVY);
