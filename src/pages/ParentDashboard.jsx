@@ -533,11 +533,12 @@ function ParentDocumentosPanel({ studentChildren }) {
         supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id),
         supabase.from('institutional_settings').select('*').limit(1).single(),
       ]);
+      const settingsWithImages = await preloadImages(settingsRes.data || null);
       generatePeiPDF({
         pei,
         paces: pacesRes.data || [],
         student: child || { first_name: '', last_name: '' },
-        settings: settingsRes.data || null,
+        settings: settingsWithImages,
         lang,
       });
     } catch (err) {
@@ -790,6 +791,16 @@ export default function ParentDashboard() {
 
   const [selectedChildId, setSelectedChildId] = useState('');
 
+  // ── Modal de evaluaciones proyectadas del PEI ─────────────────────────────
+  const [paceProjectionModal, setPaceProjectionModal] = useState(null); // { childId, childName }
+  const [evalQFilter, setEvalQFilter]     = useState('all');
+  const [evalSubjFilter, setEvalSubjFilter] = useState('all');
+  const [evalStatusFilter, setEvalStatusFilter] = useState('all');
+
+  // ── Descarga inline de documentos ES/EN desde tarjeta ────────────────────
+  const [downloadingDoc,  setDownloadingDoc]  = useState(null);
+  const [docDropdownOpen, setDocDropdownOpen] = useState(null); // 'pei|{childId}' | 'carta|{childId}' | 'contrato|{childId}'
+
   useEffect(() => {
     if (!profile) return;
 
@@ -837,32 +848,45 @@ export default function ParentDashboard() {
       : d.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
+  // ── Trimestre actual desde academic_calendars o fallback por mes ──────────
+  const getCurrentQuarter = () => {
+    const cal = schoolCalendar;
+    const today = new Date().toISOString().slice(0, 10);
+    if (cal) {
+      if (cal.q1_start_date && cal.q1_end_date && today >= cal.q1_start_date && today <= cal.q1_end_date) return 'Q1';
+      if (cal.q2_start_date && cal.q2_end_date && today >= cal.q2_start_date && today <= cal.q2_end_date) return 'Q2';
+      if (cal.q3_start_date && cal.q3_end_date && today >= cal.q3_start_date && today <= cal.q3_end_date) return 'Q3';
+      if (cal.q2_end_date && today > cal.q2_end_date) return 'Q3';
+      if (cal.q1_end_date && today > cal.q1_end_date) return 'Q2';
+      return 'Q1';
+    }
+    // Fallback: mes del año (España: sep–dic Q1, ene–mar Q2, abr–jun Q3)
+    const m = new Date().getMonth() + 1;
+    if (m >= 9) return 'Q1';
+    if (m <= 3) return 'Q2';
+    return 'Q3';
+  };
+  const QUARTER_ORDER = { Q1: 1, Q2: 2, Q3: 3 };
+
+  const isPaceOverdue = (p) => {
+    const DONE = ['evaluated', 'cancelled', 'approved'];
+    if (DONE.includes(p.status) || p.grade_obtained != null) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    if (p.due_date && p.due_date < today) return true;
+    const curQ = getCurrentQuarter();
+    if ((QUARTER_ORDER[p.quarter] || 0) < (QUARTER_ORDER[curQ] || 0)) return true;
+    return false;
+  };
+
+  const isPaceCompleted = (p) => {
+    return ['evaluated', 'cancelled', 'approved'].includes(p.status) || p.grade_obtained != null;
+  };
+
   const getStudentStats = (childId) => {
     const childPaces = paceProjection.filter((p) => p.student_id === childId);
-    // 'evaluated' o nota asignada = completado
-    const completed = childPaces.filter(
-      (p) => p.status === 'evaluated' || p.grade_obtained != null
-    ).length;
-    const planned = childPaces.length;
-    // 'delayed' o fecha vencida y no evaluado = atrasado
-    const today = new Date().toISOString().slice(0, 10);
-    const overdue = childPaces.filter(
-      (p) =>
-        p.status === 'delayed' ||
-        (
-          p.status !== 'evaluated' &&
-          p.grade_obtained == null &&
-          (p.due_date || p.completion_date) &&
-          (p.due_date || p.completion_date) < today
-        )
-    ).length;
-
-    return {
-      completed,
-      planned,
-      overdue,
-      isOnTrack: overdue === 0
-    };
+    const completed  = childPaces.filter(isPaceCompleted).length;
+    const overdue    = childPaces.filter((p) => !isPaceCompleted(p) && isPaceOverdue(p)).length;
+    return { completed, planned: childPaces.length, overdue, isOnTrack: overdue === 0 };
   };
 
   const getChildPaymentsStatus = (childId) => {
@@ -880,6 +904,39 @@ export default function ParentDashboard() {
       pendingPayments,
       childPayments,
     };
+  };
+
+  // ── Descarga inline ES/EN desde tarjeta ──────────────────────────────────
+  const handleCardDownloadDoc = async (child, docType, lang) => {
+    const key = `${docType}-${child.id}-${lang}`;
+    setDownloadingDoc(key);
+    setDocDropdownOpen(null);
+    try {
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const settingsWithImages = await preloadImages(rawSettings);
+      if (docType === 'pei') {
+        const pei = officialDocuments.peis.find((d) => d.student_id === child.id);
+        if (!pei) { toast({ title: 'PEI no publicado', variant: 'destructive' }); return; }
+        const { generatePeiPDF } = await import('@/lib/peiPdf');
+        const { data: paces } = await supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id);
+        generatePeiPDF({ pei, paces: paces || [], student: child, settings: settingsWithImages, lang });
+      } else if (docType === 'carta') {
+        const letter = officialDocuments.letters.find((d) => d.student_id === child.id);
+        if (!letter) { toast({ title: 'Carta no publicada', variant: 'destructive' }); return; }
+        const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
+        generateEnrollmentLetterPDF({ letter, student: child, settings: settingsWithImages, lang });
+      } else if (docType === 'contrato') {
+        const contract = officialDocuments.contracts.find((d) => d.student_id === child.id);
+        if (!contract) { toast({ title: 'Contrato no publicado', variant: 'destructive' }); return; }
+        const { generateContractPDF } = await import('@/lib/contractPdf');
+        generateContractPDF({ contract, student: child, settings: settingsWithImages, lang });
+      }
+    } catch (err) {
+      console.error('[CardDocDownload]', err);
+      toast({ title: 'Error al generar documento', description: err.message, variant: 'destructive' });
+    } finally {
+      setDownloadingDoc(null);
+    }
   };
 
   const loadData = async () => {
@@ -1000,7 +1057,7 @@ export default function ParentDashboard() {
       // Tablas complementarias — errores no fatales. Documentos oficiales vienen de módulos Admin.
       const [paymentStatusRes, paceProjectionRes, officialPeisRes, officialContractsRes, officialLettersRes, officialTranscriptsRes] = await Promise.all([
         supabase.from('student_payments').select('id, student_id, school_year, concept, payment_type, amount, currency, status, balance_status, due_date, paid_at, stripe_payment_link_url, notes').in('student_id', studentIds),
-        supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
+        supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date, estimated_delivery_date, pages_per_day').in('student_id', studentIds),
         supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
         supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed', 'published']),
         supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'published']),
@@ -1014,11 +1071,11 @@ export default function ParentDashboard() {
         letters: officialLettersRes.error ? [] : (officialLettersRes.data || []),
         transcripts: officialTranscriptsRes.error ? [] : (officialTranscriptsRes.data || []),
       });
-      // pei_pace_projections no tiene due_date — map para compatibilidad
+      // pei_pace_projections — map due_date para compatibilidad legacy
       setPaceProjection(
         paceProjectionRes.error ? [] : (paceProjectionRes.data || []).map(p => ({
           ...p,
-          due_date: p.projected_completion_date || null,
+          due_date: p.estimated_delivery_date || p.projected_completion_date || null,
           completion_date: p.projected_completion_date || null,
           pillar_type: p.pillar_type || '',
         }))
@@ -1279,63 +1336,15 @@ export default function ParentDashboard() {
                         </div>
                       </div>
 
-                      {/* ── PACEs proyectadas por trimestre ── */}
-                      {(() => {
-                        const childPaces = paceProjection.filter((p) => p.student_id === child.id);
-                        const today = new Date().toISOString().slice(0, 10);
-                        if (childPaces.length === 0) {
-                          return (
-                            <div className="px-6 pb-4">
-                              <p className="text-xs text-slate-400 italic">
-                                Aún no hay evaluaciones proyectadas para este estudiante. El equipo académico las configurará próximamente.
-                              </p>
-                            </div>
-                          );
-                        }
-                        const byQuarter = { Q1: [], Q2: [], Q3: [] };
-                        childPaces.forEach(p => {
-                          const q = p.quarter;
-                          if (byQuarter[q]) byQuarter[q].push(p);
-                        });
-                        return (
-                          <div className="px-6 pb-4 space-y-3">
-                            {['Q1','Q2','Q3'].map(q => {
-                              const paces = byQuarter[q];
-                              if (!paces.length) return null;
-                              return (
-                                <div key={q}>
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Trimestre {q.replace('Q','')}</p>
-                                  <div className="space-y-1">
-                                    {paces.map(p => {
-                                      const isCompleted = p.status === 'evaluated' || p.grade_obtained != null;
-                                      const dueDate     = p.due_date || p.completion_date;
-                                      const isOverdue   = !isCompleted && dueDate && dueDate < today;
-                                      return (
-                                        <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
-                                          <span className="text-slate-700 truncate flex-1">
-                                            <span className="font-bold">{p.subject_name || '—'}</span>
-                                            {p.pace_number ? ` · #${p.pace_number}` : ''}
-                                          </span>
-                                          {dueDate && (
-                                            <span className="text-slate-400 shrink-0">{new Date(dueDate).toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}</span>
-                                          )}
-                                          <span className={`shrink-0 px-1.5 py-0.5 rounded font-bold text-[10px] ${
-                                            isCompleted ? 'bg-emerald-100 text-emerald-700' :
-                                            isOverdue   ? 'bg-red-100 text-red-700' :
-                                                          'bg-slate-100 text-slate-500'
-                                          }`}>
-                                            {isCompleted ? '✓ Listo' : isOverdue ? '⚠ Atrasado' : 'Pendiente'}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
+                      {/* ── Tira de progreso compacta (sin lista) ── */}
+                      {stats.planned > 0 && stats.overdue > 0 && (
+                        <div className="mx-6 mb-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+                          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                          <p className="text-xs font-bold text-red-700">
+                            {stats.overdue} evaluación{stats.overdue !== 1 ? 'es' : ''} vencida{stats.overdue !== 1 ? 's' : ''} — pulse "Ver Evaluaciones"
+                          </p>
+                        </div>
+                      )}
 
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
@@ -1356,12 +1365,20 @@ export default function ParentDashboard() {
                         <button
                           onClick={() => {
                             setSelectedChildId(child.id);
-                            setSubjectSelectionStep(true);
+                            setEvalQFilter('all');
+                            setEvalSubjFilter('all');
+                            setEvalStatusFilter('all');
+                            setPaceProjectionModal({ childId: child.id, childName: `${child.first_name} ${child.last_name}` });
                           }}
-                          className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                          className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group relative"
                         >
                           <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform text-[#20B2AA]" />
                           <span className="text-xs font-bold text-slate-700">Ver Evaluaciones</span>
+                          {stats.overdue > 0 && (
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                              {stats.overdue > 9 ? '9+' : stats.overdue}
+                            </span>
+                          )}
                         </button>
 
                         <button
@@ -1381,62 +1398,83 @@ export default function ParentDashboard() {
                           <span className="text-xs font-bold text-slate-700">Pagos</span>
                         </button>
 
-                        <button
-                          onClick={() => setActiveTab('documentos')}
-                          title={hasPeiPublished ? 'Ver PEI oficial publicado' : 'Aún no hay PEI publicado'}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
-                            hasPeiPublished
-                              ? 'bg-white border-slate-200 hover:shadow-md'
-                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
+                        {/* ── PEI oficial ES/EN ── */}
+                        <div className="relative">
                           {hasPeiPublished ? (
-                            <Download className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />
+                            <button
+                              onClick={() => setDocDropdownOpen(docDropdownOpen === `pei|${child.id}` ? null : `pei|${child.id}`)}
+                              className="w-full p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                            >
+                              {downloadingDoc?.startsWith(`pei-${child.id}`)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                                : <Download className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />}
+                              <span className="text-xs font-bold text-slate-700">PEI oficial</span>
+                            </button>
                           ) : (
-                            <Hourglass className="w-5 h-5 text-slate-400" />
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2">
+                              <Hourglass className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs font-bold text-center text-slate-500">PEI pendiente</span>
+                            </div>
                           )}
-                          <span className={`text-xs font-bold text-center ${hasPeiPublished ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasPeiPublished ? 'PEI oficial' : 'Aún no hay PEI publicado'}
-                          </span>
-                        </button>
+                          {docDropdownOpen === `pei|${child.id}` && (
+                            <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                              <button onClick={() => handleCardDownloadDoc(child, 'pei', 'es')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇪🇸 Español</button>
+                              <button onClick={() => handleCardDownloadDoc(child, 'pei', 'en')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇬🇧 English</button>
+                            </div>
+                          )}
+                        </div>
 
-                        <button
-                          onClick={() => setActiveTab('documentos')}
-                          title={hasEnrollmentPublished ? 'Ver carta oficial publicada' : 'Confirmación de matrícula pendiente'}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
-                            hasEnrollmentPublished
-                              ? 'bg-white border-slate-200 hover:shadow-md'
-                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
+                        {/* ── Carta de matrícula ES/EN ── */}
+                        <div className="relative">
                           {hasEnrollmentPublished ? (
-                            <FileSignature className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                            <button
+                              onClick={() => setDocDropdownOpen(docDropdownOpen === `carta|${child.id}` ? null : `carta|${child.id}`)}
+                              className="w-full p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                            >
+                              {downloadingDoc?.startsWith(`carta-${child.id}`)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+                                : <FileSignature className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />}
+                              <span className="text-xs font-bold text-slate-700">Carta matrícula</span>
+                            </button>
                           ) : (
-                            <Hourglass className="w-5 h-5 text-slate-400" />
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2">
+                              <Hourglass className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs font-bold text-center text-slate-500">Carta pendiente</span>
+                            </div>
                           )}
-                          <span className={`text-xs font-bold text-center ${hasEnrollmentPublished ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasEnrollmentPublished ? 'Carta de matrícula' : 'Confirmación de matrícula pendiente'}
-                          </span>
-                        </button>
+                          {docDropdownOpen === `carta|${child.id}` && (
+                            <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                              <button onClick={() => handleCardDownloadDoc(child, 'carta', 'es')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇪🇸 Español</button>
+                              <button onClick={() => handleCardDownloadDoc(child, 'carta', 'en')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇬🇧 English</button>
+                            </div>
+                          )}
+                        </div>
 
-                        <button
-                          onClick={() => setActiveTab('documentos')}
-                          title={hasContractOfficial ? 'Ver contrato oficial enviado o firmado' : 'Contrato pendiente'}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
-                            hasContractOfficial
-                              ? 'bg-white border-slate-200 hover:shadow-md'
-                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
+                        {/* ── Contrato oficial ES/EN ── */}
+                        <div className="relative">
                           {hasContractOfficial ? (
-                            <Scale className="w-5 h-5 text-[#193D6D] group-hover:scale-110 transition-transform" />
+                            <button
+                              onClick={() => setDocDropdownOpen(docDropdownOpen === `contrato|${child.id}` ? null : `contrato|${child.id}`)}
+                              className="w-full p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                            >
+                              {downloadingDoc?.startsWith(`contrato-${child.id}`)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-[#193D6D]" />
+                                : <Scale className="w-5 h-5 text-[#193D6D] group-hover:scale-110 transition-transform" />}
+                              <span className="text-xs font-bold text-slate-700">Contrato</span>
+                            </button>
                           ) : (
-                            <Hourglass className="w-5 h-5 text-slate-400" />
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2">
+                              <Hourglass className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs font-bold text-center text-slate-500">Contrato pendiente</span>
+                            </div>
                           )}
-                          <span className={`text-xs font-bold text-center ${hasContractOfficial ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasContractOfficial ? 'Contrato oficial' : 'Contrato pendiente'}
-                          </span>
-                        </button>
+                          {docDropdownOpen === `contrato|${child.id}` && (
+                            <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                              <button onClick={() => handleCardDownloadDoc(child, 'contrato', 'es')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇪🇸 Español</button>
+                              <button onClick={() => handleCardDownloadDoc(child, 'contrato', 'en')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇬🇧 English</button>
+                            </div>
+                          )}
+                        </div>
 
                         <button
                           onClick={() => {
@@ -1639,6 +1677,168 @@ export default function ParentDashboard() {
           ? Ayuda
         </Link>
       </footer>
+
+      {/* ── Modal Evaluaciones proyectadas PEI ── */}
+      {paceProjectionModal && (() => {
+        const { childId, childName } = paceProjectionModal;
+        const childPaces = paceProjection.filter((p) => p.student_id === childId);
+
+        // Materias únicas para filtro
+        const subjectOptions = [...new Set(childPaces.map((p) => p.subject_name))].sort();
+
+        // Filtrado
+        const filtered = childPaces.filter((p) => {
+          if (evalQFilter !== 'all' && p.quarter !== evalQFilter) return false;
+          if (evalSubjFilter !== 'all' && p.subject_name !== evalSubjFilter) return false;
+          if (evalStatusFilter === 'completed' && !isPaceCompleted(p)) return false;
+          if (evalStatusFilter === 'overdue'   && (isPaceCompleted(p) || !isPaceOverdue(p))) return false;
+          if (evalStatusFilter === 'pending'   && (isPaceCompleted(p) || isPaceOverdue(p)))  return false;
+          return true;
+        });
+
+        // Agrupar por Quarter → por Materia
+        const byQ = { Q1: {}, Q2: {}, Q3: {} };
+        filtered.forEach((p) => {
+          const q = p.quarter;
+          if (!byQ[q]) return;
+          if (!byQ[q][p.subject_name]) byQ[q][p.subject_name] = [];
+          byQ[q][p.subject_name].push(p);
+        });
+
+        const DONE_STATUSES = ['evaluated', 'approved', 'cancelled'];
+        const statusBadge = (p) => {
+          if (isPaceCompleted(p)) return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700">✓ Completada</span>;
+          if (isPaceOverdue(p))   return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">⚠ Vencida</span>;
+          return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-500">Pendiente</span>;
+        };
+
+        const totalCompleted = childPaces.filter(isPaceCompleted).length;
+        const totalOverdue   = childPaces.filter((p) => !isPaceCompleted(p) && isPaceOverdue(p)).length;
+        const totalPending   = childPaces.length - totalCompleted - totalOverdue;
+
+        return (
+          <div className="fixed inset-0 overflow-hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl h-[90vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-100 bg-[#193D6D] shrink-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-lg text-white">Evaluaciones proyectadas</h3>
+                    <p className="text-xs text-blue-200 mt-0.5">{childName}</p>
+                  </div>
+                  <button onClick={() => setPaceProjectionModal(null)} className="text-blue-200 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                {/* Stats strip */}
+                <div className="flex gap-4 mt-3">
+                  {[
+                    { label: 'Total', val: childPaces.length, cls: 'text-blue-200' },
+                    { label: 'Completadas', val: totalCompleted, cls: 'text-emerald-300' },
+                    { label: 'Vencidas', val: totalOverdue, cls: totalOverdue > 0 ? 'text-red-300' : 'text-blue-200' },
+                    { label: 'Pendientes', val: totalPending, cls: 'text-slate-300' },
+                  ].map(({ label, val, cls }) => (
+                    <div key={label} className="text-center">
+                      <p className={`text-lg font-black leading-none ${cls}`}>{val}</p>
+                      <p className="text-[9px] text-blue-300 font-bold uppercase tracking-wider mt-0.5">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtros */}
+              <div className="px-6 py-3 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-2 shrink-0">
+                {/* Quarter */}
+                <div className="flex gap-1">
+                  {['all','Q1','Q2','Q3'].map((q) => (
+                    <button key={q} onClick={() => setEvalQFilter(q)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${evalQFilter === q ? 'bg-[#193D6D] text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400'}`}>
+                      {q === 'all' ? 'Todos' : q}
+                    </button>
+                  ))}
+                </div>
+                {/* Estado */}
+                <div className="flex gap-1">
+                  {[['all','Todos'],['completed','Completadas'],['overdue','Vencidas'],['pending','Pendientes']].map(([v, l]) => (
+                    <button key={v} onClick={() => setEvalStatusFilter(v)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${evalStatusFilter === v ? 'bg-[#193D6D] text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {/* Materia */}
+                <select value={evalSubjFilter} onChange={(e) => setEvalSubjFilter(e.target.value)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700">
+                  <option value="all">Todas las materias</option>
+                  {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Contenido scrolleable */}
+              <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-6">
+                {filtered.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-slate-400">
+                    <p className="font-bold">Sin evaluaciones para este filtro.</p>
+                  </div>
+                ) : (
+                  ['Q1','Q2','Q3'].map((q) => {
+                    const subjMap = byQ[q];
+                    const subjNames = Object.keys(subjMap);
+                    if (!subjNames.length) return null;
+                    return (
+                      <div key={q}>
+                        <h4 className="font-black text-slate-700 text-sm mb-3 flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-[#193D6D] text-white rounded-lg text-xs">{q}</span>
+                          Trimestre {q.replace('Q','')}
+                        </h4>
+                        <div className="space-y-3">
+                          {subjNames.sort().map((subj) => (
+                            <div key={subj} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                              <div className="px-4 py-2 bg-slate-100 border-b border-slate-200">
+                                <span className="text-xs font-black text-slate-700 uppercase tracking-wider">{subj}</span>
+                              </div>
+                              <div className="divide-y divide-slate-100">
+                                {subjMap[subj].map((p) => (
+                                  <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                                    <span className="font-bold text-sm text-slate-800">
+                                      #{p.pace_number}
+                                    </span>
+                                    {p.pages_per_day && (
+                                      <span className="text-[10px] text-slate-400 font-medium">{p.pages_per_day} pág/día</span>
+                                    )}
+                                    {p.due_date && (
+                                      <span className="text-[10px] text-slate-400 font-medium">
+                                        Est. {new Date(p.due_date).toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}
+                                      </span>
+                                    )}
+                                    {statusBadge(p)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between gap-3">
+                <p className="text-xs text-slate-500 font-medium">
+                  Para enviar evidencias de una evaluación, use la pestaña <strong>Evidencias</strong>.
+                  Las notas finales son validadas por Chanak.
+                </p>
+                <button onClick={() => setPaceProjectionModal(null)}
+                  className="px-4 py-2 bg-slate-200 text-slate-800 rounded-xl font-bold text-sm hover:bg-slate-300">
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Payment Details Modal */}
       {isPaymentModalOpen && (() => {

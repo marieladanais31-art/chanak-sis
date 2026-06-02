@@ -2,14 +2,15 @@
  * peiPdf.js
  * Genera el PDF institucional del Plan Educativo Individualizado (PEI).
  * Usa jsPDF + jspdf-autotable (ya instalados).
- *
- * PENDIENTE EDGE FUNCTION: firma digital criptográfica del Director.
+ * Requiere: settings = await preloadImages(rawSettings) antes de llamar.
  */
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   addInstitutionLogo,
+  addInstitutionSeal,
+  addInstitutionSignature,
   getDocumentFooter,
   getInstitutionFldoe,
   getInstitutionName,
@@ -387,6 +388,10 @@ export function generatePeiPDF({ pei, paces = [], student, settings, lang: reque
   doc.setDrawColor(...NAVY);
   doc.setLineWidth(0.3);
   doc.rect(sig1X, y, sigW, 30, 'S');
+
+  // Imagen de firma del director (si existe en settings)
+  addInstitutionSignature(doc, settings, sig1X + 3, y + 1, 38, 8);
+
   doc.setFont(FONT_NORMAL, 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
@@ -403,6 +408,9 @@ export function generatePeiPDF({ pei, paces = [], student, settings, lang: reque
   doc.setFontSize(7.5);
   doc.setTextColor(...NAVY);
   doc.text('Head of School / Dirección', sig1X + sigW / 2, y + 29, { align: 'center' });
+
+  // Sello institucional debajo de la caja del director
+  addInstitutionSeal(doc, settings, sig1X + 3, y + 31, 18, 18);
 
   // Caja firma Padre/Madre/Tutor
   doc.setTextColor(...BLACK);

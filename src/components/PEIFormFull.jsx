@@ -3,6 +3,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { ACTIVE_SCHOOL_YEAR } from '@/lib/academicUtils';
 import { normalizeDateFields } from '@/lib/dateUtils';
+import { preloadImages } from '@/lib/officialDocuments';
 import PaceProjectionTable from './PaceProjectionTable';
 import { generatePeiPDF } from '@/lib/peiPdf';
 import {
@@ -330,6 +331,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           : Promise.resolve({ data: [] }),
         supabase.from('institutional_settings').select('*').limit(1).single(),
       ]);
+      const settingsWithImages = await preloadImages(settingsRes.data || null);
       const [parts] = (studentName || '').split(' ');
       generatePeiPDF({
         pei: { ...form, id: peiId },
@@ -338,7 +340,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           first_name: parts || studentName,
           last_name: (studentName || '').replace(parts + ' ', ''),
         },
-        settings: settingsRes.data || null,
+        settings: settingsWithImages,
         lang,
       });
     } catch (err) {
