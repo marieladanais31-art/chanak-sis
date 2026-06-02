@@ -1,31 +1,29 @@
 /**
  * EnrollmentForm.jsx
  * Formulario público de solicitud de matrícula — Chanak International Academy
- * Ruta: /matricula  (sin autenticación requerida)
- * Envía POST JSON al webhook Zapier.
+ * Rutas: /matricula  /enrollment  (sin autenticación)
+ * Envía POST a /api/enrollment (proxy Vercel → Zapier server-side).
  * No guarda en Supabase. No crea usuarios.
  */
 
 import React, { useState, useCallback } from 'react';
 import {
   ChevronRight, ChevronLeft, CheckCircle2, AlertCircle,
-  Loader2, GraduationCap, User, Users, BookOpen, ClipboardCheck,
+  Loader2, GraduationCap, User, Users, BookOpen, FileText, ClipboardCheck,
+  ExternalLink,
 } from 'lucide-react';
-
-// ── Webhook ───────────────────────────────────────────────────────────────────
-const ZAPIER_WEBHOOK = 'https://hooks.zapier.com/hooks/catch/27757659/4bsxiu9/';
 
 // ── Generador de folio ────────────────────────────────────────────────────────
 function generateFolio() {
-  const now   = new Date();
-  const pad   = (n, l = 2) => String(n).padStart(l, '0');
-  const date  = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
-  const time  = `${pad(now.getHours())}${pad(now.getMinutes())}`;
-  const rand  = String(Math.floor(Math.random() * 9000) + 1000);
+  const now  = new Date();
+  const pad  = (n, l = 2) => String(n).padStart(l, '0');
+  const date = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const rand = String(Math.floor(Math.random() * 9000) + 1000);
   return `CHA-${date}-${time}-${rand}`;
 }
 
-// ── Constantes de opciones ────────────────────────────────────────────────────
+// ── Opciones ──────────────────────────────────────────────────────────────────
 const PROGRAMAS = [
   'Off-Campus K-12 (España)',
   'Dual Diploma',
@@ -34,113 +32,97 @@ const PROGRAMAS = [
 ];
 const AÑOS_ESCOLARES = ['2025-2026', '2026-2027'];
 const GRADOS = [
-  'Kindergarten', '1st Grade', '2nd Grade', '3rd Grade', '4th Grade',
-  '5th Grade', '6th Grade', '7th Grade', '8th Grade',
-  '9th Grade', '10th Grade', '11th Grade', '12th Grade',
+  'Kindergarten','1st Grade','2nd Grade','3rd Grade','4th Grade',
+  '5th Grade','6th Grade','7th Grade','8th Grade',
+  '9th Grade','10th Grade','11th Grade','12th Grade',
 ];
-const RELACIONES = ['Madre', 'Padre', 'Tutor Legal', 'Abuelo/a', 'Otro'];
-const IDIOMAS = ['Español', 'Inglés', 'Bilingüe Español/Inglés', 'Otro'];
-const PAISES = [
-  'España', 'Venezuela', 'Colombia', 'México', 'Argentina',
-  'Peru', 'Chile', 'Ecuador', 'Estados Unidos', 'Otro',
-];
-const NIVEL_INGLES = ['A1 – Principiante', 'A2 – Básico', 'B1 – Intermedio', 'B2 – Intermedio Alto', 'C1 – Avanzado', 'Nativo'];
+const RELACIONES  = ['Madre','Padre','Tutor Legal','Abuelo/a','Otro'];
+const IDIOMAS     = ['Español','Inglés','Bilingüe Español/Inglés','Otro'];
+const PAISES      = ['España','Venezuela','Colombia','México','Argentina','Peru','Chile','Ecuador','Estados Unidos','Otro'];
+const NIV_INGLES  = ['A1 – Principiante','A2 – Básico','B1 – Intermedio','B2 – Intermedio Alto','C1 – Avanzado','Nativo'];
 
-// ── Pasos del wizard ──────────────────────────────────────────────────────────
+// ── Pasos ─────────────────────────────────────────────────────────────────────
 const STEPS = [
-  { id: 1, label: 'Programa',  icon: GraduationCap },
-  { id: 2, label: 'Alumno',    icon: User           },
-  { id: 3, label: 'Familia',   icon: Users          },
-  { id: 4, label: 'Académico', icon: BookOpen       },
-  { id: 5, label: 'Confirmar', icon: ClipboardCheck },
+  { id: 1, label: 'Programa',     icon: GraduationCap },
+  { id: 2, label: 'Alumno',       icon: User          },
+  { id: 3, label: 'Familia',      icon: Users         },
+  { id: 4, label: 'Académico',    icon: BookOpen      },
+  { id: 5, label: 'Documentos',   icon: FileText      },
+  { id: 6, label: 'Confirmar',    icon: ClipboardCheck},
 ];
 
-// ── Estado inicial del formulario ─────────────────────────────────────────────
+// ── Estado inicial ────────────────────────────────────────────────────────────
 const INIT = {
   // Paso 1
-  programa:      '',
-  añoEscolar:    '2025-2026',
-  fechaInicio:   '',
-  referencia:    '',
+  programa: '', añoEscolar: '2025-2026', fechaInicio: '', referencia: '',
   // Paso 2
-  alumNombre:    '',
-  alumApellidos: '',
-  alumFechaNac:  '',
-  alumGenero:    '',
-  alumNacional:  '',
-  alumPais:      'España',
-  alumCiudad:    '',
-  alumDNI:       '',
-  alumIdioma:    '',
-  gradeSelected: '',
-  neeCheck:      'No',
-  neeDesc:       '',
+  alumNombre: '', alumApellidos: '', alumFechaNac: '', alumGenero: '',
+  alumNacional: '', alumPais: 'España', alumCiudad: '', alumDNI: '',
+  alumIdioma: '', gradeSelected: '', neeCheck: 'No', neeDesc: '',
   // Paso 3
-  tutNombre:     '',
-  tutRelacion:   '',
-  tutEmail:      '',
-  tutTel:        '',
-  tutPais:       'España',
-  tutCiudad:     '',
-  tutDireccion:  '',
-  tut2Nombre:    '',
-  tut2Email:     '',
-  tut2Tel:       '',
+  tutNombre: '', tutRelacion: '', tutEmail: '', tutTel: '',
+  tutPais: 'España', tutCiudad: '', tutDireccion: '',
+  tut2Nombre: '', tut2Email: '', tut2Tel: '',
   // Paso 4
-  instAnterior:  '',
-  instPais:      '',
-  nivelIngles:   '',
-  aceExp:        'No',
-  fortalezas:    '',
-  dificultades:  '',
-  motivacion:    '',
-  cosmovis:      '',
+  instAnterior: '', instPais: '', nivelIngles: '', aceExp: 'No',
+  fortalezas: '', dificultades: '', motivacion: '', cosmovis: '',
+  // Paso 5 — Documentos
+  tutorIdDocumentUrl: '', studentIdDocumentUrl: '',
+  reportCardsLastTwoYearsUrl: '', neeDocumentsUrl: '', documentsNotes: '',
 };
 
 // ── Validación por paso ───────────────────────────────────────────────────────
 const REQUIRED_BY_STEP = {
-  1: ['programa', 'añoEscolar', 'fechaInicio'],
-  2: ['alumNombre', 'alumApellidos', 'alumFechaNac', 'gradeSelected'],
-  3: ['tutNombre', 'tutEmail', 'tutTel', 'tutRelacion'],
+  1: ['programa','añoEscolar','fechaInicio'],
+  2: ['alumNombre','alumApellidos','alumFechaNac','gradeSelected'],
+  3: ['tutNombre','tutRelacion','tutEmail','tutTel'],
   4: [],
+  5: ['tutorIdDocumentUrl','studentIdDocumentUrl','reportCardsLastTwoYearsUrl'],
 };
 
-// ── Estilos reutilizables ─────────────────────────────────────────────────────
-const INPUT   = 'w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-800 bg-white outline-none focus:ring-2 focus:ring-[#193D6D] focus:border-[#193D6D] transition-colors';
-const SELECT  = INPUT + ' cursor-pointer';
-const LABEL   = 'block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider';
-const SECTION = 'space-y-5';
-const GROUP   = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
+// ── Estilos ───────────────────────────────────────────────────────────────────
+const INPUT  = 'w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-800 bg-white outline-none focus:ring-2 focus:ring-[#193D6D] focus:border-[#193D6D] transition-colors';
+const SELECT = INPUT + ' cursor-pointer';
+const LABEL  = 'block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wider';
+const S2     = 'space-y-5';
+const G2     = 'grid grid-cols-1 sm:grid-cols-2 gap-4';
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function EnrollmentForm() {
-  const [step,       setStep]       = useState(1);
-  const [form,       setForm]       = useState(INIT);
-  const [errors,     setErrors]     = useState({});
-  const [sending,    setSending]    = useState(false);
-  const [submitted,  setSubmitted]  = useState(false);
-  const [sendError,  setSendError]  = useState('');
-  const [folio]                     = useState(generateFolio);
+  const [step,      setStep]      = useState(1);
+  const [form,      setForm]      = useState(INIT);
+  const [errors,    setErrors]    = useState({});
+  const [sending,   setSending]   = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [folio]                   = useState(generateFolio);
 
-  const set = (field) => (e) =>
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  const set = (field) => (e) => setForm(p => ({ ...p, [field]: e.target.value }));
 
   const validate = useCallback((s) => {
     const required = REQUIRED_BY_STEP[s] || [];
     const errs = {};
-    required.forEach((f) => {
-      if (!form[f] || !String(form[f]).trim()) errs[f] = 'Campo obligatorio';
-    });
+    required.forEach(f => { if (!form[f] || !String(form[f]).trim()) errs[f] = 'Campo obligatorio'; });
+
     // Email tutor
     if (s === 3 && form.tutEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.tutEmail)) {
       errs.tutEmail = 'Email no válido';
     }
+    // URLs de documentos
+    if (s === 5) {
+      ['tutorIdDocumentUrl','studentIdDocumentUrl','reportCardsLastTwoYearsUrl'].forEach(f => {
+        if (form[f] && !String(form[f]).trim().startsWith('https://')) {
+          errs[f] = 'El enlace debe comenzar con https://';
+        }
+      });
+    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }, [form]);
 
-  const next = () => { if (validate(step)) setStep((s) => s + 1); };
-  const prev = () => { setErrors({}); setStep((s) => s - 1); };
+  const next = () => { if (validate(step)) setStep(s => s + 1); };
+  const prev = () => { setErrors({}); setStep(s => s - 1); };
 
   const handleSubmit = async () => {
     if (!validate(step)) return;
@@ -148,70 +130,56 @@ export default function EnrollmentForm() {
     setSendError('');
 
     const payload = {
-      folioSIS:      folio,
+      folioSIS: folio,
       // Paso 1
-      programa:      form.programa,
-      añoEscolar:    form.añoEscolar,
-      fechaInicio:   form.fechaInicio,
-      referencia:    form.referencia,
+      programa: form.programa, añoEscolar: form.añoEscolar,
+      fechaInicio: form.fechaInicio, referencia: form.referencia,
       // Paso 2
-      alumNombre:    form.alumNombre,
-      alumApellidos: form.alumApellidos,
-      alumFechaNac:  form.alumFechaNac,
-      alumGenero:    form.alumGenero,
-      alumNacional:  form.alumNacional,
-      alumPais:      form.alumPais,
-      alumCiudad:    form.alumCiudad,
-      alumDNI:       form.alumDNI,
-      alumIdioma:    form.alumIdioma,
-      gradeSelected: form.gradeSelected,
-      neeCheck:      form.neeCheck,
-      neeDesc:       form.neeDesc,
+      alumNombre: form.alumNombre, alumApellidos: form.alumApellidos,
+      alumFechaNac: form.alumFechaNac, alumGenero: form.alumGenero,
+      alumNacional: form.alumNacional, alumPais: form.alumPais,
+      alumCiudad: form.alumCiudad, alumDNI: form.alumDNI,
+      alumIdioma: form.alumIdioma, gradeSelected: form.gradeSelected,
+      neeCheck: form.neeCheck, neeDesc: form.neeDesc,
       // Paso 3
-      tutNombre:     form.tutNombre,
-      tutRelacion:   form.tutRelacion,
-      tutEmail:      form.tutEmail,
-      tutTel:        form.tutTel,
-      tutPais:       form.tutPais,
-      tutCiudad:     form.tutCiudad,
-      tutDireccion:  form.tutDireccion,
-      tut2Nombre:    form.tut2Nombre,
-      tut2Email:     form.tut2Email,
-      tut2Tel:       form.tut2Tel,
+      tutNombre: form.tutNombre, tutRelacion: form.tutRelacion,
+      tutEmail: form.tutEmail, tutTel: form.tutTel,
+      tutPais: form.tutPais, tutCiudad: form.tutCiudad,
+      tutDireccion: form.tutDireccion,
+      tut2Nombre: form.tut2Nombre, tut2Email: form.tut2Email, tut2Tel: form.tut2Tel,
       // Paso 4
-      instAnterior:  form.instAnterior,
-      instPais:      form.instPais,
-      nivelIngles:   form.nivelIngles,
-      aceExp:        form.aceExp,
-      fortalezas:    form.fortalezas,
-      dificultades:  form.dificultades,
-      motivacion:    form.motivacion,
-      cosmovis:      form.cosmovis,
-      // Pago
-      stripePaymentLink: 'https://buy.stripe.com/aFa7sMgjLcBvfvW2NQ67S0c',
-      paymentStatus:     'Pendiente de pago',
-      // Metadatos
-      fechaEnvio:    new Date().toISOString(),
-      origen:        'Formulario público /matricula',
+      instAnterior: form.instAnterior, instPais: form.instPais,
+      nivelIngles: form.nivelIngles, aceExp: form.aceExp,
+      fortalezas: form.fortalezas, dificultades: form.dificultades,
+      motivacion: form.motivacion, cosmovis: form.cosmovis,
+      // Paso 5 — Documentos
+      tutorIdDocumentUrl:         form.tutorIdDocumentUrl,
+      studentIdDocumentUrl:       form.studentIdDocumentUrl,
+      reportCardsLastTwoYearsUrl: form.reportCardsLastTwoYearsUrl,
+      neeDocumentsUrl:            form.neeDocumentsUrl    || 'No aplica',
+      documentsNotes:             form.documentsNotes     || 'No proporcionado',
     };
 
     try {
-      const res = await fetch(ZAPIER_WEBHOOK, {
+      const res = await fetch('/api/enrollment', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       setSubmitted(true);
     } catch (err) {
-      console.error('[EnrollmentForm] Zapier error:', err);
+      console.error('[EnrollmentForm] submit error:', err.message);
       setSendError('No se pudo enviar la solicitud. Inténtelo nuevamente o contacte con offcampus@chanakacademy.org.');
     } finally {
       setSending(false);
     }
   };
 
-  // ── Pantalla de confirmación ─────────────────────────────────────────────
+  // ── Pantalla de éxito ─────────────────────────────────────────────────────
   if (submitted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#193D6D] to-[#20B2AA] flex items-center justify-center p-4">
@@ -221,75 +189,64 @@ export default function EnrollmentForm() {
           <p className="text-slate-600 font-medium">
             Hemos recibido la solicitud de matrícula para{' '}
             <strong>{form.alumNombre} {form.alumApellidos}</strong>.
+            Hemos enviado una confirmación al correo del tutor.
           </p>
           <div className="bg-slate-50 border border-slate-200 rounded-xl px-6 py-3">
             <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Número de folio</p>
             <p className="text-lg font-black text-[#193D6D]">{folio}</p>
           </div>
-          <p className="text-sm text-slate-500 font-medium">
-            Hemos enviado una confirmación al correo del tutor.
-            El equipo de Chanak se pondrá en contacto en los próximos días hábiles.
-          </p>
-
           <a
             href="https://buy.stripe.com/aFa7sMgjLcBvfvW2NQ67S0c"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 w-full px-6 py-3 bg-[#193D6D] hover:bg-[#142d5a] text-white rounded-xl font-black text-sm transition-colors"
           >
-            Realizar pago inicial / reserva de plaza →
+            <ExternalLink className="w-4 h-4" />
+            Realizar pago inicial / reserva de plaza
           </a>
-
           <p className="text-xs text-slate-400 italic leading-relaxed">
             El pago no garantiza admisión automática. La solicitud queda sujeta a revisión
             académica y administrativa por parte de Chanak International Academy.
           </p>
-
           <p className="text-xs text-slate-400">
-            Para consultas: <a href="mailto:offcampus@chanakacademy.org" className="underline">offcampus@chanakacademy.org</a>
+            Consultas: <a href="mailto:offcampus@chanakacademy.org" className="underline">offcampus@chanakacademy.org</a>
           </p>
         </div>
       </div>
     );
   }
 
-  // ── Layout principal ─────────────────────────────────────────────────────
+  // ── Layout principal ──────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#193D6D] to-[#20B2AA]">
-      {/* Cabecera */}
       <header className="text-white text-center py-8 px-4">
         <p className="text-sm font-bold opacity-80 tracking-widest uppercase">Chanak International Academy</p>
         <h1 className="text-2xl md:text-3xl font-black mt-1">Solicitud de Matrícula Off-Campus</h1>
         <p className="text-sm opacity-70 mt-1">FLDOE #134620 · chanakacademy.org</p>
       </header>
 
-      {/* Wizard */}
       <div className="max-w-3xl mx-auto px-4 pb-12">
         {/* Barra de pasos */}
         <div className="flex items-center justify-center gap-1 mb-8 flex-wrap">
           {STEPS.map((s, idx) => {
-            const Icon = s.icon;
-            const active  = step === s.id;
-            const done    = step > s.id;
+            const Icon  = s.icon;
+            const active = step === s.id;
+            const done   = step > s.id;
             return (
               <React.Fragment key={s.id}>
                 <div className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all ${
                   active ? 'bg-white text-[#193D6D] shadow-lg' :
-                  done   ? 'bg-white/30 text-white' :
-                           'bg-white/10 text-white/50'
+                  done   ? 'bg-white/30 text-white' : 'bg-white/10 text-white/50'
                 }`}>
                   <Icon className="w-3.5 h-3.5" />
                   <span className="hidden sm:block">{s.label}</span>
                 </div>
-                {idx < STEPS.length - 1 && (
-                  <div className={`h-px w-4 md:w-8 ${step > s.id ? 'bg-white/60' : 'bg-white/20'}`} />
-                )}
+                {idx < STEPS.length - 1 && <div className={`h-px w-3 md:w-5 ${step > s.id ? 'bg-white/60' : 'bg-white/20'}`} />}
               </React.Fragment>
             );
           })}
         </div>
 
-        {/* Tarjeta del formulario */}
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-[#193D6D] px-8 py-5">
             <h2 className="text-white font-black text-lg">
@@ -300,7 +257,7 @@ export default function EnrollmentForm() {
           <div className="p-8">
             {/* ── PASO 1: Programa ── */}
             {step === 1 && (
-              <div className={SECTION}>
+              <div className={S2}>
                 <div>
                   <label className={LABEL}>Programa solicitado *</label>
                   <select value={form.programa} onChange={set('programa')} className={SELECT}>
@@ -309,7 +266,7 @@ export default function EnrollmentForm() {
                   </select>
                   {errors.programa && <Err>{errors.programa}</Err>}
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Año escolar *</label>
                     <select value={form.añoEscolar} onChange={set('añoEscolar')} className={SELECT}>
@@ -332,8 +289,8 @@ export default function EnrollmentForm() {
 
             {/* ── PASO 2: Alumno ── */}
             {step === 2 && (
-              <div className={SECTION}>
-                <div className={GROUP}>
+              <div className={S2}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Nombre(s) del alumno *</label>
                     <input type="text" value={form.alumNombre} onChange={set('alumNombre')} className={INPUT} />
@@ -345,7 +302,7 @@ export default function EnrollmentForm() {
                     {errors.alumApellidos && <Err>{errors.alumApellidos}</Err>}
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Fecha de nacimiento *</label>
                     <input type="date" value={form.alumFechaNac} onChange={set('alumFechaNac')} className={INPUT} />
@@ -359,11 +316,10 @@ export default function EnrollmentForm() {
                     </select>
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Nacionalidad</label>
-                    <input type="text" value={form.alumNacional} onChange={set('alumNacional')} className={INPUT}
-                      placeholder="Española, Venezolana…" />
+                    <input type="text" value={form.alumNacional} onChange={set('alumNacional')} className={INPUT} placeholder="Española, Venezolana…" />
                   </div>
                   <div>
                     <label className={LABEL}>País de residencia</label>
@@ -372,7 +328,7 @@ export default function EnrollmentForm() {
                     </select>
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Ciudad</label>
                     <input type="text" value={form.alumCiudad} onChange={set('alumCiudad')} className={INPUT} />
@@ -382,7 +338,7 @@ export default function EnrollmentForm() {
                     <input type="text" value={form.alumDNI} onChange={set('alumDNI')} className={INPUT} />
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Idioma materno</label>
                     <select value={form.alumIdioma} onChange={set('alumIdioma')} className={SELECT}>
@@ -402,11 +358,9 @@ export default function EnrollmentForm() {
                 <div>
                   <label className={LABEL}>¿Tiene necesidades educativas especiales o diagnóstico previo?</label>
                   <div className="flex gap-4">
-                    {['No', 'Sí'].map(v => (
+                    {['No','Sí'].map(v => (
                       <label key={v} className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700">
-                        <input type="radio" name="neeCheck" value={v}
-                          checked={form.neeCheck === v} onChange={set('neeCheck')}
-                          className="accent-[#193D6D]" />
+                        <input type="radio" name="neeCheck" value={v} checked={form.neeCheck === v} onChange={set('neeCheck')} className="accent-[#193D6D]" />
                         {v}
                       </label>
                     ))}
@@ -421,11 +375,9 @@ export default function EnrollmentForm() {
 
             {/* ── PASO 3: Familia ── */}
             {step === 3 && (
-              <div className={SECTION}>
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 font-bold">
-                  Tutor / Responsable Legal Principal
-                </div>
-                <div className={GROUP}>
+              <div className={S2}>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 font-bold">Tutor / Responsable Legal Principal</div>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Nombre completo *</label>
                     <input type="text" value={form.tutNombre} onChange={set('tutNombre')} className={INPUT} />
@@ -440,7 +392,7 @@ export default function EnrollmentForm() {
                     {errors.tutRelacion && <Err>{errors.tutRelacion}</Err>}
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Correo electrónico *</label>
                     <input type="email" value={form.tutEmail} onChange={set('tutEmail')} className={INPUT} />
@@ -448,12 +400,11 @@ export default function EnrollmentForm() {
                   </div>
                   <div>
                     <label className={LABEL}>Teléfono / WhatsApp *</label>
-                    <input type="tel" value={form.tutTel} onChange={set('tutTel')} className={INPUT}
-                      placeholder="+34 600 000 000" />
+                    <input type="tel" value={form.tutTel} onChange={set('tutTel')} className={INPUT} placeholder="+34 600 000 000" />
                     {errors.tutTel && <Err>{errors.tutTel}</Err>}
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>País</label>
                     <select value={form.tutPais} onChange={set('tutPais')} className={SELECT}>
@@ -467,15 +418,11 @@ export default function EnrollmentForm() {
                 </div>
                 <div>
                   <label className={LABEL}>Dirección postal</label>
-                  <input type="text" value={form.tutDireccion} onChange={set('tutDireccion')} className={INPUT}
-                    placeholder="Calle, número, código postal…" />
+                  <input type="text" value={form.tutDireccion} onChange={set('tutDireccion')} className={INPUT} placeholder="Calle, número, código postal…" />
                 </div>
-
                 <div className="border-t border-slate-200 pt-4">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
-                    Segundo tutor / responsable (opcional)
-                  </p>
-                  <div className={GROUP}>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Segundo tutor / responsable (opcional)</p>
+                  <div className={G2}>
                     <div>
                       <label className={LABEL}>Nombre completo</label>
                       <input type="text" value={form.tut2Nombre} onChange={set('tut2Nombre')} className={INPUT} />
@@ -487,8 +434,7 @@ export default function EnrollmentForm() {
                   </div>
                   <div className="mt-4 max-w-xs">
                     <label className={LABEL}>Teléfono</label>
-                    <input type="tel" value={form.tut2Tel} onChange={set('tut2Tel')} className={INPUT}
-                      placeholder="+34 600 000 000" />
+                    <input type="tel" value={form.tut2Tel} onChange={set('tut2Tel')} className={INPUT} placeholder="+34 600 000 000" />
                   </div>
                 </div>
               </div>
@@ -496,12 +442,11 @@ export default function EnrollmentForm() {
 
             {/* ── PASO 4: Académico ── */}
             {step === 4 && (
-              <div className={SECTION}>
-                <div className={GROUP}>
+              <div className={S2}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Institución educativa anterior</label>
-                    <input type="text" value={form.instAnterior} onChange={set('instAnterior')} className={INPUT}
-                      placeholder="Nombre del colegio o escuela" />
+                    <input type="text" value={form.instAnterior} onChange={set('instAnterior')} className={INPUT} placeholder="Nombre del colegio o escuela" />
                   </div>
                   <div>
                     <label className={LABEL}>País de la institución anterior</label>
@@ -511,22 +456,20 @@ export default function EnrollmentForm() {
                     </select>
                   </div>
                 </div>
-                <div className={GROUP}>
+                <div className={G2}>
                   <div>
                     <label className={LABEL}>Nivel de inglés del alumno</label>
                     <select value={form.nivelIngles} onChange={set('nivelIngles')} className={SELECT}>
                       <option value="">Seleccionar…</option>
-                      {NIVEL_INGLES.map(n => <option key={n} value={n}>{n}</option>)}
+                      {NIV_INGLES.map(n => <option key={n} value={n}>{n}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={LABEL}>¿Tiene experiencia previa con currículo A.C.E.?</label>
+                    <label className={LABEL}>¿Experiencia previa con currículo A.C.E.?</label>
                     <div className="flex gap-4 mt-2">
-                      {['No', 'Sí'].map(v => (
+                      {['No','Sí'].map(v => (
                         <label key={v} className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700">
-                          <input type="radio" name="aceExp" value={v}
-                            checked={form.aceExp === v} onChange={set('aceExp')}
-                            className="accent-[#193D6D]" />
+                          <input type="radio" name="aceExp" value={v} checked={form.aceExp === v} onChange={set('aceExp')} className="accent-[#193D6D]" />
                           {v}
                         </label>
                       ))}
@@ -546,7 +489,7 @@ export default function EnrollmentForm() {
                 <div>
                   <label className={LABEL}>Motivación para solicitar este programa</label>
                   <textarea rows={3} value={form.motivacion} onChange={set('motivacion')} className={INPUT + ' resize-none'}
-                    placeholder="¿Por qué eligieron Chanak International Academy? ¿Qué esperan lograr?" />
+                    placeholder="¿Por qué eligieron Chanak? ¿Qué esperan lograr?" />
                 </div>
                 <div>
                   <label className={LABEL}>Cosmovisión / valores familiares</label>
@@ -556,21 +499,94 @@ export default function EnrollmentForm() {
               </div>
             )}
 
-            {/* ── PASO 5: Confirmación ── */}
+            {/* ── PASO 5: Documentos ── */}
             {step === 5 && (
-              <div className={SECTION}>
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-3">
+              <div className={S2}>
+                {/* Instrucciones */}
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-2">
+                  <p className="font-black text-[#193D6D] text-sm">Documentación requerida — Solo enlaces de Google Drive</p>
+                  <p className="text-sm text-blue-800 font-medium">
+                    Suba los documentos a una carpeta de Google Drive con permisos de visualización para el equipo
+                    Off-Campus de Chanak y pegue aquí los enlaces correspondientes.
+                  </p>
+                  <ul className="text-xs text-blue-700 font-medium list-disc list-inside space-y-1 mt-2">
+                    <li><strong>Identificación del tutor legal:</strong> Pasaporte, DNI, NIE o documento oficial equivalente.</li>
+                    <li><strong>Identificación del estudiante:</strong> Pasaporte, DNI, NIE o documento oficial equivalente.</li>
+                    <li><strong>Boletines / reportes de los dos últimos años escolares.</strong></li>
+                    <li><strong>Si aplica:</strong> informe psicopedagógico, diagnóstico o documentación NEE.</li>
+                  </ul>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 font-bold">
+                  ⚠️ Asegúrese de que los enlaces permitan visualización al equipo de Chanak.
+                  Si los permisos están restringidos, la revisión de matrícula puede retrasarse.
+                </div>
+
+                {/* Identificación tutor */}
+                <div>
+                  <label className={LABEL}>Identificación del tutor/a legal * <span className="normal-case font-normal">(Pasaporte, DNI, NIE)</span></label>
+                  <input type="url" value={form.tutorIdDocumentUrl} onChange={set('tutorIdDocumentUrl')} className={INPUT}
+                    placeholder="https://drive.google.com/file/d/…" />
+                  {errors.tutorIdDocumentUrl && <Err>{errors.tutorIdDocumentUrl}</Err>}
+                </div>
+
+                {/* Identificación estudiante */}
+                <div>
+                  <label className={LABEL}>Identificación del estudiante * <span className="normal-case font-normal">(Pasaporte, DNI, NIE)</span></label>
+                  <input type="url" value={form.studentIdDocumentUrl} onChange={set('studentIdDocumentUrl')} className={INPUT}
+                    placeholder="https://drive.google.com/file/d/…" />
+                  {errors.studentIdDocumentUrl && <Err>{errors.studentIdDocumentUrl}</Err>}
+                </div>
+
+                {/* Boletines */}
+                <div>
+                  <label className={LABEL}>Boletines / reportes académicos de los últimos dos años * </label>
+                  <input type="url" value={form.reportCardsLastTwoYearsUrl} onChange={set('reportCardsLastTwoYearsUrl')} className={INPUT}
+                    placeholder="https://drive.google.com/drive/folders/…" />
+                  {errors.reportCardsLastTwoYearsUrl && <Err>{errors.reportCardsLastTwoYearsUrl}</Err>}
+                  <p className="text-xs text-slate-400 mt-1 font-medium">Puede subir una carpeta con todos los documentos.</p>
+                </div>
+
+                {/* NEE (opcional) */}
+                <div>
+                  <label className={LABEL}>Documentación NEE / informe psicopedagógico <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
+                  <input type="url" value={form.neeDocumentsUrl} onChange={set('neeDocumentsUrl')} className={INPUT}
+                    placeholder="https://drive.google.com/file/d/… (dejar vacío si no aplica)" />
+                </div>
+
+                {/* Notas */}
+                <div>
+                  <label className={LABEL}>Notas adicionales sobre documentos <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
+                  <textarea rows={3} value={form.documentsNotes} onChange={set('documentsNotes')} className={INPUT + ' resize-none'}
+                    placeholder="Ej: Los boletines del año 2022-2023 están en la carpeta junto con los del año anterior." />
+                </div>
+              </div>
+            )}
+
+            {/* ── PASO 6: Confirmar ── */}
+            {step === 6 && (
+              <div className={S2}>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-2">
                   <h3 className="font-black text-[#193D6D] text-lg">Resumen de la solicitud</h3>
-                  <Row label="Folio SIS"         value={folio} highlight />
-                  <Row label="Programa"           value={form.programa} />
-                  <Row label="Año escolar"        value={form.añoEscolar} />
-                  <Row label="Fecha de inicio"    value={form.fechaInicio} />
-                  <Row label="Alumno"             value={`${form.alumNombre} ${form.alumApellidos}`} />
+
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider pt-2">Datos generales</p>
+                  <Row label="Folio SIS"          value={folio} highlight />
+                  <Row label="Programa"            value={form.programa} />
+                  <Row label="Año escolar"         value={form.añoEscolar} />
+                  <Row label="Fecha de inicio"     value={form.fechaInicio} />
+                  <Row label="Alumno"              value={`${form.alumNombre} ${form.alumApellidos}`} />
                   <Row label="Fecha de nacimiento" value={form.alumFechaNac} />
-                  <Row label="Grado solicitado"   value={form.gradeSelected} />
-                  <Row label="Tutor principal"    value={form.tutNombre} />
-                  <Row label="Email tutor"        value={form.tutEmail} />
-                  <Row label="Teléfono tutor"     value={form.tutTel} />
+                  <Row label="Grado solicitado"    value={form.gradeSelected} />
+                  <Row label="Tutor principal"     value={form.tutNombre} />
+                  <Row label="Email tutor"         value={form.tutEmail} />
+                  <Row label="Teléfono tutor"      value={form.tutTel} />
+
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider pt-3">Documentación</p>
+                  <Row label="ID tutor legal"      value={form.tutorIdDocumentUrl         ? 'Enlace registrado ✓' : '—'} />
+                  <Row label="ID estudiante"       value={form.studentIdDocumentUrl       ? 'Enlace registrado ✓' : '—'} />
+                  <Row label="Boletines 2 años"    value={form.reportCardsLastTwoYearsUrl ? 'Enlace registrado ✓' : '—'} />
+                  <Row label="Documentos NEE"      value={form.neeDocumentsUrl || 'No aplica'} />
+                  {form.documentsNotes && <Row label="Notas docs" value={form.documentsNotes} />}
                 </div>
 
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 font-medium">
@@ -578,7 +594,8 @@ export default function EnrollmentForm() {
                   <ul className="list-disc list-inside space-y-1 text-xs">
                     <li>Los datos del alumno y del tutor son correctos.</li>
                     <li>El correo electrónico del tutor es válido para recibir comunicaciones.</li>
-                    <li>Comprende que esta solicitud no garantiza plaza; el equipo de Chanak evaluará y contactará.</li>
+                    <li>Los enlaces de Google Drive tienen permisos de visualización.</li>
+                    <li>Comprende que esta solicitud no garantiza plaza; el equipo evaluará y contactará.</li>
                   </ul>
                 </div>
 
@@ -607,7 +624,7 @@ export default function EnrollmentForm() {
                 </button>
               ) : (
                 <button type="button" onClick={handleSubmit} disabled={sending}
-                  className="flex items-center gap-2 px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-sm transition-colors disabled:opacity-50">
+                  className="flex items-center gap-2 px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                   {sending
                     ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando…</>
                     : <><CheckCircle2 className="w-4 h-4" /> Enviar solicitud</>}
@@ -626,11 +643,11 @@ export default function EnrollmentForm() {
   );
 }
 
-// ── Micro-componentes ──────────────────────────────────────────────────────────
+// ── Micro-componentes ─────────────────────────────────────────────────────────
 function Err({ children }) {
   return (
     <p className="text-xs font-bold text-red-600 mt-1 flex items-center gap-1">
-      <AlertCircle className="w-3 h-3" /> {children}
+      <AlertCircle className="w-3 h-3" />{children}
     </p>
   );
 }
