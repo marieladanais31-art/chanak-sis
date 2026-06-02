@@ -59,14 +59,16 @@ const DEFAULT_FORM = {
   institutional_intro:
     'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo, nivel real de entrada y necesidades específicas del estudiante. El PEI organiza el plan académico anual, las evaluaciones proyectadas, las áreas de refuerzo y el acompañamiento requerido para favorecer un progreso ordenado y medible.',
   // Perfil
-  strength_areas:             '',
-  improvement_areas:          '',
+  strength_areas:
+    'Responsabilidad, disposición para aprender, apoyo familiar, capacidad de adaptación, interés por mejorar y potencial para avanzar mediante aprendizaje por dominio. Se recomienda ajustar esta sección según las fortalezas observadas en el estudiante.',
+  improvement_areas:
+    'Lectura comprensiva, gramática, redacción, matemáticas, concentración, hábitos de estudio, gestión del tiempo, autonomía académica y vocabulario académico en inglés. Estas áreas deberán ajustarse según los resultados diagnósticos y la observación del tutor/coordinador.',
   // Diagnóstico
   initial_diagnosis:
     'La prueba diagnóstica ACE se interpreta como una herramienta técnica de ubicación académica, no como un examen de aprobado o suspenso. Su objetivo es identificar el punto real de entrada del estudiante y detectar posibles lagunas de aprendizaje que deben reforzarse antes de avanzar a contenidos superiores. En el sistema ACE, el estudiante progresa por dominio del contenido, no únicamente por edad o curso escolar.',
   diagnostic_results:         '',
   diagnostic_interpretation:
-    'La interpretación de resultados debe identificar las asignaturas en las que el estudiante presenta dominio suficiente y aquellas en las que necesita refuerzo. Cuando el diagnóstico ubica al estudiante en un nivel anterior al esperado, esto se interpreta como una oportunidad para cubrir lagunas específicas y consolidar fundamentos antes de avanzar. En inglés y Word Building, es normal que estudiantes no nativos requieran evaluaciones de refuerzo para desarrollar gramática, vocabulario académico y estructura técnica del idioma.',
+    'La interpretación de resultados permite identificar asignaturas con dominio suficiente y áreas que requieren refuerzo. Cuando el diagnóstico ubica al estudiante en un nivel anterior al esperado, esto se considera una oportunidad para cubrir lagunas específicas, consolidar fundamentos y avanzar con mayor seguridad. En English y Word Building, los estudiantes no nativos pueden requerir refuerzo específico en gramática, vocabulario académico y estructura técnica del idioma.',
   ace_curriculum_description:
     'El currículo A.C.E. (Accelerated Christian Education) es un sistema de autoaprendizaje basado en evaluaciones individuales (PACEs) de 12 lecciones cada una. El estudiante avanza a su propio ritmo bajo la supervisión de un tutor certificado. El diagnóstico inicial determina el nivel real de entrada y sirve como punto de partida para la proyección académica personalizada.',
   // Plan
@@ -75,12 +77,12 @@ const DEFAULT_FORM = {
   quarterly_objectives:
     'Cada trimestre tendrá objetivos académicos medibles por asignatura. Se priorizará el avance progresivo en las evaluaciones proyectadas, la consolidación de hábitos de estudio, la corrección de lagunas detectadas y la entrega oportuna de evidencias cuando corresponda.',
   local_extension:
-    'La extensión local incorporará contenidos requeridos por el contexto educativo nacional, incluyendo lengua, historia, geografía, cultura local y otros elementos necesarios para complementar el currículo internacional desde la realidad del estudiante.',
+    'La Extensión Local incorporará contenidos requeridos por el contexto educativo nacional y autonómico, incluyendo lengua, historia, geografía, cultura local y otros elementos necesarios para complementar el currículo internacional desde la realidad del estudiante.',
   life_skills:
-    'El área de Life Skills integra actividades de desarrollo personal, habilidades prácticas, educación física, arte, música, tecnología, servicio, emprendimiento, educación emocional y otras experiencias formativas que contribuyen al crecimiento integral del estudiante.',
+    'El área de Life Skills / Desarrollo Integral integra actividades de desarrollo personal, habilidades prácticas, educación física, arte, música, tecnología, servicio, emprendimiento, educación emocional y otras experiencias formativas que fortalecen el crecimiento integral, la autonomía y la formación del carácter del estudiante.',
   // Metodología
   daily_rhythm_methodology:
-    'El modelo metodológico del PEI combina aprendizaje por dominio, extensión local y desarrollo integral. Como referencia operativa, el plan se organiza aproximadamente en un 60% de aprendizaje por dominio, un 20% de extensión local conforme a los contenidos requeridos en el plan de estudio nacional, y un 20% de Life Skills y desarrollo integral. El estudiante avanzará de manera progresiva, con acompañamiento del tutor/mentor, seguimiento académico y revisión periódica de evidencias y evaluaciones.',
+    'El modelo metodológico del PEI combina aprendizaje por dominio, Extensión Local y desarrollo integral. Como referencia operativa, el plan se organiza aproximadamente en un 60% de aprendizaje por dominio, un 20% de Extensión Local conforme a los contenidos requeridos en el plan de estudio nacional y autonómico, y un 20% de Life Skills / Desarrollo Integral. El ritmo diario de trabajo se definirá por asignatura, tomando como referencia la cantidad de páginas o actividades asignadas por día, el nivel de entrada del estudiante y la carga académica semanal. Este ritmo podrá ajustarse según progreso, dominio demostrado y necesidades familiares. El estudiante avanzará de manera progresiva, con acompañamiento del tutor/mentor, seguimiento académico y revisión periódica de evidencias y evaluaciones.',
   estimated_time_daily_load:
     'Se recomienda una carga diaria ajustada al nivel y edad del estudiante, combinando trabajo autónomo, revisión familiar y seguimiento del tutor. La carga podrá modificarse según ritmo de avance, resultados diagnósticos y necesidades específicas.',
   follow_up_strategies:
@@ -114,9 +116,37 @@ const DEFAULT_FORM = {
   status:                     'draft',
 };
 
-const INTRO_DEFAULT = 'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo y las necesidades únicas de cada estudiante.';
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const ACE_DEFAULT = 'El currículo A.C.E. (Accelerated Christian Education) es un sistema de autoaprendizaje basado en PACEs (Packet of Accelerated Christian Education). Cada PACE equivale a una unidad de contenido evaluable de 12 lecciones. El estudiante avanza a su propio ritmo bajo la supervisión de un tutor certificado. El diagnóstico inicial determina el nivel real de entrada y sirve como punto de partida para la proyección académica personalizada.';
+/**
+ * Devuelve `value` si no es null, undefined ni string vacío.
+ * De lo contrario devuelve `defaultValue`.
+ * Aplica a PEIs existentes donde campos están guardados como '' en DB.
+ */
+function withDefault(value, defaultValue) {
+  if (value === null || value === undefined) return defaultValue;
+  if (typeof value === 'string' && value.trim() === '') return defaultValue;
+  return value;
+}
+
+/**
+ * Construye el texto de diagnóstico por asignatura desde los niveles de la ficha.
+ * Si un nivel está ausente, deja espacio editable.
+ */
+function buildDiagnosticText(levels) {
+  const L = levels || {};
+  return [
+    `Mathematics: Math ${L.math          || '____'}`,
+    `English: English ${L.english       || '____'}`,
+    `Word Building: WB ${L.word_building || '____'}`,
+    `Science: Science ${L.science       || '____'}`,
+    `Social Studies: Social Studies ${L.social_studies || '____'}`,
+  ].join('\n');
+}
+
+// Constantes de fallback (se mantienen por compatibilidad con placeholders existentes)
+const INTRO_DEFAULT = 'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo y las necesidades únicas de cada estudiante.';
+const ACE_DEFAULT   = DEFAULT_FORM.ace_curriculum_description;
 
 export default function PEIFormFull({ studentId, studentName, peiId: initialPeiId, onClose, canEdit = false }) {
   const { toast } = useToast();
@@ -134,10 +164,16 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const bodyRef = useRef(null);
 
   // ── Bloquear scroll de página mientras el modal está abierto ─────────────
+  // Bloquea tanto <body> como <html> para cubrir Safari/iOS y Chrome/desktop.
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow          = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow          = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
   }, []);
 
   // ── Cambio de pestaña con reset de scroll interno ─────────────────────────
@@ -152,49 +188,67 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Always prefill from student ficha (DOB, modality, grade, vocational, etc.)
-      const { data: studentData } = await supabase
+      // ── 1. Cargar ficha del estudiante ────────────────────────────────────
+      const { data: s } = await supabase
         .from('students')
         .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies')
         .eq('id', studentId)
         .single();
 
-      if (studentData) {
-        const fichaDefaults = {};
-        if (studentData.date_of_birth)            fichaDefaults.student_dob             = studentData.date_of_birth;
-        if (studentData.enrollment_date)          fichaDefaults.enrollment_date          = studentData.enrollment_date;
-        if (studentData.last_grade_completed)     fichaDefaults.last_grade_completed     = studentData.last_grade_completed;
-        if (studentData.grade_level)              fichaDefaults.grade_level              = studentData.us_grade_level || studentData.grade_level;
-        if (studentData.modality)                 fichaDefaults.modality                 = studentData.modality;
-        if (studentData.curriculum_base)          fichaDefaults.curriculum_base          = studentData.curriculum_base;
-        if (studentData.vocational_interest)      fichaDefaults.vocational_interest      = studentData.vocational_interest;
-        if (studentData.graduation_pathway_notes) fichaDefaults.graduation_pathway_notes = studentData.graduation_pathway_notes;
-        if (studentData.diagnostic_notes)         fichaDefaults.initial_diagnosis        = studentData.diagnostic_notes;
-        if (studentData.parent1_name)             fichaDefaults.parent_signature_name    = studentData.parent1_name;
-        setForm(prev => ({ ...prev, ...fichaDefaults }));
-        setFichaLevels({
-          math:          studentData.diag_math          || null,
-          english:       studentData.diag_english       || null,
-          word_building: studentData.diag_word_building || null,
-          science:       studentData.diag_science       || null,
-          social_studies:studentData.diag_social_studies|| null,
-        });
-      }
+      const levels = {
+        math:          s?.diag_math           || null,
+        english:       s?.diag_english        || null,
+        word_building: s?.diag_word_building  || null,
+        science:       s?.diag_science        || null,
+        social_studies:s?.diag_social_studies || null,
+      };
+      setFichaLevels(levels);
+
+      // ── 2. Texto de diagnóstico construido desde niveles de ficha ─────────
+      const diagText = buildDiagnosticText(levels);
+
+      // ── 3. Defaults efectivos = DEFAULT_FORM + campos calculados desde ficha
+      const effectiveDefaults = {
+        ...DEFAULT_FORM,
+        diagnostic_results: diagText,
+        pace_status_notes:  diagText,
+      };
+
+      // ── 4. Overrides provenientes de la ficha del estudiante (específicos) ─
+      const fichaOverrides = {};
+      if (s?.date_of_birth)            fichaOverrides.student_dob             = s.date_of_birth;
+      if (s?.enrollment_date)          fichaOverrides.enrollment_date          = s.enrollment_date;
+      if (s?.last_grade_completed)     fichaOverrides.last_grade_completed     = s.last_grade_completed;
+      if (s?.grade_level)              fichaOverrides.grade_level              = s.us_grade_level || s.grade_level;
+      if (s?.modality)                 fichaOverrides.modality                 = s.modality;
+      if (s?.curriculum_base)          fichaOverrides.curriculum_base          = s.curriculum_base;
+      if (s?.vocational_interest)      fichaOverrides.vocational_interest      = s.vocational_interest;
+      if (s?.graduation_pathway_notes) fichaOverrides.graduation_pathway_notes = s.graduation_pathway_notes;
+      if (s?.diagnostic_notes)         fichaOverrides.initial_diagnosis        = s.diagnostic_notes;
+      if (s?.parent1_name)             fichaOverrides.parent_signature_name    = s.parent1_name;
+
+      // Inicializar form con defaults + ficha (PEI nuevo o mientras carga DB)
+      setForm({ ...effectiveDefaults, ...fichaOverrides });
 
       if (!initialPeiId) { setLoading(false); return; }
 
+      // ── 5. Cargar PEI existente y mezclar con withDefault ─────────────────
       const { data, error } = await supabase
         .from('individualized_education_plans')
         .select('*')
         .eq('id', initialPeiId)
         .single();
       if (error) throw error;
-      setForm(prev => ({
-        ...prev,
-        ...Object.fromEntries(
-          Object.entries(data).filter(([k, v]) => k in DEFAULT_FORM && v !== null && v !== undefined)
-        ),
-      }));
+
+      // withDefault: si el campo en DB es null, undefined o '' → usar effectiveDefault
+      setForm(() => {
+        const merged = { ...effectiveDefaults, ...fichaOverrides };
+        Object.entries(data).forEach(([k, v]) => {
+          if (!(k in effectiveDefaults)) return;
+          merged[k] = withDefault(v, effectiveDefaults[k]);
+        });
+        return merged;
+      });
       setPeiId(data.id);
     } catch (err) {
       toast({ title: 'Error', description: 'No se pudo cargar el PEI.', variant: 'destructive' });
@@ -484,7 +538,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           <div className="space-y-4">
             <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
               <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Perfil Vocacional</p>
-              <p className="text-xs text-amber-700">Basado en el modelo de PEI de Daniel Vidal. Define el interés vocacional, estado de PACEs, objetivos estratégicos y ruta de graduación del estudiante.</p>
+              <p className="text-xs text-amber-700">Esta sección permite registrar el interés vocacional del estudiante, sus objetivos estratégicos del año y una ruta de desarrollo académico y personal coherente con su nivel de entrada y proyección educativa.</p>
             </div>
             <div>
               <label className={LABEL}>Interés Principal / Área Vocacional</label>

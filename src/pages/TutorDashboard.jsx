@@ -123,7 +123,7 @@ export default function TutorDashboard() {
 
       {/* PEI modal */}
       {peiModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 overflow-hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <PEIFormFull
             studentId={peiModal.studentId}
             studentName={peiModal.studentName}

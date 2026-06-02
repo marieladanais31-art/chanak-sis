@@ -13,6 +13,48 @@ const INPUT = 'w-full p-1.5 border border-slate-300 rounded-lg outline-none focu
 
 const PACE_TYPE_LABELS = { advance: 'Avance', leveling: 'Nivelación' };
 
+// ── Agrupación institucional de materias ─────────────────────────────────────
+const SUBJECT_GROUP_ORDER = [
+  'Core A.C.E.',
+  'Extensión Local',
+  'Life Skills / Desarrollo Integral',
+];
+
+// Palabras clave (lowercase) para clasificar por subject_name
+const SUBJECT_GROUP_KEYWORDS = {
+  'Core A.C.E.': [
+    'math', 'english', 'word building', 'science', 'social studies', 'bible',
+  ],
+  'Extensión Local': [
+    'lengua', 'castellana', 'local history', 'local geography', 'historia local',
+    'geografía local', 'geografía', 'extension local', 'extensión local',
+  ],
+  'Life Skills / Desarrollo Integral': [
+    'art', 'music', 'technology', 'physical education', 'life skills',
+    'p.e.', 'ed. física', 'educación física', 'tecnología',
+  ],
+};
+
+const SUBJECT_GROUP_COLORS = {
+  'Core A.C.E.':                   'bg-[#193D6D] text-white',
+  'Extensión Local':                'bg-[#20B2AA] text-white',
+  'Life Skills / Desarrollo Integral': 'bg-amber-600 text-white',
+};
+
+/**
+ * Clasifica una asignatura en su grupo institucional por coincidencia de nombre.
+ * Fallback: Core A.C.E.
+ */
+function getSubjectGroup(subjectName) {
+  const lower = (subjectName || '').toLowerCase().trim();
+  for (const group of SUBJECT_GROUP_ORDER) {
+    if (SUBJECT_GROUP_KEYWORDS[group].some((kw) => lower.includes(kw))) {
+      return group;
+    }
+  }
+  return 'Core A.C.E.';
+}
+
 const EMPTY_FORM = {
   subject_name:             '',
   pace_number:              '',
@@ -23,6 +65,7 @@ const EMPTY_FORM = {
   estimated_start_date:     '',
   estimated_delivery_date:  '',
   projected_completion_date:'',
+  pages_per_day:            '',
   tutor_notes:              '',
   coordinator_notes:        '',
 };
@@ -87,10 +130,12 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Agrupar por materia ───────────────────────────────────────────────────
+  // ── Agrupar por materia con clasificación institucional ───────────────────
   const buildMatrix = () => {
-    const map = {};
-    paces.forEach(p => {
+    const map      = {};
+    const pagesMap = {}; // subject_name → pages_per_day (primer valor no vacío)
+
+    paces.forEach((p) => {
       if (!map[p.subject_name]) map[p.subject_name] = { Q1: [], Q2: [], Q3: [], lev: [] };
       if (p.pace_type === 'leveling') {
         map[p.subject_name].lev.push(p);
@@ -98,15 +143,36 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
         const q = p.quarter;
         if (map[p.subject_name][q]) map[p.subject_name][q].push(p);
       }
+      if (p.pages_per_day && !pagesMap[p.subject_name]) {
+        pagesMap[p.subject_name] = p.pages_per_day;
+      }
     });
 
-    subjects.forEach((subject) => {
-      const name = subject.subject_name;
-      if (!map[name]) map[name] = { Q1: [], Q2: [], Q3: [], lev: [] };
+    subjects.forEach((s) => {
+      if (!map[s.subject_name]) map[s.subject_name] = { Q1: [], Q2: [], Q3: [], lev: [] };
     });
-    const subjectOrder = subjects.map((subject) => subject.subject_name);
-    const ordered = [...subjectOrder, ...Object.keys(map).filter((name) => !subjectOrder.includes(name))];
-    return { map, ordered };
+
+    const subjectOrder = subjects.map((s) => s.subject_name);
+    const allSubjects  = [...new Set([...subjectOrder, ...Object.keys(map)])];
+
+    // Clasificar en grupos institucionales
+    const grouped = {};
+    SUBJECT_GROUP_ORDER.forEach((g) => { grouped[g] = []; });
+    allSubjects.forEach((name) => {
+      const group = getSubjectGroup(name);
+      grouped[group].push(name);
+    });
+
+    // Lista plana con marcadores de encabezado de grupo
+    const orderedItems = [];
+    SUBJECT_GROUP_ORDER.forEach((group) => {
+      if (grouped[group]?.length > 0) {
+        orderedItems.push({ type: 'header', group });
+        grouped[group].forEach((name) => orderedItems.push({ type: 'subject', name }));
+      }
+    });
+
+    return { map, orderedItems, pagesMap };
   };
 
   const getAvg = (rows) => {
@@ -133,6 +199,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
       estimated_start_date:      pace.estimated_start_date || '',
       estimated_delivery_date:   pace.estimated_delivery_date || '',
       projected_completion_date: pace.projected_completion_date || '',
+      pages_per_day:             pace.pages_per_day || '',
       tutor_notes:               pace.tutor_notes || '',
       coordinator_notes:         pace.coordinator_notes || '',
     });
@@ -154,11 +221,12 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
         school_year:               schoolYear || '',
         status:                    form.status,
         grade_obtained:            form.grade_obtained ? parseFloat(form.grade_obtained) : null,
-        estimated_start_date:      form.estimated_start_date     || null,
-        estimated_delivery_date:   form.estimated_delivery_date  || null,
-        projected_completion_date: form.projected_completion_date || null,
-        tutor_notes:               form.tutor_notes              || null,
-        coordinator_notes:         form.coordinator_notes        || null,
+        estimated_start_date:      form.estimated_start_date      || null,
+        estimated_delivery_date:   form.estimated_delivery_date   || null,
+        projected_completion_date: form.projected_completion_date  || null,
+        pages_per_day:             form.pages_per_day              || null,
+        tutor_notes:               form.tutor_notes               || null,
+        coordinator_notes:         form.coordinator_notes          || null,
         updated_at:                new Date().toISOString(),
       };
       if (editing) {
@@ -191,7 +259,9 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
 
   if (loading) return <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>;
 
-  const { map, ordered } = buildMatrix();
+  const { map, orderedItems, pagesMap } = buildMatrix();
+  // Para el empty-state: materias reales sin encabezados
+  const subjectCount = orderedItems.filter((it) => it.type === 'subject').length;
 
   // ── Render celda de PACEs (hasta 5 slots) ─────────────────────────────────
   const renderSlots = (paceList, quarter, subj, maxSlots = 5) => {
@@ -262,7 +332,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
         )}
       </div>
 
-      {ordered.length === 0 ? (
+      {subjectCount === 0 ? (
         <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <p className="text-amber-800">No hay evaluaciones proyectadas. {canEdit ? 'Use el botón "Añadir evaluación" para comenzar.' : ''}</p>
@@ -291,12 +361,35 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
               </tr>
             </thead>
             <tbody>
-              {ordered.map((subj, si) => {
-                const d = map[subj];
-                const allGraded = [...d.Q1, ...d.Q2, ...d.Q3];
-                return (
-                  <tr key={subj} className={si % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="px-3 py-2 font-bold text-[#193D6D] border border-slate-200 whitespace-nowrap">{subj}</td>
+              {/* Contador de filas de materia para alternar color */}
+              {(() => {
+                let subjIdx = 0;
+                return orderedItems.map((item) => {
+                  if (item.type === 'header') {
+                    return (
+                      <tr key={`hdr-${item.group}`}>
+                        <td colSpan={19} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border border-slate-200 ${SUBJECT_GROUP_COLORS[item.group]}`}>
+                          {item.group}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const subj        = item.name;
+                  const d           = map[subj];
+                  const allGraded   = [...d.Q1, ...d.Q2, ...d.Q3];
+                  const rowClass    = subjIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50';
+                  const pagesHint   = pagesMap[subj];
+                  subjIdx++;
+                  return (
+                  <tr key={subj} className={rowClass}>
+                    <td className="px-3 py-2 border border-slate-200 whitespace-nowrap">
+                      <span className="font-bold text-[#193D6D] text-[10px]">{subj}</span>
+                      {pagesHint && (
+                        <span className="block text-[8px] text-slate-400 font-normal mt-0.5">
+                          {pagesHint} pág/día
+                        </span>
+                      )}
+                    </td>
                     {/* Q1 - 5 slots */}
                     {[0,1,2,3,4].map(idx => (
                       <td key={`q1-${idx}`} className="px-2 py-2 border border-slate-200 text-center align-top">
@@ -369,8 +462,9 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
                       {getAvg(allGraded)}
                     </td>
                   </tr>
-                );
-              })}
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
@@ -452,6 +546,29 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
                   <input type="date" value={form.projected_completion_date}
                     onChange={e => setForm(f => ({...f, projected_completion_date: e.target.value}))}
                     className={INPUT} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Páginas por día</label>
+                  <input
+                    type="text"
+                    value={form.pages_per_day}
+                    onChange={e => setForm(f => ({...f, pages_per_day: e.target.value}))}
+                    className={INPUT}
+                    placeholder="Ej. 4, 3–5, 1 actividad"
+                  />
+                  <p className="text-[9px] text-slate-400 mt-0.5">
+                    Core A.C.E.: 3–5 · Local: 1–2 · Life Skills: 1 actividad
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Bloque / Grupo</label>
+                  <input
+                    type="text"
+                    value={getSubjectGroup(form.subject_name)}
+                    readOnly
+                    className={INPUT + ' bg-slate-100 cursor-default text-slate-500'}
+                    title="Calculado automáticamente por nombre de asignatura"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-600 mb-1">Notas del tutor</label>
