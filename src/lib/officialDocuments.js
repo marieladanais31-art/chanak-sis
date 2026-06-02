@@ -213,13 +213,38 @@ export const addInstitutionSeal = (doc, settings, x, y, w, h) => {
 };
 
 /**
- * Inserta la imagen de firma del director.
- * Requiere preloadImages para que funcione.
+ * Calcula dimensiones que encajan en un box manteniendo el aspect ratio original.
+ * Usa doc.getImageProperties() si está disponible; fallback a maxW/maxH.
+ */
+export function fitImageWithinBox(doc, imageData, maxW, maxH) {
+  if (!imageData || !doc) return { w: maxW, h: maxH };
+  try {
+    const props = doc.getImageProperties(imageData);
+    if (!props || !props.width || !props.height) return { w: maxW, h: maxH };
+    const ratio = props.width / props.height;
+    let w = maxW;
+    let h = maxW / ratio;
+    if (h > maxH) {
+      h = maxH;
+      w = maxH * ratio;
+    }
+    return { w: Math.round(w * 100) / 100, h: Math.round(h * 100) / 100 };
+  } catch {
+    return { w: maxW, h: maxH };
+  }
+}
+
+/**
+ * Inserta la imagen de firma del director con aspect ratio correcto.
+ * maxW/maxH son los límites máximos en mm; la imagen se ajusta
+ * proporcionalmente dentro de esos límites.
  * @returns {boolean} true si se dibujó la imagen, false si no había imagen.
  */
-export const addInstitutionSignature = (doc, settings, x, y, w, h) => {
+export const addInstitutionSignature = (doc, settings, x, y, maxW = 52, maxH = 22) => {
   const src = settings?._signature64 || settings?.director_signature_url ||
               settings?.signature_url || settings?.director_signature;
+  if (!src) return false;
+  const { w, h } = fitImageWithinBox(doc, src, maxW, maxH);
   return safeAddImage(doc, src, x, y, w, h, 'signature');
 };
 

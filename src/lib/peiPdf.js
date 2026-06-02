@@ -475,7 +475,7 @@ export function generatePeiPDF({ pei, paces = [], student, settings, lang: reque
   // Caja director
   doc.setDrawColor(...NAVY); doc.setLineWidth(0.3);
   doc.rect(sig1X, y, sigW, 30, 'S');
-  addInstitutionSignature(doc, settings, sig1X + 3, y + 1, 38, 8);
+  addInstitutionSignature(doc, settings, sig1X + 3, y + 1, 52, 20);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...GRAY);
   doc.text(t.signLabel, sig1X + 3, y + 10);
   doc.line(sig1X + 15, y + 10, sig1X + sigW - 3, y + 10);

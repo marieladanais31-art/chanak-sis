@@ -280,7 +280,11 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       }
 
       const assessmentName = `PACE ${r.pace_number}`;
-      const reviewComment = r.comment?.trim()
+      // Si el coordinador no escribió comentario:
+      // - en INSERT usamos texto genérico
+      // - en UPDATE NO sobrescribimos el comentario existente (se omite del payload)
+      const hasNewComment = Boolean(r.comment?.trim());
+      const reviewComment = hasNewComment
         ? r.comment.trim()
         : isApprover
           ? 'Carga administrativa validada por coordinador — sin evidencia adjunta.'
@@ -332,10 +336,15 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
 
       try {
         if (r.existing_entry_id) {
-          // UPDATE existing entry
+          // UPDATE existing entry — sólo incluir review_comment si el coordinador
+          // escribió uno nuevo; si no, preservar el comentario ya guardado.
+          const updatePayload = { ...payload };
+          if (!hasNewComment) {
+            delete updatePayload.review_comment;
+          }
           const { error } = await supabase
             .from('student_grade_entries')
-            .update(payload)
+            .update(updatePayload)
             .eq('id', r.existing_entry_id);
           if (error) throw error;
         } else {

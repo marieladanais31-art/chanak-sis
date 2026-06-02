@@ -329,7 +329,7 @@ export function generateTranscriptPDF({
   y += 3;
 
   // Imagen de firma (una sola vez, 40×16 mm); si no hay imagen, reservar espacio para línea limpia
-  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 16);
+  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 52, 22);
   y += drewSig ? 19 : 16;
 
   // Línea horizontal de firma
