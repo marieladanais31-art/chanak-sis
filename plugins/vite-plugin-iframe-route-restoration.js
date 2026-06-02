@@ -33,8 +33,20 @@ export default function iframeRouteRestorationPlugin() {
             return false;
           };
 
+          // Rutas públicas que nunca deben ser interceptadas ni redirigidas
+          const PUBLIC_PATHS = ['/matricula', '/enrollment'];
+
+          const isPublicPath = (path) => {
+            try {
+              return PUBLIC_PATHS.some(p => path === p || path.startsWith(p + '/') || path.startsWith(p + '?'));
+            } catch { return false; }
+          };
+
           const restore = () => {
             try {
+              // No interferir con rutas públicas — se renderizan directamente
+              if (isPublicPath(location.pathname)) return;
+
               const saved = sessionStorage.getItem(STORAGE_KEY);
               if (!saved) return;
 
@@ -51,6 +63,9 @@ export default function iframeRouteRestorationPlugin() {
 
                 requestAnimationFrame(() => setTimeout(() => {
                   try {
+                    // No redirigir a '/' si estamos en una ruta pública conocida
+                    if (isPublicPath(location.pathname)) return;
+
                     const text = (document.body?.innerText || '').trim();
 
                     // If the restored route results in too little content, assume it is invalid and navigate home

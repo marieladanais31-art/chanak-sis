@@ -19,10 +19,15 @@ import TutorDashboard from '@/pages/TutorDashboard';
 import StudentDashboard from '@/pages/StudentDashboard';
 import PeiManagement from '@/pages/PeiManagement';
 import HelpPage from '@/pages/HelpPage';
+import EnrollmentForm from '@/pages/EnrollmentForm';
 
 const AppContent = () => {
   return (
     <Routes>
+      {/* ── Rutas completamente públicas — NUNCA requieren sesión ── */}
+      <Route path="/matricula"  element={<EnrollmentForm />} />
+      <Route path="/enrollment" element={<EnrollmentForm />} />
+
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
