@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solicitud de Matrícula — Chanak International Academy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      color: #1e293b;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: 22px;
+      font-weight: 900;
+      color: #193D6D;
+    }
+    header p {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.08);
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 32px 28px;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #20B2AA;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 6px;
+      margin: 28px 0 16px;
+    }
+    .section-title:first-child { margin-top: 0; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 500px) { .row { grid-template-columns: 1fr; } }
+    .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    label .req { color: #ef4444; }
+    input, select, textarea {
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      color: #1e293b;
+      background: #f8fafc;
+      width: 100%;
+      transition: border-color .2s;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #193D6D;
+      background: #fff;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    .info-box {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #1e40af;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .info-box strong { font-weight: 800; }
+    .warn-box {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #92400e;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    button[type=submit] {
+      width: 100%;
+      margin-top: 24px;
+      padding: 16px;
+      background: #193D6D;
+      color: #fff;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+      transition: background .2s;
+      font-family: inherit;
+    }
+    button[type=submit]:hover { background: #142d5a; }
+    button[type=submit]:disabled { background: #94a3b8; cursor: not-allowed; }
+    #success {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    #success .check { font-size: 56px; }
+    #success h2 { font-size: 22px; font-weight: 900; color: #193D6D; margin: 12px 0 8px; }
+    #success p { color: #475569; font-size: 14px; line-height: 1.6; }
+    #success .folio {
+      display: inline-block;
+      margin: 16px 0;
+      padding: 10px 24px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: 900;
+      color: #193D6D;
+      letter-spacing: .05em;
+    }
+    #success .stripe-btn {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 14px 28px;
+      background: #193D6D;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      transition: background .2s;
+    }
+    #success .stripe-btn:hover { background: #142d5a; }
+    #success .disclaimer {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 14px;
+      font-style: italic;
+    }
+    #error-msg {
+      display: none;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #dc2626;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Chanak International Academy</h1>
+  <p>Solicitud de Matrícula Off-Campus · FLDOE #134620</p>
+</header>
+
+<div class="card">
+
+  <!-- ── Formulario ── -->
+  <form id="form">
+
+    <p class="section-title">Programa</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Programa <span class="req">*</span></label>
+        <select name="programa" required>
+          <option value="">Seleccionar…</option>
+          <option>Off-Campus K-12 (España)</option>
+          <option>Dual Diploma</option>
+          <option>On-Campus</option>
+          <option>Homeschool Supervisado</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Año escolar <span class="req">*</span></label>
+        <select name="añoEscolar" required>
+          <option value="2025-2026">2025-2026</option>
+          <option value="2026-2027">2026-2027</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Fecha de inicio deseada <span class="req">*</span></label>
+        <input type="date" name="fechaInicio" required />
+      </div>
+      <div class="field">
+        <label>¿Cómo nos conociste?</label>
+        <input type="text" name="referencia" placeholder="Google, recomendación…" />
+      </div>
+    </div>
+
+    <p class="section-title">Datos del estudiante</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Nombre(s) <span class="req">*</span></label>
+        <input type="text" name="alumNombre" required />
+      </div>
+      <div class="field">
+        <label>Apellidos <span class="req">*</span></label>
+        <input type="text" name="alumApellidos" required />
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Fecha de nacimiento <span class="req">*</span></label>
+        <input type="date" name="alumFechaNac" required />
+      </div>
+      <div class="field">
+        <label>Grado al que ingresa <span class="req">*</span></label>
+        <select name="gradeSelected" required>
+          <option value="">Seleccionar…</option>
+          <option>Kindergarten</option><option>1st Grade</option><option>2nd Grade</option>
+          <option>3rd Grade</option><option>4th Grade</option><option>5th Grade</option>
+          <option>6th Grade</option><option>7th Grade</option><option>8th Grade</option>
+          <option>9th Grade</option><option>10th Grade</option><option>11th Grade</option>
+          <option>12th Grade</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>País de residencia</label>
+        <input type="text" name="alumPais" placeholder="España" />
+      </div>
+      <div class="field">
+        <label>Ciudad</label>
+        <input type="text" name="alumCiudad" />
+      </div>
+    </div>
+
+    <p class="section-title">Tutor / Responsable legal</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Nombre completo <span class="req">*</span></label>
+        <input type="text" name="tutNombre" required />
+      </div>
+      <div class="field">
+        <label>Relación con el estudiante</label>
+        <select name="tutRelacion">
+          <option value="">Seleccionar…</option>
+          <option>Madre</option><option>Padre</option>
+          <option>Tutor Legal</option><option>Abuelo/a</option><option>Otro</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Correo electrónico <span class="req">*</span></label>
+        <input type="email" name="tutEmail" required placeholder="ejemplo@correo.com" />
+      </div>
+      <div class="field">
+        <label>Teléfono / WhatsApp <span class="req">*</span></label>
+        <input type="tel" name="tutTel" required placeholder="+34 600 000 000" />
+      </div>
+    </div>
+
+    <p class="section-title">Documentos (Google Drive)</p>
+
+    <div class="info-box">
+      Suba los documentos a Google Drive, compártalos con permisos de visualización
+      y pegue aquí los enlaces. <strong>No adjunte archivos.</strong>
+    </div>
+
+    <div class="warn-box">
+      ⚠️ Asegúrese de que los enlaces permiten visualización. Si los permisos están
+      restringidos, la revisión de matrícula puede retrasarse.
+    </div>
+
+    <div class="field">
+      <label>Identificación del tutor legal (DNI, NIE, Pasaporte) <span class="req">*</span></label>
+      <input type="url" name="tutorIdDocumentUrl" required placeholder="https://drive.google.com/…" />
+    </div>
+
+    <div class="field">
+      <label>Identificación del estudiante (DNI, NIE, Pasaporte) <span class="req">*</span></label>
+      <input type="url" name="studentIdDocumentUrl" required placeholder="https://drive.google.com/…" />
+    </div>
+
+    <div class="field">
+      <label>Boletines / reportes de los últimos 2 años <span class="req">*</span></label>
+      <input type="url" name="reportCardsLastTwoYearsUrl" required placeholder="https://drive.google.com/…" />
+    </div>
+
+    <div class="field">
+      <label>Documentación NEE (opcional — solo si aplica)</label>
+      <input type="url" name="neeDocumentsUrl" placeholder="https://drive.google.com/… (dejar vacío si no aplica)" />
+    </div>
+
+    <div class="field">
+      <label>Notas adicionales (opcional)</label>
+      <textarea name="documentsNotes" placeholder="Cualquier información que quiera añadir sobre los documentos…"></textarea>
+    </div>
+
+    <button type="submit" id="submit-btn">Enviar solicitud</button>
+    <div id="error-msg"></div>
+
+  </form>
+
+  <!-- ── Pantalla de éxito ── -->
+  <div id="success">
+    <div class="check">✅</div>
+    <h2>¡Solicitud recibida!</h2>
+    <p>Hemos recibido su solicitud. El equipo de Chanak se pondrá en contacto en los próximos días hábiles.</p>
+    <div class="folio" id="folio-display"></div>
+    <br/>
+    <a href="https://buy.stripe.com/aFa7sMgjLcBvfvW2NQ67S0c" target="_blank" rel="noopener" class="stripe-btn">
+      Realizar pago inicial / reserva de plaza →
+    </a>
+    <p class="disclaimer">
+      El pago no garantiza admisión automática. La solicitud queda sujeta a revisión
+      académica y administrativa por parte de Chanak International Academy.
+    </p>
+    <p style="margin-top:16px; font-size:12px; color:#94a3b8;">
+      Consultas: <a href="mailto:offcampus@chanakacademy.org" style="color:#193D6D;">offcampus@chanakacademy.org</a>
+    </p>
+  </div>
+
+</div><!-- .card -->
+
+<script>
+  const WEBHOOK = 'https://hooks.zapier.com/hooks/catch/27757659/4bsxiu9/';
+
+  function generateFolio() {
+    const now = new Date();
+    const p = (n, l=2) => String(n).padStart(l,'0');
+    return `CHA-${now.getFullYear()}${p(now.getMonth()+1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}-${String(Math.floor(Math.random()*9000)+1000)}`;
+  }
+
+  document.getElementById('form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const errEl = document.getElementById('error-msg');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+
+    const fd = new FormData(e.target);
+    const folio = generateFolio();
+
+    const payload = {
+      folioSIS:                   folio,
+      programa:                   fd.get('programa')                || '',
+      añoEscolar:                 fd.get('añoEscolar')              || '',
+      fechaInicio:                fd.get('fechaInicio')             || '',
+      referencia:                 fd.get('referencia')              || '',
+      alumNombre:                 fd.get('alumNombre')              || '',
+      alumApellidos:              fd.get('alumApellidos')           || '',
+      alumFechaNac:               fd.get('alumFechaNac')            || '',
+      gradeSelected:              fd.get('gradeSelected')           || '',
+      alumPais:                   fd.get('alumPais')                || '',
+      alumCiudad:                 fd.get('alumCiudad')              || '',
+      tutNombre:                  fd.get('tutNombre')               || '',
+      tutRelacion:                fd.get('tutRelacion')             || '',
+      tutEmail:                   fd.get('tutEmail')                || '',
+      tutTel:                     fd.get('tutTel')                  || '',
+      tutorIdDocumentUrl:         fd.get('tutorIdDocumentUrl')      || '',
+      studentIdDocumentUrl:       fd.get('studentIdDocumentUrl')    || '',
+      reportCardsLastTwoYearsUrl: fd.get('reportCardsLastTwoYearsUrl') || '',
+      neeDocumentsUrl:            fd.get('neeDocumentsUrl')         || 'No aplica',
+      documentsNotes:             fd.get('documentsNotes')          || 'No proporcionado',
+      stripePaymentLink:          'https://buy.stripe.com/aFa7sMgjLcBvfvW2NQ67S0c',
+      paymentStatus:              'Pendiente de pago',
+      fechaEnvio:                 new Date().toISOString(),
+      origen:                     'Formulario público matricula.html',
+    };
+
+    try {
+      const res = await fetch(WEBHOOK, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      document.getElementById('form').style.display = 'none';
+      document.getElementById('folio-display').textContent = folio;
+      document.getElementById('success').style.display = 'block';
+    } catch (err) {
+      errEl.textContent = 'No se pudo enviar la solicitud. Inténtelo nuevamente o contacte con offcampus@chanakacademy.org.';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Enviar solicitud';
+    }
+  });
+</script>
+
+</body>
+</html>
