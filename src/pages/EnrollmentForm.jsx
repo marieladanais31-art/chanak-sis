@@ -77,7 +77,7 @@ const REQUIRED_BY_STEP = {
   2: ['alumNombre','alumApellidos','alumFechaNac','gradeSelected'],
   3: ['tutNombre','tutRelacion','tutEmail','tutTel'],
   4: [],
-  5: ['tutorIdDocumentUrl','studentIdDocumentUrl','reportCardsLastTwoYearsUrl'],
+  5: [], // documentos opcionales — la familia puede enviarlos después por correo
 };
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
@@ -108,11 +108,13 @@ export default function EnrollmentForm() {
     if (s === 3 && form.tutEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.tutEmail)) {
       errs.tutEmail = 'Email no válido';
     }
-    // URLs de documentos
+    // URLs de documentos: si el campo tiene valor, validar que sea https://
+    // (si está vacío se acepta — los documentos son opcionales)
     if (s === 5) {
-      ['tutorIdDocumentUrl','studentIdDocumentUrl','reportCardsLastTwoYearsUrl'].forEach(f => {
-        if (form[f] && !String(form[f]).trim().startsWith('https://')) {
-          errs[f] = 'El enlace debe comenzar con https://';
+      ['tutorIdDocumentUrl','studentIdDocumentUrl','reportCardsLastTwoYearsUrl','neeDocumentsUrl'].forEach(f => {
+        const val = String(form[f] || '').trim();
+        if (val && !val.startsWith('https://')) {
+          errs[f] = 'Si introduce un enlace, debe comenzar con https://';
         }
       });
     }
@@ -205,9 +207,11 @@ export default function EnrollmentForm() {
           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
           <h1 className="text-2xl font-black text-[#193D6D]">¡Solicitud recibida!</h1>
           <p className="text-slate-600 font-medium">
-            Hemos recibido la solicitud de matrícula para{' '}
+            Solicitud recibida correctamente para{' '}
             <strong>{form.alumNombre} {form.alumApellidos}</strong>.
-            Hemos enviado una confirmación al correo del tutor.
+            Si no adjuntó los documentos, puede enviarlos posteriormente a{' '}
+            <a href="mailto:offcampus@chanakacademy.org" className="underline font-bold text-[#193D6D]">offcampus@chanakacademy.org</a>{' '}
+            indicando su folio SIS.
           </p>
           <div className="bg-slate-50 border border-slate-200 rounded-xl px-6 py-3">
             <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Número de folio</p>
@@ -522,61 +526,63 @@ export default function EnrollmentForm() {
               <div className={S2}>
                 {/* Instrucciones */}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 space-y-2">
-                  <p className="font-black text-[#193D6D] text-sm">Documentación requerida — Solo enlaces de Google Drive</p>
+                  <p className="font-black text-[#193D6D] text-sm">Documentación académica y legal</p>
                   <p className="text-sm text-blue-800 font-medium">
-                    Suba los documentos a una carpeta de Google Drive con permisos de visualización para el equipo
-                    Off-Campus de Chanak y pegue aquí los enlaces correspondientes.
+                    Si ya tiene los documentos preparados en Google Drive, puede pegar aquí los enlaces.
+                    Si todavía no los tiene, puede continuar con la solicitud y enviarlos después por
+                    correo a <strong>offcampus@chanakacademy.org</strong>.
                   </p>
                   <ul className="text-xs text-blue-700 font-medium list-disc list-inside space-y-1 mt-2">
-                    <li><strong>Identificación del tutor legal:</strong> Pasaporte, DNI, NIE o documento oficial equivalente.</li>
-                    <li><strong>Identificación del estudiante:</strong> Pasaporte, DNI, NIE o documento oficial equivalente.</li>
-                    <li><strong>Boletines / reportes de los dos últimos años escolares.</strong></li>
-                    <li><strong>Si aplica:</strong> informe psicopedagógico, diagnóstico o documentación NEE.</li>
+                    <li>Identificación del tutor legal (Pasaporte, DNI, NIE)</li>
+                    <li>Identificación del estudiante (Pasaporte, DNI, NIE)</li>
+                    <li>Boletines o reportes académicos de los últimos dos años</li>
+                    <li>Informe psicopedagógico / NEE, si aplica</li>
                   </ul>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 font-bold">
-                  ⚠️ Asegúrese de que los enlaces permitan visualización al equipo de Chanak.
-                  Si los permisos están restringidos, la revisión de matrícula puede retrasarse.
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-800 font-semibold">
+                  ✅ Puede completar la solicitud ahora y enviar los documentos más adelante por correo a
+                  offcampus@chanakacademy.org. La revisión académica comenzará cuando recibamos la
+                  documentación necesaria.
                 </div>
 
                 {/* Identificación tutor */}
                 <div>
-                  <label className={LABEL}>Identificación del tutor/a legal * <span className="normal-case font-normal">(Pasaporte, DNI, NIE)</span></label>
+                  <label className={LABEL}>Documento de identidad del tutor legal <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
                   <input type="url" value={form.tutorIdDocumentUrl} onChange={set('tutorIdDocumentUrl')} className={INPUT}
-                    placeholder="https://drive.google.com/file/d/…" />
+                    placeholder="https://drive.google.com/file/d/… (dejar vacío si lo envía después)" />
                   {errors.tutorIdDocumentUrl && <Err>{errors.tutorIdDocumentUrl}</Err>}
                 </div>
 
                 {/* Identificación estudiante */}
                 <div>
-                  <label className={LABEL}>Identificación del estudiante * <span className="normal-case font-normal">(Pasaporte, DNI, NIE)</span></label>
+                  <label className={LABEL}>Documento de identidad del estudiante <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
                   <input type="url" value={form.studentIdDocumentUrl} onChange={set('studentIdDocumentUrl')} className={INPUT}
-                    placeholder="https://drive.google.com/file/d/…" />
+                    placeholder="https://drive.google.com/file/d/… (dejar vacío si lo envía después)" />
                   {errors.studentIdDocumentUrl && <Err>{errors.studentIdDocumentUrl}</Err>}
                 </div>
 
                 {/* Boletines */}
                 <div>
-                  <label className={LABEL}>Boletines / reportes académicos de los últimos dos años * </label>
+                  <label className={LABEL}>Boletines o reportes académicos de los últimos dos años <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
                   <input type="url" value={form.reportCardsLastTwoYearsUrl} onChange={set('reportCardsLastTwoYearsUrl')} className={INPUT}
-                    placeholder="https://drive.google.com/drive/folders/…" />
+                    placeholder="https://drive.google.com/drive/folders/… (dejar vacío si lo envía después)" />
                   {errors.reportCardsLastTwoYearsUrl && <Err>{errors.reportCardsLastTwoYearsUrl}</Err>}
-                  <p className="text-xs text-slate-400 mt-1 font-medium">Puede subir una carpeta con todos los documentos.</p>
                 </div>
 
-                {/* NEE (opcional) */}
+                {/* NEE */}
                 <div>
-                  <label className={LABEL}>Documentación NEE / informe psicopedagógico <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
+                  <label className={LABEL}>Documentación NEE / necesidades educativas, si aplica <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
                   <input type="url" value={form.neeDocumentsUrl} onChange={set('neeDocumentsUrl')} className={INPUT}
                     placeholder="https://drive.google.com/file/d/… (dejar vacío si no aplica)" />
+                  {errors.neeDocumentsUrl && <Err>{errors.neeDocumentsUrl}</Err>}
                 </div>
 
                 {/* Notas */}
                 <div>
-                  <label className={LABEL}>Notas adicionales sobre documentos <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
+                  <label className={LABEL}>Notas sobre documentación pendiente <span className="normal-case font-normal text-slate-400">(opcional)</span></label>
                   <textarea rows={3} value={form.documentsNotes} onChange={set('documentsNotes')} className={INPUT + ' resize-none'}
-                    placeholder="Ej: Los boletines del año 2022-2023 están en la carpeta junto con los del año anterior." />
+                    placeholder="Ej: Enviamos los boletines esta semana. El pasaporte del alumno llega el día 15." />
                 </div>
               </div>
             )}
@@ -600,11 +606,18 @@ export default function EnrollmentForm() {
                   <Row label="Teléfono tutor"      value={form.tutTel} />
 
                   <p className="text-xs font-black text-slate-500 uppercase tracking-wider pt-3">Documentación</p>
-                  <Row label="ID tutor legal"      value={form.tutorIdDocumentUrl         ? 'Enlace registrado ✓' : '—'} />
-                  <Row label="ID estudiante"       value={form.studentIdDocumentUrl       ? 'Enlace registrado ✓' : '—'} />
-                  <Row label="Boletines 2 años"    value={form.reportCardsLastTwoYearsUrl ? 'Enlace registrado ✓' : '—'} />
-                  <Row label="Documentos NEE"      value={form.neeDocumentsUrl || 'No aplica'} />
-                  {form.documentsNotes && <Row label="Notas docs" value={form.documentsNotes} />}
+                  {(form.tutorIdDocumentUrl || form.studentIdDocumentUrl || form.reportCardsLastTwoYearsUrl) ? (
+                    <>
+                      <Row label="ID tutor legal"   value={form.tutorIdDocumentUrl         ? 'Enlace registrado ✓' : 'Pendiente'} />
+                      <Row label="ID estudiante"    value={form.studentIdDocumentUrl       ? 'Enlace registrado ✓' : 'Pendiente'} />
+                      <Row label="Boletines"        value={form.reportCardsLastTwoYearsUrl ? 'Enlace registrado ✓' : 'Pendiente'} />
+                      {form.documentsNotes && <Row label="Notas" value={form.documentsNotes} />}
+                    </>
+                  ) : (
+                    <p className="text-sm text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      Pendiente de envío por correo a offcampus@chanakacademy.org
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 font-medium">
