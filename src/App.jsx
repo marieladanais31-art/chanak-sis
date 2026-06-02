@@ -19,6 +19,7 @@ import TutorDashboard from '@/pages/TutorDashboard';
 import StudentDashboard from '@/pages/StudentDashboard';
 import PeiManagement from '@/pages/PeiManagement';
 import HelpPage from '@/pages/HelpPage';
+import EnrollmentForm from '@/pages/EnrollmentForm';
 
 const AppContent = () => {
   return (
@@ -63,6 +64,10 @@ const AppContent = () => {
       
       {/* Centro de Ayuda — accesible para cualquier usuario autenticado */}
       <Route path="/ayuda" element={<ProtectedRoute><HelpPage /></ProtectedRoute>} />
+
+      {/* Formulario público de matrícula — sin autenticación */}
+      <Route path="/matricula" element={<EnrollmentForm />} />
+      <Route path="/enrollment" element={<EnrollmentForm />} />
 
       {/* Catch-all: cualquier ruta desconocida va directo al login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
