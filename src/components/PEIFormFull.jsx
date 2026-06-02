@@ -152,6 +152,41 @@ function buildDiagnosticText(levels) {
 const INTRO_DEFAULT = 'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo y las necesidades únicas de cada estudiante.';
 const ACE_DEFAULT   = DEFAULT_FORM.ace_curriculum_description;
 
+// ── Sincronización selectiva PEI → ficha del estudiante ──────────────────────
+// Mapeo PEI field → students column.
+// Solo actualiza si el campo en students está vacío/null.
+const PEI_TO_STUDENT_MAP = [
+  { peiField: 'student_nationality', studentCol: 'nationality' },
+  { peiField: 'student_city',        studentCol: 'city' },
+  { peiField: 'student_country',     studentCol: 'country' },
+  { peiField: 'student_email',       studentCol: 'student_email' },
+  { peiField: 'parent_phone',        studentCol: 'phone' },
+  { peiField: 'parent_relation',     studentCol: 'parent1_relationship' },
+  { peiField: 'student_dob',         studentCol: 'date_of_birth' },
+  { peiField: 'grade_level',         studentCol: 'grade_level' },
+  { peiField: 'last_grade_completed',studentCol: 'last_grade_completed' },
+  { peiField: 'enrollment_date',     studentCol: 'enrollment_date' },
+  { peiField: 'modality',            studentCol: 'modality' },
+  { peiField: 'curriculum_base',     studentCol: 'curriculum_base' },
+];
+
+async function syncMasterFieldsToStudent(studentId, peiForm, snapshot) {
+  if (!studentId) return;
+  const syncPayload = {};
+  PEI_TO_STUDENT_MAP.forEach(({ peiField, studentCol }) => {
+    const peiVal     = peiForm[peiField];
+    const studentVal = snapshot?.[studentCol];
+    const peiHasData   = peiVal && typeof peiVal === 'string' && peiVal.trim() !== '';
+    const studentEmpty = !studentVal || (typeof studentVal === 'string' && studentVal.trim() === '');
+    // Solo llenar si PEI tiene dato real Y campo en students está vacío
+    if (peiHasData && studentEmpty) {
+      syncPayload[studentCol] = peiVal.trim();
+    }
+  });
+  if (Object.keys(syncPayload).length === 0) return;
+  await supabase.from('students').update(syncPayload).eq('id', studentId);
+}
+
 export default function PEIFormFull({ studentId, studentName, peiId: initialPeiId, onClose, canEdit = false }) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('portada');
@@ -163,6 +198,8 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const [form, setForm]           = useState(DEFAULT_FORM);
 
   const [fichaLevels, setFichaLevels] = useState(null);
+  // Snapshot de ficha del estudiante para comparar en handleSave (sync selectivo)
+  const [fichaSnapshot, setFichaSnapshot] = useState(null);
 
   // Ref al área de contenido scrolleable — usada para reset al cambiar de pestaña.
   const bodyRef = useRef(null);
@@ -195,9 +232,12 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
       // ── 1. Cargar ficha del estudiante ────────────────────────────────────
       const { data: s } = await supabase
         .from('students')
-        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies')
+        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, parent1_relationship, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies, nationality, city, country, student_email, phone')
         .eq('id', studentId)
         .single();
+
+      // Guardar snapshot para sync selectivo en handleSave
+      setFichaSnapshot(s || null);
 
       const levels = {
         math:          s?.diag_math           || null,
@@ -230,6 +270,13 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
       if (s?.graduation_pathway_notes) fichaOverrides.graduation_pathway_notes = s.graduation_pathway_notes;
       if (s?.diagnostic_notes)         fichaOverrides.initial_diagnosis        = s.diagnostic_notes;
       if (s?.parent1_name)             fichaOverrides.parent_signature_name    = s.parent1_name;
+      // ── Campos de contacto/perfil que faltaban ──────────────────────────────
+      if (s?.nationality)              fichaOverrides.student_nationality      = s.nationality;
+      if (s?.city)                     fichaOverrides.student_city             = s.city;
+      if (s?.country)                  fichaOverrides.student_country          = s.country;
+      if (s?.student_email)            fichaOverrides.student_email            = s.student_email;
+      if (s?.phone)                    fichaOverrides.parent_phone             = s.phone;
+      if (s?.parent1_relationship)     fichaOverrides.parent_relation          = s.parent1_relationship;
 
       // Inicializar form con defaults + ficha (PEI nuevo o mientras carga DB)
       setForm({ ...effectiveDefaults, ...fichaOverrides });
@@ -291,6 +338,10 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         if (error) throw error;
         setPeiId(data.id);
       }
+      // ── Sincronizar datos maestros de vuelta a ficha del estudiante ──────────
+      // Solo se llenan campos VACÍOS en students; nunca se pisa un dato existente.
+      await syncMasterFieldsToStudent(studentId, form, fichaSnapshot);
+
       toast({ title: 'PEI guardado', description: 'Los cambios han sido guardados.' });
     } catch (err) {
       toast({ title: 'Error', description: err.message || 'No se pudo guardar.', variant: 'destructive' });
@@ -415,6 +466,11 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
               <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">Portada Institucional</p>
               <p className="text-xs text-blue-600">Esta sección genera la carátula del PEI con datos del estudiante e información de ingreso a Chanak.</p>
+              <p className="text-xs text-blue-500 mt-1 font-medium">
+                ℹ️ Los datos de esta sección se cargan desde la ficha del estudiante como fuente oficial.
+                Al guardar, los campos nuevos que estén vacíos en la ficha se actualizarán automáticamente.
+                Nunca se sobreescriben datos ya existentes en la ficha.
+              </p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
