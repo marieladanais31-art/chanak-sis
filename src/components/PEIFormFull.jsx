@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { ACTIVE_SCHOOL_YEAR } from '@/lib/academicUtils';
@@ -23,7 +23,7 @@ const TABS = [
   { id: 'diagnostico',label: 'Diagnóstico',       icon: ClipboardList },
   { id: 'plan',       label: 'Plan de Estudios',  icon: BookOpen },
   { id: 'metodologia',label: 'Metodología',       icon: BarChart3 },
-  { id: 'paces',      label: 'PACEs',             icon: ChevronRight },
+  { id: 'paces',      label: 'Evaluaciones',       icon: ChevronRight },
   { id: 'familia',    label: 'Familia',           icon: Heart },
   { id: 'firmas',     label: 'Firmas',            icon: Award },
 ];
@@ -56,32 +56,46 @@ const DEFAULT_FORM = {
   parent_relation:            'Padre/Madre',
   modality:                   'Off-Campus',
   curriculum_base:            'A.C.E. (Accelerated Christian Education)',
-  institutional_intro:        '',
+  institutional_intro:
+    'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo, nivel real de entrada y necesidades específicas del estudiante. El PEI organiza el plan académico anual, las evaluaciones proyectadas, las áreas de refuerzo y el acompañamiento requerido para favorecer un progreso ordenado y medible.',
   // Perfil
   strength_areas:             '',
   improvement_areas:          '',
   // Diagnóstico
-  initial_diagnosis:          '',
+  initial_diagnosis:
+    'La prueba diagnóstica ACE se interpreta como una herramienta técnica de ubicación académica, no como un examen de aprobado o suspenso. Su objetivo es identificar el punto real de entrada del estudiante y detectar posibles lagunas de aprendizaje que deben reforzarse antes de avanzar a contenidos superiores. En el sistema ACE, el estudiante progresa por dominio del contenido, no únicamente por edad o curso escolar.',
   diagnostic_results:         '',
-  diagnostic_interpretation:  '',
-  ace_curriculum_description: '',
+  diagnostic_interpretation:
+    'La interpretación de resultados debe identificar las asignaturas en las que el estudiante presenta dominio suficiente y aquellas en las que necesita refuerzo. Cuando el diagnóstico ubica al estudiante en un nivel anterior al esperado, esto se interpreta como una oportunidad para cubrir lagunas específicas y consolidar fundamentos antes de avanzar. En inglés y Word Building, es normal que estudiantes no nativos requieran evaluaciones de refuerzo para desarrollar gramática, vocabulario académico y estructura técnica del idioma.',
+  ace_curriculum_description:
+    'El currículo A.C.E. (Accelerated Christian Education) es un sistema de autoaprendizaje basado en evaluaciones individuales (PACEs) de 12 lecciones cada una. El estudiante avanza a su propio ritmo bajo la supervisión de un tutor certificado. El diagnóstico inicial determina el nivel real de entrada y sirve como punto de partida para la proyección académica personalizada.',
   // Plan
-  subject_plan:               '',
-  quarterly_objectives:       '',
-  local_extension:            '',
-  life_skills:                '',
+  subject_plan:
+    'El plan de estudios se organiza a partir del nivel real de entrada del estudiante, sus asignaturas base, la extensión local requerida y las áreas de desarrollo integral. Las materias principales se trabajarán bajo el enfoque de aprendizaje por dominio, complementadas con actividades de extensión local y Life Skills.',
+  quarterly_objectives:
+    'Cada trimestre tendrá objetivos académicos medibles por asignatura. Se priorizará el avance progresivo en las evaluaciones proyectadas, la consolidación de hábitos de estudio, la corrección de lagunas detectadas y la entrega oportuna de evidencias cuando corresponda.',
+  local_extension:
+    'La extensión local incorporará contenidos requeridos por el contexto educativo nacional, incluyendo lengua, historia, geografía, cultura local y otros elementos necesarios para complementar el currículo internacional desde la realidad del estudiante.',
+  life_skills:
+    'El área de Life Skills integra actividades de desarrollo personal, habilidades prácticas, educación física, arte, música, tecnología, servicio, emprendimiento, educación emocional y otras experiencias formativas que contribuyen al crecimiento integral del estudiante.',
   // Metodología
-  daily_rhythm_methodology:   '',
-  estimated_time_daily_load:  '',
-  follow_up_strategies:       '',
-  follow_up_resources:        '',
+  daily_rhythm_methodology:
+    'El modelo metodológico del PEI combina aprendizaje por dominio, extensión local y desarrollo integral. Como referencia operativa, el plan se organiza aproximadamente en un 60% de aprendizaje por dominio, un 20% de extensión local conforme a los contenidos requeridos en el plan de estudio nacional, y un 20% de Life Skills y desarrollo integral. El estudiante avanzará de manera progresiva, con acompañamiento del tutor/mentor, seguimiento académico y revisión periódica de evidencias y evaluaciones.',
+  estimated_time_daily_load:
+    'Se recomienda una carga diaria ajustada al nivel y edad del estudiante, combinando trabajo autónomo, revisión familiar y seguimiento del tutor. La carga podrá modificarse según ritmo de avance, resultados diagnósticos y necesidades específicas.',
+  follow_up_strategies:
+    'El seguimiento académico incluirá revisión periódica del progreso, monitoreo de evaluaciones proyectadas, comunicación con la familia, revisión de evidencias, alertas de retraso y ajustes al PEI cuando sea necesario.',
+  follow_up_resources:
+    'El estudiante podrá utilizar materiales A.C.E., recursos digitales, guías de apoyo, actividades de extensión local, herramientas de lectura, diccionarios, recursos de Word Building, materiales de Life Skills y acompañamiento del tutor o coordinador académico.',
   required_adaptations:       '',
   // Familia — Sección 09: acuerdos + Sección 08: materiales
   family_message:             '',
   institutional_conclusion:   '',
   coordinator_observations:   '',
-  materials_text:             '',
-  operational_agreements:     '',
+  materials_text:
+    'Los materiales base incluirán los recursos curriculares asignados al estudiante, evaluaciones proyectadas, documentos de apoyo, actividades de extensión local y recursos complementarios definidos por el equipo académico.',
+  operational_agreements:
+    'La familia actuará como supervisor primario del trabajo diario del estudiante, asegurando un ambiente adecuado, seguimiento de las actividades asignadas y comunicación oportuna con Chanak. Chanak validará académicamente las calificaciones, evidencias y reportes emitidos desde el SIS.',
   // Vocacional (modelo Daniel)
   vocational_interest:        '',
   strategic_objectives:       '',
@@ -89,7 +103,7 @@ const DEFAULT_FORM = {
   pace_status_notes:          '',
   vocational_plan:            '',
   // Firmas — Sección 10
-  director_signature_name:    '',
+  director_signature_name:    'Mariela Andrade',
   director_signature_date:    '',
   parent_signature_name:      '',
   parent_signature_date:      '',
@@ -115,6 +129,25 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const [form, setForm]           = useState(DEFAULT_FORM);
 
   const [fichaLevels, setFichaLevels] = useState(null);
+
+  // Ref al área de contenido scrolleable — usada para reset al cambiar de pestaña.
+  const bodyRef = useRef(null);
+
+  // ── Bloquear scroll de página mientras el modal está abierto ─────────────
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // ── Cambio de pestaña con reset de scroll interno ─────────────────────────
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    // Scroll al inicio del área de contenido (no del window)
+    requestAnimationFrame(() => {
+      bodyRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -268,7 +301,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const isReadOnly = !canEdit || form.status === 'published';
 
   return (
-    <div className="flex flex-col h-full max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl mx-auto">
+    <div className="flex flex-col h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#193D6D] shrink-0">
         <div>
@@ -300,7 +333,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-700 bg-white'
@@ -314,8 +347,8 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         })}
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Body — min-h-0 es obligatorio para que flex-1 no desborde el contenedor */}
+      <div ref={bodyRef} className="flex-1 overflow-y-auto min-h-0 overscroll-contain p-6">
 
         {/* ── PORTADA ──────────────────────────────────────────────────────── */}
         {activeTab === 'portada' && (
@@ -465,7 +498,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
               />
             </div>
             <div>
-              <label className={LABEL}>Estado Académico Actual — PACE Status</label>
+              <label className={LABEL}>Estado académico actual / Nivel de entrada por asignatura</label>
               <textarea
                 rows={5}
                 value={form.pace_status_notes}
@@ -579,7 +612,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                 placeholder="Descripción del estado académico inicial del estudiante al momento de ingreso. Contexto, historial académico, necesidades detectadas." />
             </div>
             <div>
-              <label className={LABEL}>Resultados del Diagnóstico — PACE de Entrada por Asignatura</label>
+              <label className={LABEL}>Resultados del diagnóstico — nivel de entrada por asignatura</label>
               <textarea rows={5} value={form.diagnostic_results} onChange={set('diagnostic_results')} disabled={isReadOnly} className={TEXTAREA}
                 placeholder={'Mathematics: Math PACE 1076\nEnglish: English PACE 1075\nWord Building: WB PACE 1074\nScience: Science PACE 1074\nSocial Studies: Social PACE 1073\n\nPuntuaciones y observaciones evaluativas.'} />
             </div>
@@ -597,7 +630,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             <div>
               <label className={LABEL}>Plan de Estudios</label>
               <textarea rows={5} value={form.subject_plan} onChange={set('subject_plan')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Descripción del plan por materia: asignaturas del año, PACEs de inicio proyectados, contenidos prioritarios, metas por trimestre." />
+                placeholder="Descripción del plan por materia: asignaturas del año, evaluaciones de inicio proyectadas, contenidos prioritarios, metas por trimestre." />
             </div>
             <div>
               <label className={LABEL}>Objetivos Trimestrales</label>
@@ -623,12 +656,12 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             <div>
               <label className={LABEL}>Ritmo, Carga y Metodología</label>
               <textarea rows={5} value={form.daily_rhythm_methodology} onChange={set('daily_rhythm_methodology')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Descripción del ritmo de trabajo: sesiones semanales, horario tipo, método de supervisión del tutor, uso de la plataforma digital, entrega de PACEs, evaluación y scoring." />
+                placeholder="Descripción del ritmo de trabajo: sesiones semanales, horario tipo, método de supervisión del tutor, uso de la plataforma digital, ritmo de trabajo, entrega de evaluaciones y revisión académica." />
             </div>
             <div>
               <label className={LABEL}>Tiempo Estimado y Carga Diaria</label>
               <textarea rows={3} value={form.estimated_time_daily_load} onChange={set('estimated_time_daily_load')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Ej: 4–5 horas diarias de trabajo autónomo. 1 sesión semanal de tutoría de 60 min. PACE completado cada 2–3 semanas. Proyección: 3 PACEs/mes por materia." />
+                placeholder="Ej: 4–5 horas diarias de trabajo autónomo. 1 sesión semanal de tutoría de 60 min. Evaluación completada cada 2–3 semanas. Proyección: 3 evaluaciones/mes por materia." />
             </div>
             <div>
               <label className={LABEL}>Estrategias de Seguimiento</label>
@@ -661,7 +694,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             ) : (
               <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm">
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-amber-800">Guarda el PEI primero (pestaña Portada → Guardar) para registrar la proyección de PACEs.</p>
+                <p className="text-amber-800">Guarda el PEI primero (pestaña Portada → Guardar) para registrar las evaluaciones proyectadas.</p>
               </div>
             )}
           </div>
