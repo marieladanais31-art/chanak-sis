@@ -243,8 +243,9 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
       setMessage({ type: 'error', title: 'N.º de evaluación obligatorio', text: 'Selecciona o ingresa el número de evaluación/PACE.' });
       return;
     }
-    if (!hasFile && !hasDriveUrl) {
-      setMessage({ type: 'error', title: 'Adjunto requerido', text: 'Adjunta un archivo o proporciona un enlace de Google Drive.' });
+    // Adjunto y/o nota: al menos uno de los tres debe estar presente
+    if (!hasFile && !hasDriveUrl && !hasScore) {
+      setMessage({ type: 'error', title: 'Datos incompletos', text: 'Ingresa al menos una nota (score) o adjunta un archivo o enlace de Drive.' });
       return;
     }
     if (hasDriveUrl && !isValidUrl(driveUrl)) {
@@ -288,12 +289,15 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
 
       setForm((cur) => ({ ...INITIAL_FORM, student_id: cur.student_id, quarter: cur.quarter, evidence_group: cur.evidence_group }));
       setManualPace(false);
+      const noAttachment = !attachmentPath && !hasDriveUrl;
       setMessage({
         type:  'success',
-        title: 'Evidencia enviada',
+        title: noAttachment ? 'Evaluación registrada (pendiente de evidencia)' : 'Evaluación enviada',
         text:  belowMin
-          ? 'Evidencia recibida (score < 80 marcado como requires_repeat). Chanak revisará oficialmente.'
-          : 'Evidencia enviada y pendiente de revisión oficial por Chanak. No se registra como nota final hasta que sea aprobada.',
+          ? 'Nota registrada (score < 80 marcado como requires_repeat). Chanak revisará oficialmente.'
+          : noAttachment
+            ? 'La nota fue registrada sin adjunto. Puede añadir la evidencia (archivo o Drive) más tarde desde esta misma pestaña.'
+            : 'Evaluación enviada y pendiente de revisión oficial por Chanak. No se registra como nota final hasta que sea aprobada.',
       });
       await loadSubmissions();
     } catch (err) {
@@ -320,20 +324,17 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
           <div>
-            <h2 className="font-black text-lg">Cómo reportar evidencias Off Campus</h2>
+            <h2 className="font-black text-lg">Registrar evaluación y/o evidencia</h2>
             <p className="text-sm font-medium mt-1 text-blue-800">
-              Las evidencias se vinculan a las evaluaciones proyectadas en el PEI. Seleccione la materia, trimestre
-              y evaluación correspondiente antes de enviar archivo o enlace de Drive. La evidencia no aprueba ni
-              registra una nota final automáticamente; será revisada por Chanak.
+              Puede registrar la nota de una evaluación aunque todavía no tenga evidencia documental. El adjunto (archivo o Drive) es <strong>opcional</strong>: puede añadirse después. Chanak revisará y validará oficialmente antes de registrar la nota final.
             </p>
             <ul className="text-sm font-medium mt-2 space-y-1 list-disc list-inside">
-              <li><strong>PACE Test</strong> — por asignatura; selecciona la evaluación proyectada en el PEI o indica el número manualmente. Adjunta el test o enlace Drive.</li>
-              <li><strong>Local Extension</strong> — por asignatura (lengua, historia local, geografía…). Adjunta foto, documento o enlace Drive.</li>
-              <li><strong>Life Skills</strong> — por asignatura (tecnología, arte, ed. física…). Adjunta foto, documento o enlace Drive.</li>
+              <li><strong>PACE Test</strong> — selecciona la evaluación del PEI, ingresa la nota y/o adjunta el test escaneado o enlace Drive.</li>
+              <li><strong>Local Extension</strong> — ingresa nota y/o adjunta foto, documento o enlace Drive por asignatura.</li>
+              <li><strong>Life Skills</strong> — ingresa nota y/o adjunta evidencia por asignatura (tecnología, arte, ed. física…).</li>
             </ul>
             <p className="text-xs font-bold mt-3 text-blue-800">
-              Puedes adjuntar un archivo, un enlace de Google Drive, o ambos. Al menos uno es obligatorio.
-              Chanak valida cada evidencia antes de registrarla como nota final.
+              Mínimo requerido: nota (score) O archivo O enlace Drive. Los tres juntos es lo ideal.
             </p>
           </div>
         </div>
@@ -531,7 +532,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         {/* Enlace Google Drive */}
         <div>
           <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
-            Enlace de Google Drive <span className="text-slate-400 font-medium">(obligatorio si no adjuntas archivo)</span>
+            Enlace de Google Drive <span className="text-slate-400 font-medium">(opcional)</span>
           </label>
           <input
             type="url"
@@ -548,7 +549,7 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         {/* Archivo adjunto */}
         <div>
           <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
-            Archivo adjunto <span className="text-slate-400 font-medium">(obligatorio si no hay enlace Drive)</span>
+            Archivo adjunto <span className="text-slate-400 font-medium">(opcional)</span>
           </label>
           <label className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-bold text-slate-600 cursor-pointer hover:border-[#20B2AA] hover:bg-teal-50 transition-colors">
             <FileUp className="w-5 h-5 text-[#20B2AA]" />
@@ -560,7 +561,8 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
         {/* Submit */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-2">
           <p className="text-xs text-slate-500 font-bold">
-            Las evidencias se guardan como <em>pendiente de revisión</em>. Chanak decide si aprueba, solicita corrección o rechaza.
+            Se requiere al menos nota (score), archivo o enlace Drive. El adjunto es opcional: puede añadirse después.
+            Chanak valida y aprueba oficialmente antes de registrar la nota final.
           </p>
           <button
             type="submit"
@@ -625,6 +627,9 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
                       {getStudentName(student)}
                       {sub.score != null ? ` · Score ${sub.score}/100` : ''}
                       {sub.school_year ? ` · ${sub.school_year}` : ''}
+                      {!sub.attachment_path && !sub.attachment_url && !sub.drive_url && (
+                        <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 text-[10px] font-black">Sin adjunto</span>
+                      )}
                     </p>
                     {sub.comment && <p className="text-sm text-slate-500">{sub.comment}</p>}
                     {sub.reviewer_comment && (
