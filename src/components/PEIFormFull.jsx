@@ -91,9 +91,12 @@ const DEFAULT_FORM = {
     'El estudiante podrá utilizar materiales A.C.E., recursos digitales, guías de apoyo, actividades de extensión local, herramientas de lectura, diccionarios, recursos de Word Building, materiales de Life Skills y acompañamiento del tutor o coordinador académico.',
   required_adaptations:       '',
   // Familia — Sección 09: acuerdos + Sección 08: materiales
-  family_message:             '',
-  institutional_conclusion:   '',
-  coordinator_observations:   '',
+  family_message:
+    'Estimadas familias: este PEI recoge la planificación académica individualizada del estudiante para el año escolar. Su propósito es ofrecer una ruta clara de avance, acompañamiento y seguimiento. La familia cumple un rol fundamental como supervisor primario del trabajo diario, asegurando un ambiente adecuado de estudio, cumplimiento de las actividades asignadas y comunicación oportuna con Chanak.',
+  institutional_conclusion:
+    'Chanak International Academy se compromete a acompañar el proceso académico del estudiante mediante seguimiento, revisión de evidencias, validación de evaluaciones y emisión de reportes oficiales conforme al plan individualizado establecido. Este documento podrá revisarse y ajustarse cuando el progreso, las necesidades del estudiante o las circunstancias familiares lo requieran.',
+  coordinator_observations:
+    'Observaciones del coordinador: registrar aquí acuerdos específicos con la familia, condiciones particulares de seguimiento, recomendaciones académicas, necesidades de apoyo o cualquier información relevante para el acompañamiento del estudiante.',
   materials_text:
     'Los materiales base incluirán los recursos curriculares asignados al estudiante, evaluaciones proyectadas, documentos de apoyo, actividades de extensión local y recursos complementarios definidos por el equipo académico.',
   operational_agreements:

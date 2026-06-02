@@ -321,8 +321,13 @@ export default function ParentEvidencePanel({ studentChildren, studentSubjects, 
           <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
           <div>
             <h2 className="font-black text-lg">Cómo reportar evidencias Off Campus</h2>
+            <p className="text-sm font-medium mt-1 text-blue-800">
+              Las evidencias se vinculan a las evaluaciones proyectadas en el PEI. Seleccione la materia, trimestre
+              y evaluación correspondiente antes de enviar archivo o enlace de Drive. La evidencia no aprueba ni
+              registra una nota final automáticamente; será revisada por Chanak.
+            </p>
             <ul className="text-sm font-medium mt-2 space-y-1 list-disc list-inside">
-              <li><strong>PACE Test</strong> — por asignatura; indica el número de evaluación. Adjunta el test o enlace Drive.</li>
+              <li><strong>PACE Test</strong> — por asignatura; selecciona la evaluación proyectada en el PEI o indica el número manualmente. Adjunta el test o enlace Drive.</li>
               <li><strong>Local Extension</strong> — por asignatura (lengua, historia local, geografía…). Adjunta foto, documento o enlace Drive.</li>
               <li><strong>Life Skills</strong> — por asignatura (tecnología, arte, ed. física…). Adjunta foto, documento o enlace Drive.</li>
             </ul>
