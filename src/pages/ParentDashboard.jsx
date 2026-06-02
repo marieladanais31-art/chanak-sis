@@ -845,11 +845,6 @@ export default function ParentDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, navigate]);
 
-  // Evaluaciones vencidas calculadas con lógica quarter-based (para Alertas)
-  const computedOverduePaces = paceProjection.filter(
-    (p) => children.some((c) => c.id === p.student_id) && !isPaceCompleted(p) && isPaceOverdue(p)
-  );
-
   const hasOfficialPei = (childId) => officialDocuments.peis.some((d) => d.student_id === childId);
   const hasOfficialEnrollmentLetter = (childId) => officialDocuments.letters.some((d) => d.student_id === childId);
   const hasOfficialContract = (childId) => officialDocuments.contracts.some((d) => d.student_id === childId);
@@ -917,6 +912,12 @@ export default function ParentDashboard() {
   const isPaceCompleted = (p) => {
     return ['evaluated', 'cancelled', 'approved'].includes(p.status) || p.grade_obtained != null;
   };
+
+  // Evaluaciones vencidas calculadas con lógica quarter-based.
+  // DEBE ir DESPUÉS de isPaceCompleted e isPaceOverdue para evitar ReferenceError.
+  const computedOverduePaces = paceProjection.filter(
+    (p) => (children || []).some((c) => c.id === p.student_id) && !isPaceCompleted(p) && isPaceOverdue(p)
+  );
 
   const getStudentStats = (childId) => {
     const childPaces = paceProjection.filter((p) => p.student_id === childId);
