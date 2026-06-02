@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { ACTIVE_SCHOOL_YEAR } from '@/lib/academicUtils';
@@ -115,6 +115,25 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const [form, setForm]           = useState(DEFAULT_FORM);
 
   const [fichaLevels, setFichaLevels] = useState(null);
+
+  // Ref al área de contenido scrolleable — usada para reset al cambiar de pestaña.
+  const bodyRef = useRef(null);
+
+  // ── Bloquear scroll de página mientras el modal está abierto ─────────────
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // ── Cambio de pestaña con reset de scroll interno ─────────────────────────
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    // Scroll al inicio del área de contenido (no del window)
+    requestAnimationFrame(() => {
+      bodyRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -268,7 +287,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const isReadOnly = !canEdit || form.status === 'published';
 
   return (
-    <div className="flex flex-col h-full max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl mx-auto">
+    <div className="flex flex-col h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#193D6D] shrink-0">
         <div>
@@ -300,7 +319,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-700 bg-white'
@@ -314,8 +333,8 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         })}
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Body — min-h-0 es obligatorio para que flex-1 no desborde el contenedor */}
+      <div ref={bodyRef} className="flex-1 overflow-y-auto min-h-0 overscroll-contain p-6">
 
         {/* ── PORTADA ──────────────────────────────────────────────────────── */}
         {activeTab === 'portada' && (
