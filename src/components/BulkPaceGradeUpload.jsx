@@ -14,6 +14,26 @@ const CAN_APPROVE_DIRECTLY = ['super_admin', 'admin', 'coordinator'];
 const QUARTERS = ['Q1', 'Q2', 'Q3'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Devuelve el academic_block canónico a partir del nombre de la asignatura.
+ * Debe coincidir exactamente con los valores que normalizeBlock() reconoce
+ * para que isValidReportArea() del boletín lo acepte.
+ */
+function getAcademicBlockFromSubjectName(subjectName) {
+  const lower = (subjectName || '').toLowerCase();
+  if (['math', 'english', 'word building', 'science', 'social studies', 'bible'].some(k => lower.includes(k))) {
+    return 'Core A.C.E.';
+  }
+  if (['lengua', 'castellana', 'local history', 'local geography', 'spanish', 'extension local', 'extensión local'].some(k => lower.includes(k))) {
+    return 'Extensión Local';
+  }
+  if (['art', 'music', 'technology', 'physical education', 'life skills', 'p.e.', 'ed. física'].some(k => lower.includes(k))) {
+    return 'Life Skills';
+  }
+  return 'Core A.C.E.'; // fallback seguro — siempre pasará isValidReportArea
+}
+
 function computeStatus(score) {
   const n = parseFloat(score);
   if (score === '' || score === null || score === undefined || isNaN(n)) return null;
@@ -290,7 +310,10 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           ? 'Carga administrativa validada por coordinador — sin evidencia adjunta.'
           : 'Registrado por tutor — pendiente revisión coordinador.';
 
-      // Resolve student_subject_id
+      // ── Resolver student_subject_id ──────────────────────────────────────────
+      // Si la fila de student_subjects no existe para esta materia/trimestre/año,
+      // la creamos automáticamente con el academic_block correcto para que el
+      // boletín pueda encontrarla mediante isValidReportArea().
       let studentSubjectId = r.student_subject_id;
       if (!studentSubjectId) {
         const { data: ss } = await supabase
@@ -305,7 +328,40 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       }
 
       if (!studentSubjectId) {
-        errors.push(`${r.subject_name} · PACE ${r.pace_number}: no se encontró la materia en el sistema.`);
+        // Crear la fila de student_subjects con academic_block adecuado
+        const academicBlock = getAcademicBlockFromSubjectName(r.subject_name);
+        const { data: newSS, error: ssErr } = await supabase
+          .from('student_subjects')
+          .insert([{
+            student_id:             selectedStudentId,
+            subject_name:           r.subject_name,
+            quarter:                selectedQuarter,
+            school_year:            schoolYear,
+            academic_block:         academicBlock,
+            grade_submission_status: 'draft',
+            submitted_at:           now,
+          }])
+          .select('id')
+          .single();
+
+        if (ssErr) {
+          // Puede haberse creado en una inserción paralela — reintentar búsqueda
+          const { data: retry } = await supabase
+            .from('student_subjects')
+            .select('id')
+            .eq('student_id', selectedStudentId)
+            .eq('subject_name', r.subject_name)
+            .eq('quarter', selectedQuarter)
+            .eq('school_year', schoolYear)
+            .maybeSingle();
+          studentSubjectId = retry?.id || null;
+        } else {
+          studentSubjectId = newSS?.id || null;
+        }
+      }
+
+      if (!studentSubjectId) {
+        errors.push(`${r.subject_name} · PACE ${r.pace_number}: no se pudo crear/encontrar la materia en student_subjects.`);
         continue;
       }
 
@@ -365,6 +421,20 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             .from('student_grade_entries')
             .insert([payload]);
           if (error) throw error;
+        }
+
+        // ── Actualizar grade_submission_status en student_subjects ────────────
+        // Si el coordinador aprueba directamente, marcar la materia como aprobada
+        // para que isValidReportArea() del boletín la encuentre.
+        if (isApprover && studentSubjectId) {
+          await supabase
+            .from('student_subjects')
+            .update({
+              grade_submission_status: 'approved',
+              grade_reviewed_by:       authUser?.id || null,
+              grade_reviewed_at:       now,
+            })
+            .eq('id', studentSubjectId);
         }
 
         // Update pei_pace_projections if linked
