@@ -160,19 +160,34 @@ export default function EnrollmentForm() {
       documentsNotes:             form.documentsNotes     || 'No proporcionado',
     };
 
-    // Enviamos directamente al webhook de Zapier desde el browser.
-    // Zapier Catch Hook responde con Access-Control-Allow-Origin: * → sin problema CORS.
-    // (El proxy /api/enrollment solo funciona en Vercel; en Hostinger estático no existe.)
-    const ZAPIER = 'https://hooks.zapier.com/hooks/catch/27757659/4bsxiu9/';
+    // El sitio está en Vercel → /api/enrollment existe como serverless function.
+    // El proxy hace el fetch server-side a Zapier (sin CORS, sin preflight).
+    const ENDPOINT = '/api/enrollment';
+    const fullPayload = {
+      ...payload,
+      stripePaymentLink: 'https://buy.stripe.com/aFa7sMgjLcBvfvW2NQ67S0c',
+      paymentStatus:     'Pendiente de pago',
+      fechaEnvio:        new Date().toISOString(),
+      origen:            'Formulario público /matricula',
+    };
+
+    console.log('ENROLLMENT ENDPOINT', ENDPOINT);
+    console.log('ENROLLMENT PAYLOAD', fullPayload);
 
     try {
-      const res = await fetch(ZAPIER, {
+      const res = await fetch(ENDPOINT, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ ...payload, stripePaymentLink: 'https://buy.stripe.com/aFa7sMgjLcBvfvW2NQ67S0c', paymentStatus: 'Pendiente de pago', origen: 'Formulario público /matricula' }),
+        body:    JSON.stringify(fullPayload),
       });
-      // Zapier responde {"status":"success"} con HTTP 200
-      if (!res.ok) throw new Error(`Zapier HTTP ${res.status}`);
+
+      console.log('ENROLLMENT RESPONSE STATUS', res.status);
+      const data = await res.json().catch(() => ({}));
+      console.log('ENROLLMENT RESPONSE BODY', data);
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       setSubmitted(true);
     } catch (err) {
       console.error('[EnrollmentForm] submit error:', err.message);
