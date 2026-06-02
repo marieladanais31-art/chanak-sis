@@ -266,7 +266,7 @@ function severityClass(severity) {
   return 'bg-blue-50 text-blue-700 border-blue-200';
 }
 
-function ParentAlertasPanel({ studentChildren, paceProjection }) {
+function ParentAlertasPanel({ studentChildren, paceProjection, computedOverdue = [] }) {
   const [alerts, setAlerts] = React.useState([]);
   const [corrections, setCorrections] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -306,19 +306,21 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
     loadAlerts();
   }, [studentChildren]);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const overduePaces = (paceProjection || []).filter((pace) => {
-    if (!studentChildren?.some((child) => child.id === pace.student_id)) return false;
-    if (['completed', 'approved', 'delivered'].includes((pace.status || '').toLowerCase())) return false;
-    if ((pace.status || '').toLowerCase() === 'overdue') return true;
-    const due = pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date;
-    if (!due) return false;
-    const dueDate = new Date(due);
-    if (Number.isNaN(dueDate.getTime())) return false;
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate < today;
-  });
+  // Usa el pre-calculado del componente padre (quarter-based) en lugar de solo fecha
+  const overduePaces = computedOverdue.length > 0
+    ? computedOverdue.filter(p => studentChildren?.some(c => c.id === p.student_id))
+    : (paceProjection || []).filter((pace) => {
+        if (!studentChildren?.some((child) => child.id === pace.student_id)) return false;
+        if (['completed', 'approved', 'delivered', 'evaluated'].includes((pace.status || '').toLowerCase())) return false;
+        if ((pace.status || '').toLowerCase() === 'overdue') return true;
+        const due = pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date;
+        if (!due) return false;
+        const dueDate = new Date(due);
+        if (Number.isNaN(dueDate.getTime())) return false;
+        dueDate.setHours(0, 0, 0, 0);
+        const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+        return dueDate < todayD;
+      });
 
   const getChildName = (studentId) => {
     const child = studentChildren.find((item) => item.id === studentId);
@@ -366,14 +368,43 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
 
       {overduePaces.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-black text-slate-800 flex items-center gap-2"><Hourglass className="w-5 h-5 text-red-500" /> Evaluaciones atrasadas según proyección</h3>
-          {overduePaces.map((pace) => (
-            <div key={pace.id} className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800">
-              <p className="text-xs font-black uppercase tracking-wider">{getChildName(pace.student_id)} · {pace.quarter || 'Quarter pendiente'}</p>
-              <p className="font-bold mt-1">{pace.subject_name || 'Materia'}{pace.pace_number ? ` · Evaluación #${pace.pace_number}` : ''}</p>
-              <p className="text-sm font-medium mt-1">Fecha proyectada: {pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date || 'sin fecha'}</p>
-            </div>
-          ))}
+          <h3 className="font-black text-slate-800 flex items-center gap-2">
+            <Hourglass className="w-5 h-5 text-red-500" /> Evaluaciones vencidas / retrasadas
+          </h3>
+          {/* Agrupar por estudiante para no mostrar lista individual */}
+          {(() => {
+            const byChild = {};
+            overduePaces.forEach(p => {
+              if (!byChild[p.student_id]) byChild[p.student_id] = [];
+              byChild[p.student_id].push(p);
+            });
+            return Object.entries(byChild).map(([studentId, paces]) => {
+              const byQ = { Q1: [], Q2: [], Q3: [] };
+              paces.forEach(p => { if (byQ[p.quarter]) byQ[p.quarter].push(p); });
+              return (
+                <div key={studentId} className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800 space-y-2">
+                  <p className="font-black text-sm">{getChildName(studentId)} — {paces.length} evaluación{paces.length !== 1 ? 'es' : ''} vencida{paces.length !== 1 ? 's' : ''}</p>
+                  {['Q1','Q2','Q3'].map(q => {
+                    const qPaces = byQ[q];
+                    if (!qPaces.length) return null;
+                    const subjGroups = {};
+                    qPaces.forEach(p => { if (!subjGroups[p.subject_name]) subjGroups[p.subject_name] = []; subjGroups[p.subject_name].push(p); });
+                    return (
+                      <div key={q} className="text-xs font-bold">
+                        <span className="text-red-600 uppercase tracking-wider">{q}: </span>
+                        {Object.entries(subjGroups).map(([subj, ps]) => (
+                          <span key={subj} className="mr-2">{subj} ({ps.map(p => `#${p.pace_number}`).join(', ')})</span>
+                        ))}
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-red-600 font-medium mt-1">
+                    Para reportar avance, usa la pestaña <strong>Evidencias</strong> o haz clic en "Ver Evaluaciones" en la tarjeta del estudiante.
+                  </p>
+                </div>
+              );
+            });
+          })()}
         </section>
       )}
     </div>
@@ -814,6 +845,11 @@ export default function ParentDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, navigate]);
 
+  // Evaluaciones vencidas calculadas con lógica quarter-based (para Alertas)
+  const computedOverduePaces = paceProjection.filter(
+    (p) => children.some((c) => c.id === p.student_id) && !isPaceCompleted(p) && isPaceOverdue(p)
+  );
+
   const hasOfficialPei = (childId) => officialDocuments.peis.some((d) => d.student_id === childId);
   const hasOfficialEnrollmentLetter = (childId) => officialDocuments.letters.some((d) => d.student_id === childId);
   const hasOfficialContract = (childId) => officialDocuments.contracts.some((d) => d.student_id === childId);
@@ -1219,7 +1255,7 @@ export default function ParentDashboard() {
           /* Secciones globales accesibles aunque no haya hijos vinculados aún */
           <div className="space-y-4">
             {activeTab === 'recursos' && <ParentRecursosPanel links={operationalLinks} />}
-            {activeTab === 'alertas' && <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} />}
+            {activeTab === 'alertas' && <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} computedOverdue={computedOverduePaces} />}
             {activeTab === 'calendario' && <ParentCalendarioPanel calendar={schoolCalendar} />}
           </div>
         ) : (
@@ -1651,7 +1687,7 @@ export default function ParentDashboard() {
                   <Bell className="w-5 h-5 text-amber-500" />
                   <h2 className="font-black text-xl text-slate-800">Alertas del portal</h2>
                 </div>
-                <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} />
+                <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} computedOverdue={computedOverduePaces} />
               </div>
             )}
 
@@ -1828,6 +1864,8 @@ export default function ParentDashboard() {
               <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between gap-3">
                 <p className="text-xs text-slate-500 font-medium">
                   Para enviar evidencias de una evaluación, use la pestaña <strong>Evidencias</strong>.
+                  Las materias de <strong>Extensión Local</strong> se reportan con tareas mensuales.
+                  Las de <strong>Life Skills</strong> con proyectos trimestrales.
                   Las notas finales son validadas por Chanak.
                 </p>
                 <button onClick={() => setPaceProjectionModal(null)}
@@ -2052,7 +2090,7 @@ export default function ParentDashboard() {
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                 <h3 className="font-black text-lg text-slate-800">
-                  Notas Parciales: {selectedStudentSubjectForEntries.subject_name} · {selectedStudentSubjectForEntries.quarter}
+                  Evaluaciones y Reporte Familiar — {selectedStudentSubjectForEntries.subject_name} · {selectedStudentSubjectForEntries.quarter}
                 </h3>
                 <button
                   onClick={() => setIsGradeEntriesModalOpen(false)}
