@@ -24,6 +24,10 @@ import EnrollmentForm from '@/pages/EnrollmentForm';
 const AppContent = () => {
   return (
     <Routes>
+      {/* ── Rutas completamente públicas — NUNCA requieren sesión ── */}
+      <Route path="/matricula"  element={<EnrollmentForm />} />
+      <Route path="/enrollment" element={<EnrollmentForm />} />
+
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -64,10 +68,6 @@ const AppContent = () => {
       
       {/* Centro de Ayuda — accesible para cualquier usuario autenticado */}
       <Route path="/ayuda" element={<ProtectedRoute><HelpPage /></ProtectedRoute>} />
-
-      {/* Formulario público de matrícula — sin autenticación */}
-      <Route path="/matricula" element={<EnrollmentForm />} />
-      <Route path="/enrollment" element={<EnrollmentForm />} />
 
       {/* Catch-all: cualquier ruta desconocida va directo al login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
