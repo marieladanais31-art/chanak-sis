@@ -41,31 +41,44 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
     if (!peiId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [paceRes, subjectRes] = await Promise.all([
-        supabase
-          .from('pei_pace_projections')
-          .select('*')
-          .eq('pei_id', peiId)
-          .order('subject_name').order('quarter').order('pace_number'),
-        supabase
-          .from('student_subjects')
-          .select('id, subject_name, academic_block, grade_level, school_year')
-          .eq('student_id', studentId)
-          .eq('school_year', schoolYear || '')
-          .order('subject_name', { ascending: true }),
-      ]);
+      // Query de evaluaciones — crítica
+      const paceRes = await supabase
+        .from('pei_pace_projections')
+        .select('*')
+        .eq('pei_id', peiId)
+        .order('subject_name').order('quarter').order('pace_number');
+
       if (paceRes.error) throw paceRes.error;
-      if (subjectRes.error) throw subjectRes.error;
       setPaces(paceRes.data || []);
-      const seen = new Set();
-      setSubjects((subjectRes.data || []).filter((subject) => {
-        const name = (subject.subject_name || '').trim();
-        if (!name || seen.has(name)) return false;
-        seen.add(name);
-        return true;
-      }));
-    } catch {
-      toast({ title: 'Error', description: 'No se pudieron cargar los PACEs.', variant: 'destructive' });
+
+      // Query de materias — solo para el datalist, no es crítica
+      if (studentId) {
+        const subjectQuery = supabase
+          .from('student_subjects')
+          .select('id, subject_name, academic_block, school_year')
+          .eq('student_id', studentId)
+          .order('subject_name', { ascending: true });
+        if (schoolYear) subjectQuery.eq('school_year', schoolYear);
+        const subjectRes = await subjectQuery;
+        if (subjectRes.error) {
+          if (import.meta.env.DEV) console.warn('[PaceProjectionTable] subjects load failed (non-fatal):', subjectRes.error.message);
+        } else {
+          const seen = new Set();
+          setSubjects((subjectRes.data || []).filter((subject) => {
+            const name = (subject.subject_name || '').trim();
+            if (!name || seen.has(name)) return false;
+            seen.add(name);
+            return true;
+          }));
+        }
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('[PaceProjectionTable] load error:', err);
+      toast({
+        title:       'Error al cargar evaluaciones',
+        description: err?.message || 'Verifica permisos (RLS) o contacta soporte.',
+        variant:     'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -155,7 +168,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
         const { error } = await supabase.from('pei_pace_projections').insert([payload]);
         if (error) throw error;
       }
-      toast({ title: 'PACE guardado' });
+      toast({ title: 'Evaluación guardada' });
       setModalOpen(false);
       await load();
     } catch (err) {
@@ -166,7 +179,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('¿Eliminar este PACE?')) return;
+    if (!confirm('¿Eliminar esta evaluación?')) return;
     try {
       const { error } = await supabase.from('pei_pace_projections').delete().eq('id', id);
       if (error) throw error;
@@ -205,7 +218,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
             onClick={() => openNew(subj, quarter, 'advance')}
             className="text-[9px] text-slate-300 hover:text-blue-500 text-left leading-none mt-0.5"
           >
-            + PACE
+            + Eval.
           </button>
         )}
       </div>
@@ -238,13 +251,13 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h4 className="font-bold text-slate-700 text-sm">Proyección Anual de PACEs — {schoolYear}</h4>
+        <h4 className="font-bold text-slate-700 text-sm">Proyección anual de evaluaciones — {schoolYear}</h4>
         {canEdit && (
           <button
             onClick={() => openNew()}
             className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold"
           >
-            <Plus className="w-3 h-3" /> Añadir PACE
+            <Plus className="w-3 h-3" /> Añadir evaluación
           </button>
         )}
       </div>
@@ -252,7 +265,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
       {ordered.length === 0 ? (
         <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <p className="text-amber-800">No hay PACEs registrados. {canEdit ? 'Use el botón "Añadir PACE" para comenzar.' : ''}</p>
+          <p className="text-amber-800">No hay evaluaciones proyectadas. {canEdit ? 'Use el botón "Añadir evaluación" para comenzar.' : ''}</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -363,12 +376,12 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
         </div>
       )}
 
-      {/* Modal add/edit PACE */}
+      {/* Modal add/edit evaluación */}
       {modalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="flex justify-between items-center p-4 border-b border-slate-100">
-              <h3 className="font-bold text-slate-800">{editing ? 'Editar PACE' : 'Nuevo PACE'}</h3>
+              <h3 className="font-bold text-slate-800">{editing ? 'Editar evaluación' : 'Nueva evaluación proyectada'}</h3>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleSave} className="p-4 space-y-3">
@@ -386,7 +399,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
                   </datalist>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">PACE # *</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">N.º Evaluación *</label>
                   <input required type="number" min="1" value={form.pace_number}
                     onChange={e => setForm(f => ({...f, pace_number: e.target.value}))}
                     className={INPUT} placeholder="1083" />
@@ -444,7 +457,7 @@ export default function PaceProjectionTable({ peiId, studentId, schoolYear, canE
                   <label className="block text-xs font-bold text-slate-600 mb-1">Notas del tutor</label>
                   <textarea rows={2} value={form.tutor_notes}
                     onChange={e => setForm(f => ({...f, tutor_notes: e.target.value}))}
-                    className={INPUT + ' resize-none'} placeholder="Observaciones del tutor sobre este PACE…" />
+                    className={INPUT + ' resize-none'} placeholder="Observaciones del tutor sobre esta evaluación…" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-600 mb-1">Notas del coordinador</label>
