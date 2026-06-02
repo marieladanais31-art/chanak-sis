@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { ACTIVE_SCHOOL_YEAR } from '@/lib/academicUtils';
+import { normalizeDateFields } from '@/lib/dateUtils';
 import PaceProjectionTable from './PaceProjectionTable';
 import { generatePeiPDF } from '@/lib/peiPdf';
 import {
@@ -173,10 +174,24 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  // Campos DATE del PEI — deben llegar a Supabase como yyyy-mm-dd o null.
+  const PEI_DATE_FIELDS = [
+    'issue_date',
+    'student_dob',
+    'enrollment_date',
+    'director_signature_date',
+    'parent_signature_date',
+    'student_signature_date',
+    'next_review_date',
+  ];
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
+      const payload = normalizeDateFields(
+        { ...form, student_id: studentId, updated_at: new Date().toISOString() },
+        PEI_DATE_FIELDS,
+      );
       if (peiId) {
         const { error } = await supabase.from('individualized_education_plans').update(payload).eq('id', peiId);
         if (error) throw error;
