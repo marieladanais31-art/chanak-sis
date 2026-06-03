@@ -341,7 +341,9 @@
 </div><!-- .card -->
 
 <script>
-  const WEBHOOK = 'https://hooks.zapier.com/hooks/catch/27757659/4bsxiu9/';
+  // El webhook se envía a través del proxy /api/enrollment (variable de entorno en servidor)
+  // Este archivo standalone usa el mismo endpoint para mantener coherencia
+  const WEBHOOK = '/api/enrollment';
 
   function generateFolio() {
     const now = new Date();
@@ -393,7 +395,8 @@
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'HTTP ' + res.status);
       document.getElementById('form').style.display = 'none';
       document.getElementById('folio-display').textContent = folio;
       document.getElementById('success').style.display = 'block';
