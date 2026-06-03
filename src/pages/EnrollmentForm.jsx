@@ -108,16 +108,7 @@ export default function EnrollmentForm() {
     if (s === 3 && form.tutEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.tutEmail)) {
       errs.tutEmail = 'Email no válido';
     }
-    // URLs de documentos: si el campo tiene valor, validar que sea https://
-    // (si está vacío se acepta — los documentos son opcionales)
-    if (s === 5) {
-      ['tutorIdDocumentUrl','studentIdDocumentUrl','reportCardsLastTwoYearsUrl','neeDocumentsUrl'].forEach(f => {
-        const val = String(form[f] || '').trim();
-        if (val && !val.startsWith('https://')) {
-          errs[f] = 'Si introduce un enlace, debe comenzar con https://';
-        }
-      });
-    }
+    // Los documentos son 100% opcionales — sin validación de URL en paso 5
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -174,7 +165,7 @@ export default function EnrollmentForm() {
     };
 
     console.log('ENROLLMENT ENDPOINT', ENDPOINT);
-    console.log('ENROLLMENT PAYLOAD', fullPayload);
+    console.log('ENROLLMENT PAYLOAD FINAL', fullPayload);
 
     try {
       const res = await fetch(ENDPOINT, {
@@ -207,8 +198,8 @@ export default function EnrollmentForm() {
           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
           <h1 className="text-2xl font-black text-[#193D6D]">¡Solicitud recibida!</h1>
           <p className="text-slate-600 font-medium">
-            Solicitud recibida correctamente para{' '}
-            <strong>{form.alumNombre} {form.alumApellidos}</strong>.
+            Hemos registrado su solicitud de matrícula con el folio{' '}
+            <strong>{folio}</strong> para <strong>{form.alumNombre} {form.alumApellidos}</strong>.
             Si no adjuntó los documentos, puede enviarlos posteriormente a{' '}
             <a href="mailto:offcampus@chanakacademy.org" className="underline font-bold text-[#193D6D]">offcampus@chanakacademy.org</a>{' '}
             indicando su folio SIS.
