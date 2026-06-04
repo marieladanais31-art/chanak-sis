@@ -548,16 +548,22 @@ export default function CoordinatorDashboard() {
                                 </td>
 
                                 <td className="p-4 text-center">
-                                  {subject.convalidation_required ? (
+                                  {/* Convalidación visible para Extensión Local, Life Skills y cualquier
+                                      materia marcada como convalidation_required en student_subjects */}
+                                  {(subject.convalidation_required ||
+                                    ['Extensión Local', 'Life Skills', 'Life Skills & Leadership']
+                                      .includes(normalizeBlock(subject.academic_block))
+                                  ) ? (
                                     <select
                                       value={subject.convalidation_status || 'pending'}
                                       onChange={(e) => updateSubjectField(subject.id, 'convalidation_status', e.target.value)}
-                                      className="border border-slate-300 rounded px-2 py-1 bg-white"
+                                      className="border border-slate-300 rounded px-2 py-1 bg-white text-sm"
                                     >
                                       <option value="pending">Pendiente</option>
                                       <option value="in_review">En revisión</option>
                                       <option value="approved">Convalidado</option>
-                                      <option value="rejected">Rechazado</option>
+                                      <option value="rejected">No convalidado</option>
+                                      <option value="not_applicable">No aplica</option>
                                     </select>
                                   ) : (
                                     <span className="text-slate-400">—</span>
