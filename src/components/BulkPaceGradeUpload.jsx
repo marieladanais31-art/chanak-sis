@@ -348,8 +348,12 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           ? 'Carga administrativa validada por coordinador — sin evidencia adjunta.'
           : 'Registrado por tutor — pendiente revisión coordinador.';
 
-      // Resolve student_subject_id
+      // ── Resolver student_subject_id ──────────────────────────────────────────
+      // Las proyecciones creadas por SQL pueden tener student_subject_id = null.
+      // Si es null, buscar en student_subjects. Si no existe, CREAR automáticamente
+      // para que el guardado funcione sin intervención manual.
       let studentSubjectId = r.student_subject_id;
+
       if (!studentSubjectId) {
         const { data: ss } = await supabase
           .from('student_subjects')
@@ -362,8 +366,48 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
         studentSubjectId = ss?.id || null;
       }
 
+      // Si sigue siendo null → auto-crear student_subjects con academic_block correcto
       if (!studentSubjectId) {
-        errors.push(`${r.subject_name} · PACE ${r.pace_number}: no se encontró la materia en el sistema.`);
+        const academicBlock = getAcademicBlockFromSubjectName(r.subject_name);
+        const { data: created, error: ssCreateErr } = await supabase
+          .from('student_subjects')
+          .insert([{
+            student_id:              selectedStudentId,
+            subject_name:            r.subject_name,
+            quarter:                 selectedQuarter,
+            school_year:             schoolYear,
+            academic_block:          academicBlock,
+            grade_submission_status: 'draft',
+            submitted_at:            now,
+          }])
+          .select('id')
+          .single();
+
+        if (!ssCreateErr && created?.id) {
+          studentSubjectId = created.id;
+          // Actualizar la proyección para que próximas cargas no repitan este paso
+          if (r.projection_id) {
+            await supabase
+              .from('pei_pace_projections')
+              .update({ student_subject_id: studentSubjectId })
+              .eq('id', r.projection_id);
+          }
+        } else {
+          // Último intento: puede que ya exista por inserción concurrente
+          const { data: retry } = await supabase
+            .from('student_subjects')
+            .select('id')
+            .eq('student_id', selectedStudentId)
+            .eq('subject_name', r.subject_name)
+            .eq('quarter', selectedQuarter)
+            .eq('school_year', schoolYear)
+            .maybeSingle();
+          studentSubjectId = retry?.id || null;
+        }
+      }
+
+      if (!studentSubjectId) {
+        errors.push(`${r.subject_name} · PACE ${r.pace_number}: no se pudo crear la materia en student_subjects.`);
         continue;
       }
 
