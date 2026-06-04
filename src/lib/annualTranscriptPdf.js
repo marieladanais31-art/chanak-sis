@@ -1,19 +1,16 @@
 /**
- * annualTranscriptPdf.js  v5 — Expediente Académico Oficial
+ * annualTranscriptPdf.js  v6 — Expediente Académico Oficial
  * ─────────────────────────────────────────────────────────
- * Diseño compacto y oficial: ficha de datos, Q1/Q2/Q3/Promedio,
- * escala horizontal, certificación, firma única (Dirección).
- * Bilingüe ES | EN.
+ * Rediseño definitivo — ficha compacta, Q1/Q2/Q3/Promedio,
+ * escala horizontal, certificación, una sola firma (Dirección).
+ * Bilingüe ES | EN · sin ACE · sin Modalidad · sin Secretaría.
  *
  * Requiere: settings = await preloadImages(rawSettings)
  */
 
-// ── Configuración global ─────────────────────────────────────────────────────
-/**
- * false → El PDF oficial NO muestra referencias internas a ACE.
- *         Usa "Programa académico individualizado" en su lugar.
- * true  → Muestra "Currículo ACE" y etiquetas internas (uso interno).
- */
+// ── Interruptor de etiquetas ACE ─────────────────────────────────────────────
+// false (producción): PDF oficial no muestra referencias internas a ACE.
+// true  (interno):    Muestra "Currículo ACE" y etiquetas del currículo.
 const SHOW_ACE_LABELS_IN_OFFICIAL_PDF = false;
 
 import jsPDF from 'jspdf';
@@ -21,7 +18,6 @@ import autoTable from 'jspdf-autotable';
 import {
   drawOfficialHeader,
   applyOfficialFooterAllPages,
-  getInstitutionName,
   getInstitutionInfo,
   addInstitutionSeal,
   addInstitutionSignature,
@@ -65,15 +61,7 @@ const QUARTERS = ['Q1', 'Q2', 'Q3'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Línea separadora delgada */
-function hrLine(doc, y, W) {
-  doc.setDrawColor(210, 220, 235);
-  doc.setLineWidth(0.2);
-  doc.line(PDF_MARGIN, y, W - PDF_MARGIN, y);
-  return y + 3;
-}
-
-/** Título de sección compacto — texto navy bold + línea inferior */
+/** Título de sección con subrayado navy */
 function sectionTitle(doc, label, y, W) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
@@ -85,7 +73,15 @@ function sectionTitle(doc, label, y, W) {
   return y + 11;
 }
 
-/** Salto de página si no cabe `need` mm */
+/** Línea separadora delgada */
+function hrLine(doc, y, W) {
+  doc.setDrawColor(210, 220, 235);
+  doc.setLineWidth(0.2);
+  doc.line(PDF_MARGIN, y, W - PDF_MARGIN, y);
+  return y + 4;
+}
+
+/** Salto de página si no caben `need` mm */
 function pageBreak(doc, y, need) {
   if (y + need > doc.internal.pageSize.getHeight() - PDF_FOOTER_H - 10) {
     doc.addPage();
@@ -94,12 +90,16 @@ function pageBreak(doc, y, need) {
   return y;
 }
 
-/** Fecha segura sin desfase de zona horaria */
+/**
+ * Formatea fecha de forma segura evitando desfase de zona horaria.
+ * Retorna null si el valor es falsy.
+ */
 function fmtDate(dateVal, lang) {
   if (!dateVal) return null;
   try {
     const s = String(dateVal);
     const d = new Date(s.includes('T') ? s : `${s}T12:00:00`);
+    if (isNaN(d.getTime())) return String(dateVal);
     return d.toLocaleDateString(lang === 'en' ? 'en-US' : 'es-ES', {
       day: '2-digit', month: 'long', year: 'numeric',
     });
@@ -112,10 +112,10 @@ function fmtDate(dateVal, lang) {
 /**
  * @param {object}   params.student   — fila de `students`
  * @param {object[]} params.years     — [{ school_year, grade_level, us_grade_level, hs_year_name, records[] }]
- *   cada record: { quarter, subjects: [{ subject_name, final_grade, credits, subject_category }] }
+ *   cada record: { quarter, subjects: [{ subject_name, final_grade, credits }] }
  * @param {object}   params.settings  — resultado de preloadImages()
  * @param {boolean}  params.isHighSchool
- * @param {string}   params.observations — texto libre de observaciones (opcional)
+ * @param {string}   params.observations — texto de observaciones (opcional)
  */
 export function generateAnnualTranscriptPDF({
   student, years, settings, isHighSchool = false, lang: requestedLang,
@@ -125,7 +125,7 @@ export function generateAnnualTranscriptPDF({
   const doc  = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W    = doc.internal.pageSize.getWidth();
 
-  // Escala con descriptores oficiales
+  // Escala de calificación con descriptores oficiales (sin ACE)
   const gradingScale = TRANSCRIPT_GRADING_SCALE
     .filter(g => g.letter !== 'F')
     .map(g => ({
@@ -135,25 +135,20 @@ export function generateAnnualTranscriptPDF({
               || (lang === 'en' ? 'Mastery achieved' : 'Dominio alcanzado'),
     }));
 
-  // Fecha e identificadores
-  const today  = new Date().toLocaleDateString(
+  // Identificadores
+  const today      = new Date().toLocaleDateString(
     lang === 'en' ? 'en-US' : 'es-ES',
     { day: '2-digit', month: 'long', year: 'numeric' },
   );
   const studentId8 = (student?.id || '').substring(0, 8).toUpperCase() || 'N/A';
+  const yearLabel  = years.length > 0 ? years[0].school_year : '—';
 
-  // Programa académico (respeta SHOW_ACE_LABELS_IN_OFFICIAL_PDF)
-  const programLabel = SHOW_ACE_LABELS_IN_OFFICIAL_PDF
-    ? (lang === 'en' ? 'ACE Curriculum' : 'Currículo ACE')
-    : (lang === 'en' ? 'Individualized Academic Program' : 'Programa académico individualizado');
-
-  // ── ENCABEZADO INSTITUCIONAL ─────────────────────────────────────────────
+  // ── 1. ENCABEZADO INSTITUCIONAL ──────────────────────────────────────────
   const docTitle    = lang === 'en' ? 'OFFICIAL ACADEMIC TRANSCRIPT' : 'EXPEDIENTE ACADÉMICO OFICIAL';
   const docSubtitle = lang === 'en' ? 'Student Academic Record'       : 'Historial de Calificaciones del Estudiante';
 
   let y = drawOfficialHeader(doc, settings, { docTitle, docSubtitle, lang });
 
-  // Fecha de emisión alineada a la derecha
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...PDF_GRAY);
@@ -161,63 +156,57 @@ export function generateAnnualTranscriptPDF({
     `${lang === 'en' ? 'Issued' : 'Emitido'}: ${today}`,
     W - PDF_MARGIN, y - 2, { align: 'right' },
   );
-  y += 4;
+  y += 5;
 
-  // ── DATOS DEL ESTUDIANTE ─────────────────────────────────────────────────
-  y = pageBreak(doc, y, 40);
-  y = sectionTitle(doc, lang === 'en' ? 'Student Information' : 'Datos del Estudiante', y, W);
+  // ── 2. DATOS DEL ESTUDIANTE ──────────────────────────────────────────────
+  // Campos visibles: Estudiante | N.º matrícula | Fecha nac. | País | Nivel | Año escolar
+  // NO incluir: Modalidad, Off-Campus, Programa académico, Fecha de matriculación
+  y = pageBreak(doc, y, 38);
+  y = sectionTitle(
+    doc,
+    lang === 'en' ? 'Student Information' : 'Datos del Estudiante',
+    y, W,
+  );
 
   const studentName = `${student.first_name || ''} ${student.last_name || ''}`.trim() || '—';
   const country     = student.country || (lang === 'en' ? 'Spain' : 'España');
   const grade       = student.grade_level || student.us_grade_level || '—';
-  const modality    = student.modality || 'Off-Campus';
-  const yearLabel   = years.length > 0 ? years[0].school_year : '—';
 
-  // Solo campos con valor — sin mostrar campos vacíos
-  const buildInfoRows = () => {
-    const rows = [];
-    if (lang === 'en') {
-      rows.push(['Student:', studentName,    'Student Code:', studentId8]);
-      rows.push(['Grade Level:', grade,       'School Year:', yearLabel]);
-      rows.push(['Country:', country,         'Modality:', modality]);
-      rows.push(['Academic Program:', programLabel, '', '']);
-    } else {
-      rows.push(['Estudiante:', studentName,         'Código de estudiante:', studentId8]);
-      rows.push(['Nivel actual:', grade,             'Año escolar:', yearLabel]);
-      rows.push(['País de residencia:', country,     'Modalidad:', modality]);
-      rows.push(['Programa académico:', programLabel, '', '']);
-    }
-    // Agregar fecha de nacimiento y matrícula solo si existen
-    const dob    = fmtDate(student.date_of_birth, lang);
-    const enroll = fmtDate(student.enrollment_date, lang);
-    if (dob || enroll) {
-      rows.push([
-        lang === 'en' ? 'Date of birth:'    : 'Fecha de nacimiento:',
-        dob    || '—',
-        lang === 'en' ? 'Enrollment date:'  : 'Fecha de matriculación:',
-        enroll || '—',
-      ]);
-    }
-    return rows;
-  };
+  // Fecha de nacimiento — siempre mostrar; "Pendiente de registro" si vacía
+  const dobRaw = student.date_of_birth || student.birth_date || student.dob || student.fecha_nacimiento || null;
+  const dobStr = fmtDate(dobRaw, lang) || (lang === 'en' ? 'Pending registration' : 'Pendiente de registro');
+
+  // 3 filas × 2 pares — sin encabezados, sin Campo/Valor
+  const infoRows = lang === 'en'
+    ? [
+        ['Student:',      studentName,  'Student ID:',           studentId8 ],
+        ['Date of Birth:', dobStr,       'Country of Residence:', country    ],
+        ['Grade Level:',  grade,        'School Year:',          yearLabel  ],
+      ]
+    : [
+        ['Estudiante:',         studentName,  'N.º de matrícula:',   studentId8 ],
+        ['Fecha de nacimiento:', dobStr,       'País de residencia:', country    ],
+        ['Nivel académico:',    grade,        'Año escolar:',        yearLabel  ],
+      ];
 
   autoTable(doc, {
     startY:  y,
     margin:  { left: PDF_MARGIN, right: PDF_MARGIN },
-    body:    buildInfoRows(),
+    body:    infoRows,
     theme:   'plain',
-    styles:  { fontSize: 9, cellPadding: [2, 3.5] },
+    styles:  { fontSize: 9, cellPadding: [2.5, 4] },
     columnStyles: {
-      0: { fontStyle: 'bold', textColor: [80, 95, 120], cellWidth: 48 },
-      1: { textColor: [...PDF_BLACK], cellWidth: 52 },
-      2: { fontStyle: 'bold', textColor: [80, 95, 120], cellWidth: 48 },
+      0: { fontStyle: 'bold', textColor: [75, 90, 115], cellWidth: 48 },
+      1: { textColor: [...PDF_BLACK], cellWidth: 54 },
+      2: { fontStyle: 'bold', textColor: [75, 90, 115], cellWidth: 48 },
       3: { textColor: [...PDF_BLACK] },
     },
   });
   y = doc.lastAutoTable.finalY + 8;
 
-  // ── CALIFICACIONES OFICIALES — una sección por año escolar ───────────────
-  years.forEach((yr, idx) => {
+  // ── 3. CALIFICACIONES OFICIALES — una tabla por año escolar ─────────────
+  // SIN sección de historial de matrícula
+  years.forEach(yr => {
     const subjectGrades = {};
     yr.records.forEach(r => {
       r.subjects.forEach(s => {
@@ -233,12 +222,12 @@ export function generateAnnualTranscriptPDF({
     const subjects = Object.keys(subjectGrades);
     if (subjects.length === 0) return;
 
-    const yearLbl = yr.school_year || '—';
+    const yrLabel = yr.school_year || '—';
     const secLabel = lang === 'en'
-      ? `Official Grades (School Year ${yearLbl})`
-      : `Calificaciones Oficiales (Año Escolar ${yearLbl})`;
+      ? `Official Grades — School Year ${yrLabel}`
+      : `Calificaciones Oficiales — Año Escolar ${yrLabel}`;
 
-    y = pageBreak(doc, y, 52);
+    y = pageBreak(doc, y, 50);
     y = sectionTitle(doc, secLabel, y, W);
 
     // Filas por materia
@@ -276,9 +265,9 @@ export function generateAnnualTranscriptPDF({
       startY: y,
       margin: { left: PDF_MARGIN, right: PDF_MARGIN, bottom: PDF_FOOTER_H + 8 },
       head: [[
-        lang === 'en' ? 'Subject' : 'Materia',
+        lang === 'en' ? 'Subject'  : 'Materia',
         'Q1', 'Q2', 'Q3',
-        lang === 'en' ? 'Average' : 'Promedio',
+        lang === 'en' ? 'Average'  : 'Promedio',
       ]],
       body: [...gradeRows, genRow],
       styles:             { fontSize: 8.5, cellPadding: [3, 4], textColor: [...PDF_BLACK] },
@@ -300,6 +289,7 @@ export function generateAnnualTranscriptPDF({
           data.cell.styles.textColor = PDF_NAVY;
           return;
         }
+        // Celdas sin nota (columnas Q1/Q2/Q3) en gris claro
         if (data.column.index >= 1 && data.column.index <= 3) {
           const raw = Array.isArray(data.row.raw) ? data.row.raw[data.column.index] : null;
           if (raw === '—') data.cell.styles.textColor = [185, 200, 220];
@@ -309,23 +299,24 @@ export function generateAnnualTranscriptPDF({
     y = doc.lastAutoTable.finalY + 8;
   });
 
-  // ── ESCALA DE CALIFICACIÓN — layout compacto en múltiples columnas ───────
-  // Dividir los 9 grados en 3 grupos de 3 para un layout horizontal
-  y = pageBreak(doc, y, 38);
-  y = sectionTitle(doc, lang === 'en' ? 'Grading Scale' : 'Escala de Calificación', y, W);
+  // ── 4. ESCALA DE CALIFICACIÓN — 3 columnas horizontales ─────────────────
+  y = pageBreak(doc, y, 35);
+  y = sectionTitle(
+    doc,
+    lang === 'en' ? 'Grading Scale' : 'Escala de Calificación',
+    y, W,
+  );
 
-  // 3 columnas × 3 filas en una sola tabla de 9 columnas para máxima compacidad
-  const scaleGroups = [gradingScale.slice(0, 3), gradingScale.slice(3, 6), gradingScale.slice(6)];
-  const scaleRows = [];
-  for (let i = 0; i < 3; i++) {
+  // 9 grados divididos en 3 grupos de 3 → 1 fila por grupo → 3 filas × 9 columnas
+  const g3 = [gradingScale.slice(0, 3), gradingScale.slice(3, 6), gradingScale.slice(6)];
+  const scaleRows = [0, 1, 2].map(i => {
     const row = [];
-    scaleGroups.forEach(grp => {
+    g3.forEach(grp => {
       const g = grp[i];
-      if (g) { row.push(g.range, g.letter, g.label); }
-      else   { row.push('', '', ''); }
+      row.push(g ? g.range : '', g ? g.letter : '', g ? g.label : '');
     });
-    scaleRows.push(row);
-  }
+    return row;
+  });
 
   autoTable(doc, {
     startY: y,
@@ -334,41 +325,42 @@ export function generateAnnualTranscriptPDF({
     theme:  'plain',
     styles: { fontSize: 7.5, cellPadding: [2, 3] },
     columnStyles: {
-      0: { cellWidth: 18, halign: 'center', fontStyle: 'bold', textColor: [90, 105, 130] },
+      0: { cellWidth: 18, halign: 'center', textColor: [90, 105, 130] },
       1: { cellWidth: 10, halign: 'center', fontStyle: 'bold', textColor: PDF_NAVY },
-      2: { cellWidth: 44 },
-      3: { cellWidth: 18, halign: 'center', fontStyle: 'bold', textColor: [90, 105, 130] },
+      2: { cellWidth: 44, textColor: [...PDF_BLACK] },
+      3: { cellWidth: 18, halign: 'center', textColor: [90, 105, 130] },
       4: { cellWidth: 10, halign: 'center', fontStyle: 'bold', textColor: PDF_NAVY },
-      5: { cellWidth: 44 },
-      6: { cellWidth: 18, halign: 'center', fontStyle: 'bold', textColor: [90, 105, 130] },
+      5: { cellWidth: 44, textColor: [...PDF_BLACK] },
+      6: { cellWidth: 18, halign: 'center', textColor: [90, 105, 130] },
       7: { cellWidth: 10, halign: 'center', fontStyle: 'bold', textColor: PDF_NAVY },
-      8: { },
+      8: { textColor: [...PDF_BLACK] },
     },
     tableLineColor: [...PDF_BORDER],
     tableLineWidth: 0.1,
   });
   y = doc.lastAutoTable.finalY + 8;
 
-  // ── OBSERVACIONES — solo si hay contenido ────────────────────────────────
-  const hasObs = Boolean(observations && String(observations).trim());
-  if (hasObs) {
+  // ── 5. OBSERVACIONES — solo si hay contenido ────────────────────────────
+  const obsText = String(observations || '').trim();
+  if (obsText) {
     y = pageBreak(doc, y, 28);
     y = sectionTitle(doc, lang === 'en' ? 'Observations' : 'Observaciones', y, W);
-    const obsLines = doc.splitTextToSize(String(observations).trim(), W - PDF_MARGIN * 2);
+    const obsLines = doc.splitTextToSize(obsText, W - PDF_MARGIN * 2);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(70, 85, 110);
+    doc.setTextColor(65, 82, 108);
     doc.text(obsLines, PDF_MARGIN, y);
     y += obsLines.length * 4.5 + 8;
   }
 
-  // ── CERTIFICACIÓN ────────────────────────────────────────────────────────
-  y = pageBreak(doc, y, 75);
+  // ── 6. CERTIFICACIÓN ─────────────────────────────────────────────────────
+  y = pageBreak(doc, y, 70);
   y = sectionTitle(doc, lang === 'en' ? 'Certification' : 'Certificación', y, W);
 
   const certText = lang === 'en'
-    ? 'We certify that this document corresponds to the official academic record of the student named herein, according to the academic records of Chanak International Academy for the corresponding school year.'
-    : 'Se certifica que el presente expediente académico refleja las calificaciones registradas oficialmente del estudiante en el período indicado, de acuerdo con los registros académicos institucionales de Chanak International Academy.';
+    ? 'We certify that this academic transcript reflects the official grades recorded for the student named herein, according to the institutional academic records of Chanak International Academy for the corresponding school year.'
+    : 'Se certifica que el presente expediente académico refleja las calificaciones registradas oficialmente del estudiante indicado, de acuerdo con los registros académicos institucionales de Chanak International Academy para el año escolar correspondiente.';
+
   const certLines = doc.splitTextToSize(certText, W - PDF_MARGIN * 2);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
@@ -377,44 +369,51 @@ export function generateAnnualTranscriptPDF({
   y += certLines.length * 4.8 + 12;
 
   y = hrLine(doc, y, W);
-  y += 2;
 
-  // ── FIRMA — solo Dirección Académica ─────────────────────────────────────
+  // ── 7. FIRMA — SOLO DIRECCIÓN ACADÉMICA ─────────────────────────────────
+  // NO Secretaría · NO Registrar · NO Academic Office
+  y = pageBreak(doc, y, 55);
+
   const instInfo = getInstitutionInfo(settings);
   const dirName  = instInfo.directorName || 'Mariela Andrade';
   const dirTitle = lang === 'en' ? 'Academic Director' : 'Directora Académica';
-  const signatureBlockW = 85;
-
-  const sigLabel = lang === 'en'
-    ? 'Academic Director Signature / Seal'
-    : 'Firma de la Dirección / Sello';
+  const sigBlockLabel = lang === 'en'
+    ? 'Academic Director Signature and Institutional Seal'
+    : 'Firma de Dirección Académica y Sello Institucional';
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...PDF_NAVY);
-  doc.text(sigLabel, PDF_MARGIN, y);
-  y += 3;
+  doc.text(sigBlockLabel, PDF_MARGIN, y);
+  y += 4;
 
-  // Imagen de firma si existe
-  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 48, 18);
-  y += drewSig ? 16 : 13;
+  // Imagen de firma del director si existe en settings
+  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 50, 18);
+  y += drewSig ? 17 : 14;
 
   // Línea de firma
-  doc.setDrawColor(160, 182, 215);
+  doc.setDrawColor(160, 185, 215);
   doc.setLineWidth(0.5);
-  doc.line(PDF_MARGIN, y, PDF_MARGIN + signatureBlockW, y);
+  doc.line(PDF_MARGIN, y, PDF_MARGIN + 90, y);
   y += 5;
 
-  // Nombre, cargo, fecha
+  // Nombre, cargo, fecha de emisión
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...PDF_NAVY);
+  doc.text(dirName, PDF_MARGIN, y);
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(65, 80, 105);
-  doc.text(dirName,   PDF_MARGIN, y);
-  doc.text(dirTitle,  PDF_MARGIN, y + 5);
-  doc.text(`${lang === 'en' ? 'Date of Issue' : 'Fecha de Emisión'}: ${today}`, PDF_MARGIN, y + 10);
+  doc.setTextColor(75, 90, 115);
+  doc.text(dirTitle, PDF_MARGIN, y + 5.5);
+  doc.text(
+    `${lang === 'en' ? 'Date of Issue' : 'Fecha de Emisión'}: ${today}`,
+    PDF_MARGIN, y + 11,
+  );
 
-  // Sello a la derecha de la firma
-  addInstitutionSeal(doc, settings, PDF_MARGIN + signatureBlockW + 10, y - 10, 24, 24);
+  // Sello institucional a la derecha del bloque de firma
+  addInstitutionSeal(doc, settings, PDF_MARGIN + 100, y - 14, 24, 24);
 
   // ── Footer en todas las páginas ──────────────────────────────────────────
   applyOfficialFooterAllPages(doc, settings, {
