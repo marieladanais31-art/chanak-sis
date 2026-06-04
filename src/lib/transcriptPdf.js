@@ -212,6 +212,25 @@ export function generateTranscriptPDF({
     'Life Skills / Desarrollo Integral': [217, 119, 6],
     'Electives':                         [100, 116, 139], // slate
   };
+  // Etiquetas oficiales de bloques para PDFs externos (sin referencias a A.C.E.)
+  const OFFICIAL_BLOCK_LABELS = {
+    es: {
+      'Core A.C.E.':                      'Materias académicas',
+      'Extensión Local':                   'Extensión local',
+      'Life Skills':                       'Desarrollo integral',
+      'Life Skills / Desarrollo Integral': 'Desarrollo integral',
+      'Electives':                         'Materias electivas',
+    },
+    en: {
+      'Core A.C.E.':                      'Academic Subjects',
+      'Extensión Local':                   'Local Extension',
+      'Life Skills':                       'Integral Development',
+      'Life Skills / Desarrollo Integral': 'Integral Development',
+      'Electives':                         'Electives',
+    },
+  };
+  const getOfficialBlockLabel = (blk) =>
+    (OFFICIAL_BLOCK_LABELS[lang] || OFFICIAL_BLOCK_LABELS.es)[blk] || blk;
 
   const getCourseBlock = (c) => {
     const b = (c.academic_block || '').trim();
@@ -266,7 +285,7 @@ export function generateTranscriptPDF({
       autoTable(doc, {
         startY: y,
         head: [
-          [{ content: blk, colSpan: colHead.length, styles: { fillColor: blkColor, textColor: [255,255,255], fontStyle: 'bold', fontSize: 8 } }],
+          [{ content: getOfficialBlockLabel(blk), colSpan: colHead.length, styles: { fillColor: blkColor, textColor: [255,255,255], fontStyle: 'bold', fontSize: 8 } }],
           colHead,
         ],
         body: blkRows,

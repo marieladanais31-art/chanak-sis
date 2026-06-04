@@ -175,7 +175,10 @@ function ParentCalendarioPanel({ calendar }) {
   );
 }
 
+const BOLETIN_QUARTERS = ['Q1', 'Q2', 'Q3'];
+
 function ParentBoletinesPanel({ studentChildren }) {
+  const { toast } = useToast();
   const [transcripts, setTranscripts] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [downloading, setDownloading] = React.useState(null);
@@ -185,15 +188,18 @@ function ParentBoletinesPanel({ studentChildren }) {
     const ids = studentChildren.map(c => c.id);
     supabase
       .from('transcript_records')
-      .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations')
+      .select('id, student_id, school_year, quarter, language, status, gpa, academic_observations, published_at')
       .in('student_id', ids)
       .eq('status', 'published')
       .order('school_year', { ascending: false })
+      .order('quarter')
       .then(({ data }) => { setTranscripts(data || []); setLoading(false); });
   }, [studentChildren]);
 
-  const handleDownload = async (tr) => {
-    setDownloading(tr.id);
+  // Descarga boletín trimestral en el idioma seleccionado (ES o EN)
+  const handleDownloadQuarter = async (tr, lang) => {
+    const key = `${tr.id}-${lang}`;
+    setDownloading(key);
     try {
       const child = studentChildren.find(c => c.id === tr.student_id);
       const [coursesRes, settingsRes, creditsRes] = await Promise.all([
@@ -202,25 +208,75 @@ function ParentBoletinesPanel({ studentChildren }) {
         supabase.from('student_credits_summary').select('*').eq('student_id', tr.student_id),
       ]);
       const preparedSettings = await preloadImages(settingsRes.data);
-      if (import.meta.env.DEV) {
-        console.warn('[PDF SETTINGS CHECK]', {
-          generator:       'ParentBoletinesPanel',
-          hasLogo:         Boolean(preparedSettings?._logo64),
-          hasSeal:         Boolean(preparedSettings?._seal64),
-          hasSignature:    Boolean(preparedSettings?._signature64),
-          rawLogoUrl:      Boolean(preparedSettings?.logo_url),
-          rawSealUrl:      Boolean(preparedSettings?.seal_url),
-          rawSignatureUrl: Boolean(preparedSettings?.director_signature_url),
-        });
-      }
       generateTranscriptPDF({
         transcript: tr,
         courses: coursesRes.data || [],
         student: child || { id: tr.student_id },
         settings: preparedSettings,
         creditsSummary: creditsRes.data || [],
-        lang: tr.language || 'es',
+        lang,
       });
+    } catch (err) {
+      toast({ title: 'Error al descargar', description: err.message, variant: 'destructive' });
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  // Descarga PDF Histórico Anual con todos los trimestres publicados del año
+  const handleDownloadAnnual = async (childId, schoolYear, lang) => {
+    const key = `annual-${childId}-${schoolYear}-${lang}`;
+    setDownloading(key);
+    try {
+      const child = studentChildren.find(c => c.id === childId);
+      const [trRes, settingsRes] = await Promise.all([
+        supabase
+          .from('transcript_records')
+          .select('id, school_year, quarter, status')
+          .eq('student_id', childId)
+          .eq('school_year', schoolYear)
+          .in('quarter', BOLETIN_QUARTERS)
+          .eq('status', 'published')
+          .order('quarter'),
+        supabase.from('institutional_settings').select('*').limit(1).single(),
+      ]);
+      if (!trRes.data || trRes.data.length === 0) {
+        toast({ title: 'Sin boletines publicados', description: `No hay trimestres publicados para ${schoolYear}.`, variant: 'destructive' });
+        return;
+      }
+      const trIds = trRes.data.map(r => r.id);
+      const { data: coursesData } = await supabase
+        .from('transcript_courses')
+        .select('transcript_id, subject_name, final_grade, credits, subject_category, is_local_subject')
+        .in('transcript_id', trIds);
+
+      const courseMap = {};
+      (coursesData || []).forEach(c => {
+        if (!courseMap[c.transcript_id]) courseMap[c.transcript_id] = [];
+        courseMap[c.transcript_id].push(c);
+      });
+
+      const yearsForPdf = [{
+        school_year:    schoolYear,
+        grade_level:    child?.grade_level || null,
+        us_grade_level: child?.us_grade_level || child?.grade_level || null,
+        records: trRes.data.map(tr => ({
+          quarter:  tr.quarter,
+          subjects: courseMap[tr.id] || [],
+        })),
+      }];
+
+      const preparedSettings = await preloadImages(settingsRes.data);
+      const { generateAnnualTranscriptPDF } = await import('@/lib/annualTranscriptPdf');
+      generateAnnualTranscriptPDF({
+        student:     child || { id: childId },
+        years:       yearsForPdf,
+        settings:    preparedSettings,
+        isHighSchool: false,
+        lang,
+      });
+    } catch (err) {
+      toast({ title: 'Error al generar PDF Anual', description: err.message, variant: 'destructive' });
     } finally {
       setDownloading(null);
     }
@@ -234,24 +290,117 @@ function ParentBoletinesPanel({ studentChildren }) {
     </div>
   );
 
+  // Agrupar por estudiante → año escolar
+  const grouped = {};
+  transcripts.forEach(tr => {
+    if (!grouped[tr.student_id]) grouped[tr.student_id] = {};
+    if (!grouped[tr.student_id][tr.school_year]) grouped[tr.student_id][tr.school_year] = [];
+    grouped[tr.student_id][tr.school_year].push(tr);
+  });
+
   return (
-    <div className="space-y-4">
-      {transcripts.map(tr => {
-        const child = studentChildren.find(c => c.id === tr.student_id);
+    <div className="space-y-6">
+      {Object.entries(grouped).map(([sid, byYear]) => {
+        const child = studentChildren.find(c => c.id === sid);
         return (
-          <div key={tr.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center justify-between">
-            <div>
-              <p className="font-bold text-slate-800">{child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}</p>
-              <p className="text-sm text-slate-500">{tr.school_year} · {tr.quarter} · {tr.language?.toUpperCase() || 'ES'}</p>
+          <div key={sid} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Cabecera del estudiante */}
+            <div className="px-5 py-4 bg-slate-50 border-b border-slate-100">
+              <p className="font-black text-slate-800 text-lg">
+                {child ? `${child.first_name} ${child.last_name}` : 'Estudiante'}
+              </p>
             </div>
-            <button
-              onClick={() => handleDownload(tr)}
-              disabled={downloading === tr.id}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm disabled:opacity-50 transition-colors"
-            >
-              {downloading === tr.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              Descargar PDF
-            </button>
+
+            <div className="divide-y divide-slate-100">
+              {Object.entries(byYear)
+                .sort(([a], [b]) => b.localeCompare(a))
+                .map(([schoolYear, quarters]) => {
+                  const publishedQs = quarters.map(q => q.quarter);
+                  const annualKey   = `annual-${sid}-${schoolYear}`;
+                  return (
+                    <div key={schoolYear} className="p-5">
+                      {/* Año escolar + badges + botones PDF Anual */}
+                      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+                        <div>
+                          <p className="font-bold text-slate-700 text-sm uppercase tracking-wider mb-2">{schoolYear}</p>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {BOLETIN_QUARTERS.map(q => (
+                              <span key={q} className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                                publishedQs.includes(q)
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : 'bg-slate-50 text-slate-400 border-slate-200'
+                              }`}>
+                                {q} {publishedQs.includes(q) ? '✓' : '·'}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {/* PDF Histórico Anual (solo si hay al menos 1 trimestre publicado) */}
+                        {publishedQs.length > 0 && (
+                          <div className="flex gap-2 flex-wrap">
+                            {['es', 'en'].map(lang => (
+                              <button
+                                key={lang}
+                                onClick={() => handleDownloadAnnual(sid, schoolYear, lang)}
+                                disabled={!!downloading?.startsWith(annualKey)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs disabled:opacity-50 transition-colors"
+                              >
+                                {downloading === `${annualKey}-${lang}`
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <Download className="w-3 h-3" />
+                                }
+                                PDF Anual {lang.toUpperCase()}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Tarjetas de boletines trimestrales */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {BOLETIN_QUARTERS.map(q => {
+                          const tr = quarters.find(t => t.quarter === q);
+                          if (!tr) return (
+                            <div key={q} className="p-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center flex flex-col items-center justify-center gap-1 min-h-[90px]">
+                              <p className="text-xs font-bold text-slate-400">{q}</p>
+                              <p className="text-[10px] text-slate-400">Pendiente de publicación</p>
+                            </div>
+                          );
+                          return (
+                            <div key={q} className="p-4 rounded-xl border border-slate-200 bg-white flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                <p className="font-bold text-slate-700 text-sm">{tr.quarter}</p>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 font-bold border border-green-200">
+                                  Publicado
+                                </span>
+                              </div>
+                              {tr.gpa !== null && tr.gpa !== undefined && (
+                                <p className="text-xs text-purple-700 font-bold">GPA: {Number(tr.gpa).toFixed(2)}</p>
+                              )}
+                              <div className="flex gap-1.5 flex-wrap">
+                                {['es', 'en'].map(lang => (
+                                  <button
+                                    key={lang}
+                                    onClick={() => handleDownloadQuarter(tr, lang)}
+                                    disabled={downloading === `${tr.id}-${lang}`}
+                                    className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] disabled:opacity-50 transition-colors"
+                                  >
+                                    {downloading === `${tr.id}-${lang}`
+                                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                                      : null
+                                    }
+                                    PDF {lang.toUpperCase()}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         );
       })}
