@@ -266,7 +266,7 @@ function severityClass(severity) {
   return 'bg-blue-50 text-blue-700 border-blue-200';
 }
 
-function ParentAlertasPanel({ studentChildren, paceProjection }) {
+function ParentAlertasPanel({ studentChildren, paceProjection, computedOverdue = [] }) {
   const [alerts, setAlerts] = React.useState([]);
   const [corrections, setCorrections] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -306,19 +306,21 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
     loadAlerts();
   }, [studentChildren]);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const overduePaces = (paceProjection || []).filter((pace) => {
-    if (!studentChildren?.some((child) => child.id === pace.student_id)) return false;
-    if (['completed', 'approved', 'delivered'].includes((pace.status || '').toLowerCase())) return false;
-    if ((pace.status || '').toLowerCase() === 'overdue') return true;
-    const due = pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date;
-    if (!due) return false;
-    const dueDate = new Date(due);
-    if (Number.isNaN(dueDate.getTime())) return false;
-    dueDate.setHours(0, 0, 0, 0);
-    return dueDate < today;
-  });
+  // Usa el pre-calculado del componente padre (quarter-based) en lugar de solo fecha
+  const overduePaces = computedOverdue.length > 0
+    ? computedOverdue.filter(p => studentChildren?.some(c => c.id === p.student_id))
+    : (paceProjection || []).filter((pace) => {
+        if (!studentChildren?.some((child) => child.id === pace.student_id)) return false;
+        if (['completed', 'approved', 'delivered', 'evaluated'].includes((pace.status || '').toLowerCase())) return false;
+        if ((pace.status || '').toLowerCase() === 'overdue') return true;
+        const due = pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date;
+        if (!due) return false;
+        const dueDate = new Date(due);
+        if (Number.isNaN(dueDate.getTime())) return false;
+        dueDate.setHours(0, 0, 0, 0);
+        const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+        return dueDate < todayD;
+      });
 
   const getChildName = (studentId) => {
     const child = studentChildren.find((item) => item.id === studentId);
@@ -357,7 +359,7 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
           {corrections.map((item) => (
             <div key={item.id} className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-800">
               <p className="text-xs font-black uppercase tracking-wider">{getChildName(item.student_id)} · {item.subject_name}</p>
-              <p className="font-bold mt-1">{item.evidence_type}{item.pace_number ? ` · PACE ${item.pace_number}` : ''}</p>
+              <p className="font-bold mt-1">{item.evidence_type}{item.pace_number ? ` · Evaluación #${item.pace_number}` : ''}</p>
               <p className="text-sm font-medium mt-1">{item.reviewer_comment || 'Chanak solicitó corrección o repetición de esta evidencia.'}</p>
             </div>
           ))}
@@ -366,14 +368,43 @@ function ParentAlertasPanel({ studentChildren, paceProjection }) {
 
       {overduePaces.length > 0 && (
         <section className="space-y-3">
-          <h3 className="font-black text-slate-800 flex items-center gap-2"><Hourglass className="w-5 h-5 text-red-500" /> PACEs atrasados según proyección</h3>
-          {overduePaces.map((pace) => (
-            <div key={pace.id} className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800">
-              <p className="text-xs font-black uppercase tracking-wider">{getChildName(pace.student_id)} · {pace.quarter || 'Quarter pendiente'}</p>
-              <p className="font-bold mt-1">{pace.subject_name || 'Materia'}{pace.pace_number ? ` · PACE ${pace.pace_number}` : ''}</p>
-              <p className="text-sm font-medium mt-1">Fecha proyectada: {pace.projected_completion_date || pace.estimated_delivery_date || pace.due_date || 'sin fecha'}</p>
-            </div>
-          ))}
+          <h3 className="font-black text-slate-800 flex items-center gap-2">
+            <Hourglass className="w-5 h-5 text-red-500" /> Evaluaciones vencidas / retrasadas
+          </h3>
+          {/* Agrupar por estudiante para no mostrar lista individual */}
+          {(() => {
+            const byChild = {};
+            overduePaces.forEach(p => {
+              if (!byChild[p.student_id]) byChild[p.student_id] = [];
+              byChild[p.student_id].push(p);
+            });
+            return Object.entries(byChild).map(([studentId, paces]) => {
+              const byQ = { Q1: [], Q2: [], Q3: [] };
+              paces.forEach(p => { if (byQ[p.quarter]) byQ[p.quarter].push(p); });
+              return (
+                <div key={studentId} className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-800 space-y-2">
+                  <p className="font-black text-sm">{getChildName(studentId)} — {paces.length} evaluación{paces.length !== 1 ? 'es' : ''} vencida{paces.length !== 1 ? 's' : ''}</p>
+                  {['Q1','Q2','Q3'].map(q => {
+                    const qPaces = byQ[q];
+                    if (!qPaces.length) return null;
+                    const subjGroups = {};
+                    qPaces.forEach(p => { if (!subjGroups[p.subject_name]) subjGroups[p.subject_name] = []; subjGroups[p.subject_name].push(p); });
+                    return (
+                      <div key={q} className="text-xs font-bold">
+                        <span className="text-red-600 uppercase tracking-wider">{q}: </span>
+                        {Object.entries(subjGroups).map(([subj, ps]) => (
+                          <span key={subj} className="mr-2">{subj} ({ps.map(p => `#${p.pace_number}`).join(', ')})</span>
+                        ))}
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs text-red-600 font-medium mt-1">
+                    Para reportar avance, usa la pestaña <strong>Evidencias</strong> o haz clic en "Ver Evaluaciones" en la tarjeta del estudiante.
+                  </p>
+                </div>
+              );
+            });
+          })()}
         </section>
       )}
     </div>
@@ -533,11 +564,12 @@ function ParentDocumentosPanel({ studentChildren }) {
         supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id),
         supabase.from('institutional_settings').select('*').limit(1).single(),
       ]);
+      const settingsWithImages = await preloadImages(settingsRes.data || null);
       generatePeiPDF({
         pei,
         paces: pacesRes.data || [],
         student: child || { first_name: '', last_name: '' },
-        settings: settingsRes.data || null,
+        settings: settingsWithImages,
         lang,
       });
     } catch (err) {
@@ -790,6 +822,16 @@ export default function ParentDashboard() {
 
   const [selectedChildId, setSelectedChildId] = useState('');
 
+  // ── Modal de evaluaciones proyectadas del PEI ─────────────────────────────
+  const [paceProjectionModal, setPaceProjectionModal] = useState(null); // { childId, childName }
+  const [evalQFilter, setEvalQFilter]     = useState('all');
+  const [evalSubjFilter, setEvalSubjFilter] = useState('all');
+  const [evalStatusFilter, setEvalStatusFilter] = useState('all');
+
+  // ── Descarga inline de documentos ES/EN desde tarjeta ────────────────────
+  const [downloadingDoc,  setDownloadingDoc]  = useState(null);
+  const [docDropdownOpen, setDocDropdownOpen] = useState(null); // 'pei|{childId}' | 'carta|{childId}' | 'contrato|{childId}'
+
   useEffect(() => {
     if (!profile) return;
 
@@ -837,51 +879,101 @@ export default function ParentDashboard() {
       : d.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
+  // ── Trimestre actual desde academic_calendars o fallback por mes ──────────
+  const getCurrentQuarter = () => {
+    const cal = schoolCalendar;
+    const today = new Date().toISOString().slice(0, 10);
+    if (cal) {
+      if (cal.q1_start_date && cal.q1_end_date && today >= cal.q1_start_date && today <= cal.q1_end_date) return 'Q1';
+      if (cal.q2_start_date && cal.q2_end_date && today >= cal.q2_start_date && today <= cal.q2_end_date) return 'Q2';
+      if (cal.q3_start_date && cal.q3_end_date && today >= cal.q3_start_date && today <= cal.q3_end_date) return 'Q3';
+      if (cal.q2_end_date && today > cal.q2_end_date) return 'Q3';
+      if (cal.q1_end_date && today > cal.q1_end_date) return 'Q2';
+      return 'Q1';
+    }
+    // Fallback: mes del año (España: sep–dic Q1, ene–mar Q2, abr–jun Q3)
+    const m = new Date().getMonth() + 1;
+    if (m >= 9) return 'Q1';
+    if (m <= 3) return 'Q2';
+    return 'Q3';
+  };
+  const QUARTER_ORDER = { Q1: 1, Q2: 2, Q3: 3 };
+
+  const isPaceOverdue = (p) => {
+    const DONE = ['evaluated', 'cancelled', 'approved'];
+    if (DONE.includes(p.status) || p.grade_obtained != null) return false;
+    const today = new Date().toISOString().slice(0, 10);
+    if (p.due_date && p.due_date < today) return true;
+    const curQ = getCurrentQuarter();
+    if ((QUARTER_ORDER[p.quarter] || 0) < (QUARTER_ORDER[curQ] || 0)) return true;
+    return false;
+  };
+
+  const isPaceCompleted = (p) => {
+    return ['evaluated', 'cancelled', 'approved'].includes(p.status) || p.grade_obtained != null;
+  };
+
+  // Evaluaciones vencidas calculadas con lógica quarter-based.
+  // DEBE ir DESPUÉS de isPaceCompleted e isPaceOverdue para evitar ReferenceError.
+  const computedOverduePaces = paceProjection.filter(
+    (p) => (children || []).some((c) => c.id === p.student_id) && !isPaceCompleted(p) && isPaceOverdue(p)
+  );
+
   const getStudentStats = (childId) => {
     const childPaces = paceProjection.filter((p) => p.student_id === childId);
-    // 'evaluated' o nota asignada = completado
-    const completed = childPaces.filter(
-      (p) => p.status === 'evaluated' || p.grade_obtained != null
-    ).length;
-    const planned = childPaces.length;
-    // 'delayed' o fecha vencida y no evaluado = atrasado
-    const today = new Date().toISOString().slice(0, 10);
-    const overdue = childPaces.filter(
-      (p) =>
-        p.status === 'delayed' ||
-        (
-          p.status !== 'evaluated' &&
-          p.grade_obtained == null &&
-          (p.due_date || p.completion_date) &&
-          (p.due_date || p.completion_date) < today
-        )
-    ).length;
-
-    return {
-      completed,
-      planned,
-      overdue,
-      isOnTrack: overdue === 0
-    };
+    const completed  = childPaces.filter(isPaceCompleted).length;
+    const overdue    = childPaces.filter((p) => !isPaceCompleted(p) && isPaceOverdue(p)).length;
+    return { completed, planned: childPaces.length, overdue, isOnTrack: overdue === 0 };
   };
 
   const getChildPaymentsStatus = (childId) => {
     const childPayments = paymentStatus.filter((p) => p.student_id === childId);
-    const totalDue = childPayments.reduce((sum, p) => sum + Number(p.due_amount || 0), 0);
-    const totalPaid = childPayments.reduce((sum, p) => sum + Number(p.paid_amount || 0), 0);
-    const saldoPendiente = Math.max(0, totalDue - totalPaid);
-    const hasPendingBalance = childPayments.some(
-      (p) =>
-        ['pending', 'overdue'].includes((p.status || '').toLowerCase()) ||
-        Number(p.due_amount || 0) > Number(p.paid_amount || 0)
+    // Solo pending/overdue cuentan como saldo adeudado
+    const pendingPayments = childPayments.filter(
+      (p) => ['pending', 'overdue'].includes((p.status || '').toLowerCase())
     );
+    const saldoPendiente = pendingPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    const hasPendingBalance = pendingPayments.length > 0;
 
     return {
-      totalDue,
-      totalPaid,
       saldoPendiente,
-      hasPendingBalance
+      hasPendingBalance,
+      pendingPayments,
+      childPayments,
     };
+  };
+
+  // ── Descarga inline ES/EN desde tarjeta ──────────────────────────────────
+  const handleCardDownloadDoc = async (child, docType, lang) => {
+    const key = `${docType}-${child.id}-${lang}`;
+    setDownloadingDoc(key);
+    setDocDropdownOpen(null);
+    try {
+      const { data: rawSettings } = await supabase.from('institutional_settings').select('*').limit(1).single();
+      const settingsWithImages = await preloadImages(rawSettings);
+      if (docType === 'pei') {
+        const pei = officialDocuments.peis.find((d) => d.student_id === child.id);
+        if (!pei) { toast({ title: 'PEI no publicado', variant: 'destructive' }); return; }
+        const { generatePeiPDF } = await import('@/lib/peiPdf');
+        const { data: paces } = await supabase.from('pei_pace_projections').select('*').eq('pei_id', pei.id);
+        generatePeiPDF({ pei, paces: paces || [], student: child, settings: settingsWithImages, lang });
+      } else if (docType === 'carta') {
+        const letter = officialDocuments.letters.find((d) => d.student_id === child.id);
+        if (!letter) { toast({ title: 'Carta no publicada', variant: 'destructive' }); return; }
+        const { generateEnrollmentLetterPDF } = await import('@/lib/enrollmentLetterPdf');
+        generateEnrollmentLetterPDF({ letter, student: child, settings: settingsWithImages, lang });
+      } else if (docType === 'contrato') {
+        const contract = officialDocuments.contracts.find((d) => d.student_id === child.id);
+        if (!contract) { toast({ title: 'Contrato no publicado', variant: 'destructive' }); return; }
+        const { generateContractPDF } = await import('@/lib/contractPdf');
+        generateContractPDF({ contract, student: child, settings: settingsWithImages, lang });
+      }
+    } catch (err) {
+      console.error('[CardDocDownload]', err);
+      toast({ title: 'Error al generar documento', description: err.message, variant: 'destructive' });
+    } finally {
+      setDownloadingDoc(null);
+    }
   };
 
   const loadData = async () => {
@@ -1001,8 +1093,8 @@ export default function ParentDashboard() {
 
       // Tablas complementarias — errores no fatales. Documentos oficiales vienen de módulos Admin.
       const [paymentStatusRes, paceProjectionRes, officialPeisRes, officialContractsRes, officialLettersRes, officialTranscriptsRes] = await Promise.all([
-        supabase.from('payment_status').select('id, student_id, billing_month, due_date, due_amount, paid_amount, status').in('student_id', studentIds),
-        supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date').in('student_id', studentIds),
+        supabase.from('student_payments').select('id, student_id, school_year, concept, payment_type, amount, currency, status, balance_status, due_date, paid_at, stripe_payment_link_url, notes').in('student_id', studentIds),
+        supabase.from('pei_pace_projections').select('id, student_id, school_year, subject_name, pace_number, quarter, status, projected_completion_date, estimated_delivery_date, pages_per_day').in('student_id', studentIds),
         supabase.from('individualized_education_plans').select('id, student_id, school_year, status').in('student_id', studentIds).eq('status', 'published'),
         supabase.from('enrollment_contracts').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'signed', 'published']),
         supabase.from('enrollment_letters').select('id, student_id, school_year, status').in('student_id', studentIds).in('status', ['sent', 'published']),
@@ -1016,11 +1108,11 @@ export default function ParentDashboard() {
         letters: officialLettersRes.error ? [] : (officialLettersRes.data || []),
         transcripts: officialTranscriptsRes.error ? [] : (officialTranscriptsRes.data || []),
       });
-      // pei_pace_projections no tiene due_date — map para compatibilidad
+      // pei_pace_projections — map due_date para compatibilidad legacy
       setPaceProjection(
         paceProjectionRes.error ? [] : (paceProjectionRes.data || []).map(p => ({
           ...p,
-          due_date: p.projected_completion_date || null,
+          due_date: p.estimated_delivery_date || p.projected_completion_date || null,
           completion_date: p.projected_completion_date || null,
           pillar_type: p.pillar_type || '',
         }))
@@ -1111,13 +1203,14 @@ export default function ParentDashboard() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex gap-1 overflow-x-auto scrollbar-none">
             {[
-              { id: 'children',   label: '👥 Mis Hijos',         Icon: Users      },
-              { id: 'documentos', label: '📋 Documentos',         Icon: Scale      },
-              { id: 'boletines',  label: '📄 Boletines',          Icon: null       },
-              { id: 'evidencias', label: 'Evidencias',            Icon: FileUp     },
-              { id: 'recursos',   label: 'Recursos',              Icon: Link2      },
-              { id: 'alertas',    label: 'Alertas',               Icon: Bell       },
-              { id: 'calendario', label: 'Calendario',            Icon: CalendarDays },
+              { id: 'children',      label: '👥 Mis Hijos',         Icon: Users        },
+              { id: 'documentos',    label: '📋 Documentos',         Icon: Scale        },
+              { id: 'evaluaciones',  label: '📊 Evaluaciones',       Icon: BookOpen     },
+              { id: 'boletines',     label: '📄 Boletines',          Icon: null         },
+              { id: 'evidencias',    label: 'Evidencias',            Icon: FileUp       },
+              { id: 'recursos',      label: 'Recursos',              Icon: Link2        },
+              { id: 'alertas',       label: 'Alertas',               Icon: Bell         },
+              { id: 'calendario',    label: 'Calendario',            Icon: CalendarDays },
             ].map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -1163,7 +1256,7 @@ export default function ParentDashboard() {
           /* Secciones globales accesibles aunque no haya hijos vinculados aún */
           <div className="space-y-4">
             {activeTab === 'recursos' && <ParentRecursosPanel links={operationalLinks} />}
-            {activeTab === 'alertas' && <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} />}
+            {activeTab === 'alertas' && <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} computedOverdue={computedOverduePaces} />}
             {activeTab === 'calendario' && <ParentCalendarioPanel calendar={schoolCalendar} />}
           </div>
         ) : (
@@ -1238,10 +1331,10 @@ export default function ParentDashboard() {
                               <Activity className="w-8 h-8 shrink-0" style={{ color: '#193D6D' }} />
                               <div>
                                 <p className="text-sm font-black uppercase tracking-wider" style={{ color: '#193D6D' }}>
-                                  Progreso PACE
+                                  Progreso de Evaluaciones
                                 </p>
                                 <p className="text-xs font-bold mt-0.5" style={{ color: '#20B2AA' }}>
-                                  PACE Actual: {currentPaceRecord.pace_number || 'N/A'} | Estado:{' '}
+                                  Evaluación actual: #{currentPaceRecord.pace_number || 'N/A'} | Estado:{' '}
                                   {currentPaceRecord.status || 'N/A'}
                                   <br />
                                   Proyección: {formatDate(currentPaceRecord.due_date || currentPaceRecord.completion_date)}
@@ -1257,8 +1350,8 @@ export default function ParentDashboard() {
                                 </p>
                                 <p className="text-xs font-bold text-slate-500 mt-0.5">
                                   {stats.planned > 0
-                                    ? `${stats.completed}/${stats.planned} PACEs proyectados`
-                                    : 'Sin datos de PACE proyectados'}
+                                    ? `${stats.completed}/${stats.planned} evaluaciones proyectadas`
+                                    : 'Sin evaluaciones proyectadas'}
                                 </p>
                               </div>
                             </div>
@@ -1272,7 +1365,7 @@ export default function ParentDashboard() {
                                   🚨 Pagos Pendientes
                                 </p>
                                 <p className="text-xs font-bold text-red-600 mt-0.5">
-                                  Saldo total adeudado: ${saldoPendiente.toFixed(2)}
+                                  Saldo pendiente: {saldoPendiente.toFixed(2)} €
                                 </p>
                               </div>
                             </div>
@@ -1280,63 +1373,15 @@ export default function ParentDashboard() {
                         </div>
                       </div>
 
-                      {/* ── PACEs proyectadas por trimestre ── */}
-                      {(() => {
-                        const childPaces = paceProjection.filter((p) => p.student_id === child.id);
-                        const today = new Date().toISOString().slice(0, 10);
-                        if (childPaces.length === 0) {
-                          return (
-                            <div className="px-6 pb-4">
-                              <p className="text-xs text-slate-400 italic">
-                                Aún no hay PACEs proyectadas para este estudiante. El equipo académico las configurará próximamente.
-                              </p>
-                            </div>
-                          );
-                        }
-                        const byQuarter = { Q1: [], Q2: [], Q3: [] };
-                        childPaces.forEach(p => {
-                          const q = p.quarter;
-                          if (byQuarter[q]) byQuarter[q].push(p);
-                        });
-                        return (
-                          <div className="px-6 pb-4 space-y-3">
-                            {['Q1','Q2','Q3'].map(q => {
-                              const paces = byQuarter[q];
-                              if (!paces.length) return null;
-                              return (
-                                <div key={q}>
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Trimestre {q.replace('Q','')}</p>
-                                  <div className="space-y-1">
-                                    {paces.map(p => {
-                                      const isCompleted = p.status === 'evaluated' || p.grade_obtained != null;
-                                      const dueDate     = p.due_date || p.completion_date;
-                                      const isOverdue   = !isCompleted && dueDate && dueDate < today;
-                                      return (
-                                        <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
-                                          <span className="text-slate-700 truncate flex-1">
-                                            <span className="font-bold">{p.subject_name || '—'}</span>
-                                            {p.pace_number ? ` · #${p.pace_number}` : ''}
-                                          </span>
-                                          {dueDate && (
-                                            <span className="text-slate-400 shrink-0">{new Date(dueDate).toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}</span>
-                                          )}
-                                          <span className={`shrink-0 px-1.5 py-0.5 rounded font-bold text-[10px] ${
-                                            isCompleted ? 'bg-emerald-100 text-emerald-700' :
-                                            isOverdue   ? 'bg-red-100 text-red-700' :
-                                                          'bg-slate-100 text-slate-500'
-                                          }`}>
-                                            {isCompleted ? '✓ Listo' : isOverdue ? '⚠ Atrasado' : 'Pendiente'}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
+                      {/* ── Tira de progreso compacta (sin lista) ── */}
+                      {stats.planned > 0 && stats.overdue > 0 && (
+                        <div className="mx-6 mb-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+                          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                          <p className="text-xs font-bold text-red-700">
+                            {stats.overdue} evaluación{stats.overdue !== 1 ? 'es' : ''} vencida{stats.overdue !== 1 ? 's' : ''} — pulse "Ver Evaluaciones"
+                          </p>
+                        </div>
+                      )}
 
                       <div className="p-4 bg-slate-50 grid grid-cols-2 lg:grid-cols-3 gap-2 shrink-0">
                         <button
@@ -1357,12 +1402,20 @@ export default function ParentDashboard() {
                         <button
                           onClick={() => {
                             setSelectedChildId(child.id);
-                            setSubjectSelectionStep(true);
+                            setEvalQFilter('all');
+                            setEvalSubjFilter('all');
+                            setEvalStatusFilter('all');
+                            setPaceProjectionModal({ childId: child.id, childName: `${child.first_name} ${child.last_name}` });
                           }}
-                          className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                          className="p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group relative"
                         >
                           <BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform text-[#20B2AA]" />
                           <span className="text-xs font-bold text-slate-700">Ver Evaluaciones</span>
+                          {stats.overdue > 0 && (
+                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                              {stats.overdue > 9 ? '9+' : stats.overdue}
+                            </span>
+                          )}
                         </button>
 
                         <button
@@ -1382,62 +1435,83 @@ export default function ParentDashboard() {
                           <span className="text-xs font-bold text-slate-700">Pagos</span>
                         </button>
 
-                        <button
-                          onClick={() => setActiveTab('documentos')}
-                          title={hasPeiPublished ? 'Ver PEI oficial publicado' : 'Aún no hay PEI publicado'}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
-                            hasPeiPublished
-                              ? 'bg-white border-slate-200 hover:shadow-md'
-                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
+                        {/* ── PEI oficial ES/EN ── */}
+                        <div className="relative">
                           {hasPeiPublished ? (
-                            <Download className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />
+                            <button
+                              onClick={() => setDocDropdownOpen(docDropdownOpen === `pei|${child.id}` ? null : `pei|${child.id}`)}
+                              className="w-full p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                            >
+                              {downloadingDoc?.startsWith(`pei-${child.id}`)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                                : <Download className="w-5 h-5 text-purple-600 group-hover:scale-110 transition-transform" />}
+                              <span className="text-xs font-bold text-slate-700">PEI oficial</span>
+                            </button>
                           ) : (
-                            <Hourglass className="w-5 h-5 text-slate-400" />
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2">
+                              <Hourglass className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs font-bold text-center text-slate-500">PEI pendiente</span>
+                            </div>
                           )}
-                          <span className={`text-xs font-bold text-center ${hasPeiPublished ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasPeiPublished ? 'PEI oficial' : 'Aún no hay PEI publicado'}
-                          </span>
-                        </button>
+                          {docDropdownOpen === `pei|${child.id}` && (
+                            <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                              <button onClick={() => handleCardDownloadDoc(child, 'pei', 'es')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇪🇸 Español</button>
+                              <button onClick={() => handleCardDownloadDoc(child, 'pei', 'en')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇬🇧 English</button>
+                            </div>
+                          )}
+                        </div>
 
-                        <button
-                          onClick={() => setActiveTab('documentos')}
-                          title={hasEnrollmentPublished ? 'Ver carta oficial publicada' : 'Confirmación de matrícula pendiente'}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
-                            hasEnrollmentPublished
-                              ? 'bg-white border-slate-200 hover:shadow-md'
-                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
+                        {/* ── Carta de matrícula ES/EN ── */}
+                        <div className="relative">
                           {hasEnrollmentPublished ? (
-                            <FileSignature className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                            <button
+                              onClick={() => setDocDropdownOpen(docDropdownOpen === `carta|${child.id}` ? null : `carta|${child.id}`)}
+                              className="w-full p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                            >
+                              {downloadingDoc?.startsWith(`carta-${child.id}`)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+                                : <FileSignature className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />}
+                              <span className="text-xs font-bold text-slate-700">Carta matrícula</span>
+                            </button>
                           ) : (
-                            <Hourglass className="w-5 h-5 text-slate-400" />
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2">
+                              <Hourglass className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs font-bold text-center text-slate-500">Carta pendiente</span>
+                            </div>
                           )}
-                          <span className={`text-xs font-bold text-center ${hasEnrollmentPublished ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasEnrollmentPublished ? 'Carta de matrícula' : 'Confirmación de matrícula pendiente'}
-                          </span>
-                        </button>
+                          {docDropdownOpen === `carta|${child.id}` && (
+                            <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                              <button onClick={() => handleCardDownloadDoc(child, 'carta', 'es')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇪🇸 Español</button>
+                              <button onClick={() => handleCardDownloadDoc(child, 'carta', 'en')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇬🇧 English</button>
+                            </div>
+                          )}
+                        </div>
 
-                        <button
-                          onClick={() => setActiveTab('documentos')}
-                          title={hasContractOfficial ? 'Ver contrato oficial enviado o firmado' : 'Contrato pendiente'}
-                          className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all group ${
-                            hasContractOfficial
-                              ? 'bg-white border-slate-200 hover:shadow-md'
-                              : 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
-                          }`}
-                        >
+                        {/* ── Contrato oficial ES/EN ── */}
+                        <div className="relative">
                           {hasContractOfficial ? (
-                            <Scale className="w-5 h-5 text-[#193D6D] group-hover:scale-110 transition-transform" />
+                            <button
+                              onClick={() => setDocDropdownOpen(docDropdownOpen === `contrato|${child.id}` ? null : `contrato|${child.id}`)}
+                              className="w-full p-3 bg-white rounded-xl border border-slate-200 hover:shadow-md flex flex-col items-center gap-2 transition-all group"
+                            >
+                              {downloadingDoc?.startsWith(`contrato-${child.id}`)
+                                ? <Loader2 className="w-5 h-5 animate-spin text-[#193D6D]" />
+                                : <Scale className="w-5 h-5 text-[#193D6D] group-hover:scale-110 transition-transform" />}
+                              <span className="text-xs font-bold text-slate-700">Contrato</span>
+                            </button>
                           ) : (
-                            <Hourglass className="w-5 h-5 text-slate-400" />
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 opacity-60 flex flex-col items-center gap-2">
+                              <Hourglass className="w-5 h-5 text-slate-400" />
+                              <span className="text-xs font-bold text-center text-slate-500">Contrato pendiente</span>
+                            </div>
                           )}
-                          <span className={`text-xs font-bold text-center ${hasContractOfficial ? 'text-slate-700' : 'text-slate-500'}`}>
-                            {hasContractOfficial ? 'Contrato oficial' : 'Contrato pendiente'}
-                          </span>
-                        </button>
+                          {docDropdownOpen === `contrato|${child.id}` && (
+                            <div className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden">
+                              <button onClick={() => handleCardDownloadDoc(child, 'contrato', 'es')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇪🇸 Español</button>
+                              <button onClick={() => handleCardDownloadDoc(child, 'contrato', 'en')} className="w-full px-3 py-2 text-xs font-bold text-left hover:bg-slate-50 text-slate-700">🇬🇧 English</button>
+                            </div>
+                          )}
+                        </div>
 
                         <button
                           onClick={() => {
@@ -1472,8 +1546,100 @@ export default function ParentDashboard() {
               </div>
             )}
 
+            {activeTab === 'evaluaciones' && (
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 text-blue-900">
+                  <div className="flex items-start gap-3">
+                    <BookOpen className="w-5 h-5 mt-0.5 shrink-0 text-blue-600" />
+                    <div>
+                      <h2 className="font-black text-lg">Evaluaciones por trimestre</h2>
+                      <p className="text-sm font-medium mt-1">
+                        Aquí puedes consultar las notas parciales de las materias de tu hijo/a.
+                        Las calificaciones son registradas por los tutores y validadas por la coordinación de Chanak Academy.
+                        Este registro es un proceso interno de seguimiento académico; el boletín oficial lo emite Chanak al cierre de cada trimestre.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {children.map((child) => {
+                  const childSubjects = getChildSubjects(child.id, selectedAcademicQuarter);
+                  return (
+                    <div key={child.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="font-black text-slate-800 text-lg">{child.first_name} {child.last_name}</h3>
+                          <p className="text-xs text-slate-500 font-bold mt-0.5">{child.grade_level || ''}{child.grade_level && child.us_grade_level ? ' · ' : ''}{child.us_grade_level || ''}</p>
+                        </div>
+                        <select
+                          value={selectedAcademicQuarter}
+                          onChange={(e) => setSelectedAcademicQuarter(e.target.value)}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-700"
+                        >
+                          {QUARTERS.map((q) => <option key={q.id} value={q.id}>{q.id}</option>)}
+                        </select>
+                      </div>
+                      {childSubjects.length === 0 ? (
+                        <div className="p-10 text-center text-slate-400 text-sm italic">
+                          Sin materias registradas para {selectedAcademicQuarter}.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {childSubjects.map((subject) => {
+                            const statusMap = {
+                              approved:           { label: 'Aprobado',          cls: 'bg-emerald-100 text-emerald-700' },
+                              submitted:          { label: 'En revisión',       cls: 'bg-amber-100 text-amber-700' },
+                              rejected:           { label: 'Observado',         cls: 'bg-red-100 text-red-700' },
+                              revision_requested: { label: 'Corrección solicit.', cls: 'bg-orange-100 text-orange-700' },
+                              draft:              { label: 'Pendiente',         cls: 'bg-slate-100 text-slate-500' },
+                            };
+                            const st = statusMap[subject.grade_submission_status || 'draft'];
+                            return (
+                              <button
+                                key={subject.id}
+                                onClick={() => {
+                                  setSelectedStudentSubjectForEntries(subject);
+                                  setSelectedChildId(child.id);
+                                  setIsGradeEntriesModalOpen(true);
+                                }}
+                                className="w-full p-4 text-left hover:bg-slate-50 transition-colors group"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="font-bold text-slate-800 group-hover:text-[#193D6D]">{subject.subject_name}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                      {subject.academic_block || subject.category || 'General'}
+                                      {subject.grade != null ? ` · Promedio: ${Number(subject.grade).toFixed(1)}` : ''}
+                                    </p>
+                                  </div>
+                                  <span className={`shrink-0 text-xs font-black px-2.5 py-1 rounded-full ${st.cls}`}>{st.label}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {activeTab === 'boletines' && (
-              <ParentBoletinesPanel studentChildren={children} />
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-slate-700">
+                  <div className="flex items-start gap-3">
+                    <FileText className="w-5 h-5 mt-0.5 shrink-0 text-slate-500" />
+                    <div>
+                      <h2 className="font-black text-lg text-slate-800">Boletines oficiales</h2>
+                      <p className="text-sm font-medium mt-1">
+                        Los boletines académicos son documentos oficiales emitidos por Chanak Academy una vez cerrado el trimestre.
+                        Solo la coordinación puede publicarlos. Cuando estén disponibles podrás descargarlos en formato PDF.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <ParentBoletinesPanel studentChildren={children} />
+              </div>
             )}
 
             {activeTab === 'documentos' && (
@@ -1481,11 +1647,26 @@ export default function ParentDashboard() {
             )}
 
             {activeTab === 'evidencias' && (
-              <ParentEvidencePanel
-                studentChildren={children}
-                studentSubjects={studentSubjects}
-                initialStudentId={selectedChildId}
-              />
+              <div className="space-y-4">
+                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-5 text-teal-900">
+                  <div className="flex items-start gap-3">
+                    <FileUp className="w-5 h-5 mt-0.5 shrink-0 text-teal-600" />
+                    <div>
+                      <h2 className="font-black text-lg">Reporte de evidencias académicas</h2>
+                      <p className="text-sm font-medium mt-1">
+                        La familia actúa como supervisor primario de aprendizaje. Aquí puedes reportar las evidencias de las
+                        evaluaciones completadas por tu hijo/a. Chanak Academy revisa y valida cada evidencia antes de registrarla
+                        oficialmente. Este formulario no crea notas finales directamente.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <ParentEvidencePanel
+                  studentChildren={children}
+                  studentSubjects={studentSubjects}
+                  initialStudentId={selectedChildId}
+                />
+              </div>
             )}
 
             {activeTab === 'recursos' && (
@@ -1507,7 +1688,7 @@ export default function ParentDashboard() {
                   <Bell className="w-5 h-5 text-amber-500" />
                   <h2 className="font-black text-xl text-slate-800">Alertas del portal</h2>
                 </div>
-                <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} />
+                <ParentAlertasPanel studentChildren={children} paceProjection={paceProjection} computedOverdue={computedOverduePaces} />
               </div>
             )}
 
@@ -1534,51 +1715,285 @@ export default function ParentDashboard() {
         </Link>
       </footer>
 
+      {/* ── Modal Evaluaciones proyectadas PEI ── */}
+      {paceProjectionModal && (() => {
+        const { childId, childName } = paceProjectionModal;
+        const childPaces = paceProjection.filter((p) => p.student_id === childId);
+
+        // Materias únicas para filtro
+        const subjectOptions = [...new Set(childPaces.map((p) => p.subject_name))].sort();
+
+        // Filtrado
+        const filtered = childPaces.filter((p) => {
+          if (evalQFilter !== 'all' && p.quarter !== evalQFilter) return false;
+          if (evalSubjFilter !== 'all' && p.subject_name !== evalSubjFilter) return false;
+          if (evalStatusFilter === 'completed' && !isPaceCompleted(p)) return false;
+          if (evalStatusFilter === 'overdue'   && (isPaceCompleted(p) || !isPaceOverdue(p))) return false;
+          if (evalStatusFilter === 'pending'   && (isPaceCompleted(p) || isPaceOverdue(p)))  return false;
+          return true;
+        });
+
+        // Agrupar por Quarter → por Materia
+        const byQ = { Q1: {}, Q2: {}, Q3: {} };
+        filtered.forEach((p) => {
+          const q = p.quarter;
+          if (!byQ[q]) return;
+          if (!byQ[q][p.subject_name]) byQ[q][p.subject_name] = [];
+          byQ[q][p.subject_name].push(p);
+        });
+
+        const DONE_STATUSES = ['evaluated', 'approved', 'cancelled'];
+        const statusBadge = (p) => {
+          if (isPaceCompleted(p)) return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-700">✓ Completada</span>;
+          if (isPaceOverdue(p))   return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">⚠ Vencida</span>;
+          return <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-500">Pendiente</span>;
+        };
+
+        const totalCompleted = childPaces.filter(isPaceCompleted).length;
+        const totalOverdue   = childPaces.filter((p) => !isPaceCompleted(p) && isPaceOverdue(p)).length;
+        const totalPending   = childPaces.length - totalCompleted - totalOverdue;
+
+        return (
+          <div className="fixed inset-0 overflow-hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl h-[90vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-slate-100 bg-[#193D6D] shrink-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-black text-lg text-white">Evaluaciones proyectadas</h3>
+                    <p className="text-xs text-blue-200 mt-0.5">{childName}</p>
+                  </div>
+                  <button onClick={() => setPaceProjectionModal(null)} className="text-blue-200 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                {/* Stats strip */}
+                <div className="flex gap-4 mt-3">
+                  {[
+                    { label: 'Total', val: childPaces.length, cls: 'text-blue-200' },
+                    { label: 'Completadas', val: totalCompleted, cls: 'text-emerald-300' },
+                    { label: 'Vencidas', val: totalOverdue, cls: totalOverdue > 0 ? 'text-red-300' : 'text-blue-200' },
+                    { label: 'Pendientes', val: totalPending, cls: 'text-slate-300' },
+                  ].map(({ label, val, cls }) => (
+                    <div key={label} className="text-center">
+                      <p className={`text-lg font-black leading-none ${cls}`}>{val}</p>
+                      <p className="text-[9px] text-blue-300 font-bold uppercase tracking-wider mt-0.5">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtros */}
+              <div className="px-6 py-3 border-b border-slate-100 bg-slate-50 flex flex-wrap gap-2 shrink-0">
+                {/* Quarter */}
+                <div className="flex gap-1">
+                  {['all','Q1','Q2','Q3'].map((q) => (
+                    <button key={q} onClick={() => setEvalQFilter(q)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${evalQFilter === q ? 'bg-[#193D6D] text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400'}`}>
+                      {q === 'all' ? 'Todos' : q}
+                    </button>
+                  ))}
+                </div>
+                {/* Estado */}
+                <div className="flex gap-1">
+                  {[['all','Todos'],['completed','Completadas'],['overdue','Vencidas'],['pending','Pendientes']].map(([v, l]) => (
+                    <button key={v} onClick={() => setEvalStatusFilter(v)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${evalStatusFilter === v ? 'bg-[#193D6D] text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {/* Materia */}
+                <select value={evalSubjFilter} onChange={(e) => setEvalSubjFilter(e.target.value)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200 bg-white text-slate-700">
+                  <option value="all">Todas las materias</option>
+                  {subjectOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Contenido scrolleable */}
+              <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-6">
+                {filtered.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-32 text-slate-400">
+                    <p className="font-bold">Sin evaluaciones para este filtro.</p>
+                  </div>
+                ) : (
+                  ['Q1','Q2','Q3'].map((q) => {
+                    const subjMap = byQ[q];
+                    const subjNames = Object.keys(subjMap);
+                    if (!subjNames.length) return null;
+                    return (
+                      <div key={q}>
+                        <h4 className="font-black text-slate-700 text-sm mb-3 flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-[#193D6D] text-white rounded-lg text-xs">{q}</span>
+                          Trimestre {q.replace('Q','')}
+                        </h4>
+                        <div className="space-y-3">
+                          {subjNames.sort().map((subj) => (
+                            <div key={subj} className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+                              <div className="px-4 py-2 bg-slate-100 border-b border-slate-200">
+                                <span className="text-xs font-black text-slate-700 uppercase tracking-wider">{subj}</span>
+                              </div>
+                              <div className="divide-y divide-slate-100">
+                                {subjMap[subj].map((p) => (
+                                  <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                                    <span className="font-bold text-sm text-slate-800">
+                                      #{p.pace_number}
+                                    </span>
+                                    {p.pages_per_day && (
+                                      <span className="text-[10px] text-slate-400 font-medium">{p.pages_per_day} pág/día</span>
+                                    )}
+                                    {p.due_date && (
+                                      <span className="text-[10px] text-slate-400 font-medium">
+                                        Est. {new Date(p.due_date).toLocaleDateString('es-ES',{day:'2-digit',month:'short'})}
+                                      </span>
+                                    )}
+                                    {statusBadge(p)}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 shrink-0 flex items-center justify-between gap-3">
+                <p className="text-xs text-slate-500 font-medium">
+                  Para enviar evidencias de una evaluación, use la pestaña <strong>Evidencias</strong>.
+                  Las materias de <strong>Extensión Local</strong> se reportan con tareas mensuales.
+                  Las de <strong>Life Skills</strong> con proyectos trimestrales.
+                  Las notas finales son validadas por Chanak.
+                </p>
+                <button onClick={() => setPaceProjectionModal(null)}
+                  className="px-4 py-2 bg-slate-200 text-slate-800 rounded-xl font-bold text-sm hover:bg-slate-300">
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Payment Details Modal */}
       {isPaymentModalOpen && (() => {
         const child = children.find((c) => c.id === selectedChildId);
-        const { hasPendingBalance, saldoPendiente } = getChildPaymentsStatus(selectedChildId);
+        const { hasPendingBalance, saldoPendiente, childPayments } = getChildPaymentsStatus(selectedChildId);
+
+        const CONCEPT_LABELS_MODAL = {
+          matricula:              'Matrícula',
+          paquete_curricular:     'Paquete curricular',
+          mensualidad:            'Mensualidad',
+          materiales_adicionales: 'Materiales adicionales',
+          evaluacion:             'Evaluación',
+          otro:                   'Otro',
+        };
+        const STATUS_BADGE = {
+          pending:     'bg-amber-100 text-amber-700',
+          overdue:     'bg-red-100 text-red-700',
+          paid:        'bg-emerald-100 text-emerald-700',
+          scholarship: 'bg-blue-100 text-blue-700',
+          waived:      'bg-purple-100 text-purple-700',
+          cancelled:   'bg-slate-100 text-slate-500',
+          refunded:    'bg-orange-100 text-orange-700',
+        };
+        const STATUS_LABEL = {
+          pending:     'Pendiente',
+          overdue:     'Vencido',
+          paid:        'Pagado',
+          scholarship: 'Beca',
+          waived:      'Exonerado',
+          cancelled:   'Cancelado',
+          refunded:    'Reembolsado',
+        };
 
         return (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
-              <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
                 <h3 className="font-black text-lg flex items-center gap-2 text-slate-800">
-                  <CreditCard className="w-5 h-5 text-emerald-600" /> Detalles Financieros
+                  <CreditCard className="w-5 h-5 text-emerald-600" /> Pagos — {child?.first_name} {child?.last_name}
                 </h3>
                 <button onClick={() => setIsPaymentModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
-                <p className="font-bold text-slate-800 text-center mb-4">
-                  {child?.first_name} {child?.last_name}
-                </p>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                  <div className="flex justify-between items-center pt-1">
-                    <span className="text-slate-800 font-black">Saldo Pendiente:</span>
-                    <span className={`text-2xl font-black ${hasPendingBalance ? 'text-red-600' : 'text-emerald-600'}`}>
-                      ${saldoPendiente.toFixed(2)}
-                    </span>
-                  </div>
+              <div className="p-5 overflow-y-auto flex-1 space-y-3">
+                {/* Saldo pendiente total */}
+                <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <span className="text-slate-700 font-bold text-sm">Saldo pendiente total:</span>
+                  <span className={`text-xl font-black ${hasPendingBalance ? 'text-red-600' : 'text-emerald-600'}`}>
+                    {saldoPendiente.toFixed(2)} €
+                  </span>
                 </div>
 
-                {hasPendingBalance ? (
-                  <div className="flex items-center justify-center gap-2 p-3 bg-red-50 border border-red-200 text-red-700 font-bold text-sm rounded-lg">
-                    <AlertCircle className="w-5 h-5" />
-                    🚨 ACCIÓN REQUERIDA: Realizar Pago
-                  </div>
+                {/* Lista de pagos */}
+                {childPayments.length === 0 ? (
+                  <p className="text-slate-400 text-sm italic text-center py-4">
+                    No hay pagos registrados para este estudiante.
+                  </p>
                 ) : (
-                  <div className="flex items-center justify-center gap-2 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm rounded-lg">
-                    <CheckCircle2 className="w-5 h-5" />
-                    Pagos al día. ¡Gracias!
+                  <div className="space-y-2">
+                    {childPayments.map((p) => {
+                      const status       = (p.status || 'pending').toLowerCase();
+                      const isPending    = ['pending', 'overdue'].includes(status);
+                      const isExempt     = ['scholarship', 'waived'].includes(status);
+                      const concept      = p.concept || p.payment_type || 'otro';
+                      const conceptLabel = CONCEPT_LABELS_MODAL[concept] || concept;
+                      const amount       = Number(p.amount || 0);
+                      const currency     = p.currency || 'EUR';
+                      const currencySymbol = currency === 'EUR' ? '€' : '$';
+
+                      return (
+                        <div key={p.id} className="border border-slate-200 rounded-xl p-4 bg-white space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-slate-800 text-sm">{conceptLabel}</span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE[status] || 'bg-slate-100 text-slate-600'}`}>
+                              {STATUS_LABEL[status] || status}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-sm text-slate-600">
+                            <span className="font-black text-slate-800">{amount.toFixed(2)} {currencySymbol}</span>
+                            {p.due_date && (
+                              <span className="text-xs text-slate-400">
+                                Vence: {new Date(p.due_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Acciones según estado */}
+                          {isPending && p.stripe_payment_link_url ? (
+                            <a
+                              href={p.stripe_payment_link_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center gap-2 w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-colors"
+                            >
+                              <ExternalLink className="w-4 h-4" /> Pagar ahora
+                            </a>
+                          ) : isPending ? (
+                            <p className="text-xs text-slate-500 italic bg-slate-50 rounded-lg p-2 text-center">
+                              Pago pendiente. Contacte con administración para recibir el enlace de pago.
+                            </p>
+                          ) : isExempt ? (
+                            <p className="text-xs font-bold text-blue-600 bg-blue-50 rounded-lg p-2 text-center">
+                              Beca / Exonerado
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <div className="p-4 border-t border-slate-100 bg-slate-50 shrink-0">
                 <button
                   onClick={() => setIsPaymentModalOpen(false)}
                   className="w-full py-2.5 bg-slate-200 text-slate-800 rounded-lg font-bold hover:bg-slate-300 transition-colors shadow-sm"
@@ -1676,7 +2091,7 @@ export default function ParentDashboard() {
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
               <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                 <h3 className="font-black text-lg text-slate-800">
-                  Notas Parciales: {selectedStudentSubjectForEntries.subject_name} · {selectedStudentSubjectForEntries.quarter}
+                  Evaluaciones y Reporte Familiar — {selectedStudentSubjectForEntries.subject_name} · {selectedStudentSubjectForEntries.quarter}
                 </h3>
                 <button
                   onClick={() => setIsGradeEntriesModalOpen(false)}

@@ -235,7 +235,7 @@ export function generateContractPDF({ contract, student, settings, lang: request
     // Imagen de firma del director (si existe y corresponde)
     let imgDrawn = false;
     if (sig.drawImg) {
-      imgDrawn = addInstitutionSignature(doc, settings, sig.x + 3, y + 3, 38, 16);
+      imgDrawn = addInstitutionSignature(doc, settings, sig.x + 3, y + 3, 52, 22);
     }
 
     const lineY = imgDrawn ? y + 22 : y + 14;

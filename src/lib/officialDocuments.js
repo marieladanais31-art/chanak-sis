@@ -213,13 +213,38 @@ export const addInstitutionSeal = (doc, settings, x, y, w, h) => {
 };
 
 /**
- * Inserta la imagen de firma del director.
- * Requiere preloadImages para que funcione.
+ * Calcula dimensiones que encajan en un box manteniendo el aspect ratio original.
+ * Usa doc.getImageProperties() si está disponible; fallback a maxW/maxH.
+ */
+export function fitImageWithinBox(doc, imageData, maxW, maxH) {
+  if (!imageData || !doc) return { w: maxW, h: maxH };
+  try {
+    const props = doc.getImageProperties(imageData);
+    if (!props || !props.width || !props.height) return { w: maxW, h: maxH };
+    const ratio = props.width / props.height;
+    let w = maxW;
+    let h = maxW / ratio;
+    if (h > maxH) {
+      h = maxH;
+      w = maxH * ratio;
+    }
+    return { w: Math.round(w * 100) / 100, h: Math.round(h * 100) / 100 };
+  } catch {
+    return { w: maxW, h: maxH };
+  }
+}
+
+/**
+ * Inserta la imagen de firma del director con aspect ratio correcto.
+ * maxW/maxH son los límites máximos en mm; la imagen se ajusta
+ * proporcionalmente dentro de esos límites.
  * @returns {boolean} true si se dibujó la imagen, false si no había imagen.
  */
-export const addInstitutionSignature = (doc, settings, x, y, w, h) => {
+export const addInstitutionSignature = (doc, settings, x, y, maxW = 52, maxH = 22) => {
   const src = settings?._signature64 || settings?.director_signature_url ||
               settings?.signature_url || settings?.director_signature;
+  if (!src) return false;
+  const { w, h } = fitImageWithinBox(doc, src, maxW, maxH);
   return safeAddImage(doc, src, x, y, w, h, 'signature');
 };
 
@@ -350,10 +375,9 @@ export function drawSectionLabel(doc, y, title, leftMargin = PDF_MARGIN) {
  * @param {Object}  [opts]
  * @param {string}  [opts.pageLabel='Pág.']
  * @param {string}  [opts.refLine]   - mostrado en página 1 (izquierda)
- * @param {boolean} [opts.buildMark] - marcador temporal de build (retirar antes de merge)
  */
 export function applyOfficialFooterAllPages(doc, settings, opts = {}) {
-  const { pageLabel = 'Pág.', refLine = '', buildMark = false } = opts;
+  const { pageLabel = 'Pág.', refLine = '' } = opts;
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const n = doc.getNumberOfPages();
@@ -389,13 +413,6 @@ export function applyOfficialFooterAllPages(doc, settings, opts = {}) {
       doc.setFontSize(5.5);
       doc.setTextColor(...PDF_GRAY);
       doc.text(refLine, 10, H - 4.5);
-    }
-
-    // Marcador temporal de build (retirar antes de merge)
-    if (buildMark) {
-      doc.setFontSize(4.5);
-      doc.setTextColor(180, 180, 180);
-      doc.text('PDF BUILD HOTFIX 2026-05-24', W / 2, H - 0.5, { align: 'center' });
     }
 
     doc.setTextColor(...PDF_BLACK);

@@ -61,7 +61,12 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
       }));
       setPaces(enriched);
     } catch (err) {
-      toast({ title: 'Error', description: 'No se pudieron cargar los PACEs.', variant: 'destructive' });
+      if (import.meta.env.DEV) console.error('[PaceProjectionManager] load error:', err);
+      toast({
+        title:       'Error al cargar evaluaciones',
+        description: err?.message || 'Verifica permisos (RLS) o contacta soporte.',
+        variant:     'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -96,7 +101,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
   const handleSave = async (e) => {
     e.preventDefault();
     if (!peiId || !studentId) {
-      toast({ title: 'Error', description: 'Guarda el PEI antes de añadir PACEs.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Guarda el PEI antes de añadir evaluaciones.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -125,7 +130,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
         const { error } = await supabase.from('pei_pace_projections').insert([payload]);
         if (error) throw error;
       }
-      toast({ title: 'PACE guardado', description: `${form.subject_name} PACE #${form.pace_number}` });
+      toast({ title: 'Evaluación guardada', description: `${form.subject_name} · Eval. #${form.pace_number}` });
       setModalOpen(false);
       await load();
     } catch (err) {
@@ -157,7 +162,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h4 className="font-bold text-slate-700 flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-blue-600" /> Proyección de PACEs
+            <BookOpen className="w-4 h-4 text-blue-600" /> Proyección de evaluaciones
           </h4>
           {overdueCount > 0 && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">
@@ -179,7 +184,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
           {canEdit && !tutorMode && (
             <button onClick={openNew}
               className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors">
-              <Plus className="w-3.5 h-3.5" /> Añadir PACE
+              <Plus className="w-3.5 h-3.5" /> Añadir evaluación
             </button>
           )}
         </div>
@@ -187,14 +192,14 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
 
       {/* Tabla */}
       {filtered.length === 0 ? (
-        <p className="text-center text-slate-400 py-6 text-sm">No hay PACEs registrados para este filtro.</p>
+        <p className="text-center text-slate-400 py-6 text-sm">No hay evaluaciones para este filtro. {canEdit && !tutorMode ? 'Use "Añadir evaluación" para comenzar.' : ''}</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase tracking-wider">
               <tr>
                 <th className="px-3 py-2.5 font-bold">Materia</th>
-                <th className="px-3 py-2.5 font-bold text-center">PACE #</th>
+                <th className="px-3 py-2.5 font-bold text-center">N.º Eval.</th>
                 <th className="px-3 py-2.5 font-bold text-center">Q</th>
                 <th className="px-3 py-2.5 font-bold">Entrega Est.</th>
                 <th className="px-3 py-2.5 font-bold">Entrega Real</th>
@@ -250,7 +255,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center p-5 border-b border-slate-100 sticky top-0 bg-white">
               <h3 className="font-bold text-slate-800 text-lg">
-                {editing ? `Editar PACE — ${editing.subject_name} #${editing.pace_number}` : 'Nuevo PACE'}
+                {editing ? `Editar evaluación — ${editing.subject_name} #${editing.pace_number}` : 'Nueva evaluación proyectada'}
               </h3>
               <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
@@ -263,7 +268,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
                   <input required type="text" value={form.subject_name} onChange={e => setForm(f => ({...f, subject_name: e.target.value}))} className={INPUT} placeholder="Ej. Mathematics" disabled={tutorMode} />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">PACE # *</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">N.º Evaluación *</label>
                   <input required type="number" min="1" value={form.pace_number} onChange={e => setForm(f => ({...f, pace_number: e.target.value}))} className={INPUT} placeholder="101" disabled={tutorMode} />
                 </div>
                 <div>
@@ -315,7 +320,7 @@ export default function PaceProjectionManager({ peiId, studentId, schoolYear, ca
                 </button>
                 <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  {saving ? 'Guardando...' : 'Guardar PACE'}
+                  {saving ? 'Guardando...' : 'Guardar evaluación'}
                 </button>
               </div>
             </form>

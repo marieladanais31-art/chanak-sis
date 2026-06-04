@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, FileCheck2, Loader2, MessageSquare, Paperclip, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, FileCheck2, Loader2, MessageSquare, Paperclip, RefreshCw, XCircle } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 
@@ -81,9 +81,11 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
           pace_number,
           score,
           evidence_type,
+          evidence_group,
           comment,
           attachment_path,
           attachment_url,
+          drive_url,
           review_status,
           academic_outcome,
           reviewer_comment,
@@ -177,7 +179,8 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
             Aprobar, pedir corrección o rechazar evidencias Off Campus. {scopeText}
           </p>
           <p className="text-xs text-slate-400 font-bold mt-1">
-            Life Skills y Extensión Local son áreas válidas; PACE Test aprobado requiere score ≥ 80/100.
+            Life Skills y Local Extension son grupos válidos; PACE Test aprobado requiere score ≥ 80/100.
+            La evidencia puede incluir adjunto y/o enlace de Google Drive.
           </p>
         </div>
         <button
@@ -233,8 +236,8 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
                       {getStudentName(item.students)} · {item.students?.us_grade_level || 'Sin grado'} · {item.quarter} · {item.school_year}
                     </p>
                     <p className="text-sm text-slate-600">
-                      <span className="font-black">{item.evidence_type}</span> · Score <span className={Number(item.score || 0) < 80 ? 'font-black text-amber-600' : 'font-black text-[#193D6D]'}>{item.score == null ? 'Pendiente' : `${Number(item.score).toFixed(2)}/100`}</span>
-                      {item.pace_number ? ` · PACE ${item.pace_number}` : ''}
+                      <span className="font-black">{item.evidence_group || item.evidence_type}</span> · Score <span className={Number(item.score || 0) < 80 ? 'font-black text-amber-600' : 'font-black text-[#193D6D]'}>{item.score == null ? 'Pendiente' : `${Number(item.score).toFixed(2)}/100`}</span>
+                      {item.pace_number ? ` · Evaluación #${item.pace_number}` : ''}
                     </p>
                     <p className="text-xs text-slate-500 font-bold">
                       Área: {item.student_subjects?.academic_block || item.student_subjects?.pillar_type || 'Materia registrada'}
@@ -263,6 +266,16 @@ export default function EvidenceReviewPanel({ hubId = null, tutorId = null, comp
                         className="inline-flex items-center gap-1 text-[#193D6D] hover:underline"
                       >
                         <Paperclip className="w-3.5 h-3.5" /> Ver adjunto
+                      </a>
+                    )}
+                    {item.drive_url && (
+                      <a
+                        href={item.drive_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Ver en Drive
                       </a>
                     )}
                     {(item.review_status === 'pending_review' || item.review_status === 'correction_requested') && (

@@ -217,7 +217,7 @@ export function generateEnrollmentLetterPDF({ letter, student, settings, lang: r
   doc.line(PDF_MARGIN, y, PDF_MARGIN + 76, y);
   y += 3;
 
-  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 40, 16);
+  const drewSig = addInstitutionSignature(doc, settings, PDF_MARGIN, y, 52, 22);
   y += drewSig ? 19 : 16;
 
   // Línea de firma

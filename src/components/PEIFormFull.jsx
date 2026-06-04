@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import { ACTIVE_SCHOOL_YEAR } from '@/lib/academicUtils';
+import { normalizeDateFields } from '@/lib/dateUtils';
+import { preloadImages } from '@/lib/officialDocuments';
 import PaceProjectionTable from './PaceProjectionTable';
 import { generatePeiPDF } from '@/lib/peiPdf';
 import {
@@ -22,7 +24,7 @@ const TABS = [
   { id: 'diagnostico',label: 'Diagnóstico',       icon: ClipboardList },
   { id: 'plan',       label: 'Plan de Estudios',  icon: BookOpen },
   { id: 'metodologia',label: 'Metodología',       icon: BarChart3 },
-  { id: 'paces',      label: 'PACEs',             icon: ChevronRight },
+  { id: 'paces',      label: 'Evaluaciones',       icon: ChevronRight },
   { id: 'familia',    label: 'Familia',           icon: Heart },
   { id: 'firmas',     label: 'Firmas',            icon: Award },
 ];
@@ -55,32 +57,51 @@ const DEFAULT_FORM = {
   parent_relation:            'Padre/Madre',
   modality:                   'Off-Campus',
   curriculum_base:            'A.C.E. (Accelerated Christian Education)',
-  institutional_intro:        '',
+  institutional_intro:
+    'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo, nivel real de entrada y necesidades específicas del estudiante. El PEI organiza el plan académico anual, las evaluaciones proyectadas, las áreas de refuerzo y el acompañamiento requerido para favorecer un progreso ordenado y medible.',
   // Perfil
-  strength_areas:             '',
-  improvement_areas:          '',
+  strength_areas:
+    'Responsabilidad, disposición para aprender, apoyo familiar, capacidad de adaptación, interés por mejorar y potencial para avanzar mediante aprendizaje por dominio. Se recomienda ajustar esta sección según las fortalezas observadas en el estudiante.',
+  improvement_areas:
+    'Lectura comprensiva, gramática, redacción, matemáticas, concentración, hábitos de estudio, gestión del tiempo, autonomía académica y vocabulario académico en inglés. Estas áreas deberán ajustarse según los resultados diagnósticos y la observación del tutor/coordinador.',
   // Diagnóstico
-  initial_diagnosis:          '',
+  initial_diagnosis:
+    'La prueba diagnóstica ACE se interpreta como una herramienta técnica de ubicación académica, no como un examen de aprobado o suspenso. Su objetivo es identificar el punto real de entrada del estudiante y detectar posibles lagunas de aprendizaje que deben reforzarse antes de avanzar a contenidos superiores. En el sistema ACE, el estudiante progresa por dominio del contenido, no únicamente por edad o curso escolar.',
   diagnostic_results:         '',
-  diagnostic_interpretation:  '',
-  ace_curriculum_description: '',
+  diagnostic_interpretation:
+    'La interpretación de resultados permite identificar asignaturas con dominio suficiente y áreas que requieren refuerzo. Cuando el diagnóstico ubica al estudiante en un nivel anterior al esperado, esto se considera una oportunidad para cubrir lagunas específicas, consolidar fundamentos y avanzar con mayor seguridad. En English y Word Building, los estudiantes no nativos pueden requerir refuerzo específico en gramática, vocabulario académico y estructura técnica del idioma.',
+  ace_curriculum_description:
+    'El currículo A.C.E. (Accelerated Christian Education) es un sistema de autoaprendizaje basado en evaluaciones individuales (PACEs) de 12 lecciones cada una. El estudiante avanza a su propio ritmo bajo la supervisión de un tutor certificado. El diagnóstico inicial determina el nivel real de entrada y sirve como punto de partida para la proyección académica personalizada.',
   // Plan
-  subject_plan:               '',
-  quarterly_objectives:       '',
-  local_extension:            '',
-  life_skills:                '',
+  subject_plan:
+    'El plan de estudios se organiza a partir del nivel real de entrada del estudiante, sus asignaturas base, la extensión local requerida y las áreas de desarrollo integral. Las materias principales se trabajarán bajo el enfoque de aprendizaje por dominio, complementadas con actividades de extensión local y Life Skills.',
+  quarterly_objectives:
+    'Cada trimestre tendrá objetivos académicos medibles por asignatura. Se priorizará el avance progresivo en las evaluaciones proyectadas, la consolidación de hábitos de estudio, la corrección de lagunas detectadas y la entrega oportuna de evidencias cuando corresponda.',
+  local_extension:
+    'La Extensión Local incorporará contenidos requeridos por el contexto educativo nacional y autonómico, incluyendo lengua, historia, geografía, cultura local y otros elementos necesarios para complementar el currículo internacional desde la realidad del estudiante.',
+  life_skills:
+    'El área de Life Skills / Desarrollo Integral integra actividades de desarrollo personal, habilidades prácticas, educación física, arte, música, tecnología, servicio, emprendimiento, educación emocional y otras experiencias formativas que fortalecen el crecimiento integral, la autonomía y la formación del carácter del estudiante.',
   // Metodología
-  daily_rhythm_methodology:   '',
-  estimated_time_daily_load:  '',
-  follow_up_strategies:       '',
-  follow_up_resources:        '',
+  daily_rhythm_methodology:
+    'El modelo metodológico del PEI combina aprendizaje por dominio, Extensión Local y desarrollo integral. Como referencia operativa, el plan se organiza aproximadamente en un 60% de aprendizaje por dominio, un 20% de Extensión Local conforme a los contenidos requeridos en el plan de estudio nacional y autonómico, y un 20% de Life Skills / Desarrollo Integral. El ritmo diario de trabajo se definirá por asignatura, tomando como referencia la cantidad de páginas o actividades asignadas por día, el nivel de entrada del estudiante y la carga académica semanal. Este ritmo podrá ajustarse según progreso, dominio demostrado y necesidades familiares. El estudiante avanzará de manera progresiva, con acompañamiento del tutor/mentor, seguimiento académico y revisión periódica de evidencias y evaluaciones.',
+  estimated_time_daily_load:
+    'Se recomienda una carga diaria ajustada al nivel y edad del estudiante, combinando trabajo autónomo, revisión familiar y seguimiento del tutor. La carga podrá modificarse según ritmo de avance, resultados diagnósticos y necesidades específicas.',
+  follow_up_strategies:
+    'El seguimiento académico incluirá revisión periódica del progreso, monitoreo de evaluaciones proyectadas, comunicación con la familia, revisión de evidencias, alertas de retraso y ajustes al PEI cuando sea necesario.',
+  follow_up_resources:
+    'El estudiante podrá utilizar materiales A.C.E., recursos digitales, guías de apoyo, actividades de extensión local, herramientas de lectura, diccionarios, recursos de Word Building, materiales de Life Skills y acompañamiento del tutor o coordinador académico.',
   required_adaptations:       '',
   // Familia — Sección 09: acuerdos + Sección 08: materiales
-  family_message:             '',
-  institutional_conclusion:   '',
-  coordinator_observations:   '',
-  materials_text:             '',
-  operational_agreements:     '',
+  family_message:
+    'Estimadas familias: este PEI recoge la planificación académica individualizada del estudiante para el año escolar. Su propósito es ofrecer una ruta clara de avance, acompañamiento y seguimiento. La familia cumple un rol fundamental como supervisor primario del trabajo diario, asegurando un ambiente adecuado de estudio, cumplimiento de las actividades asignadas y comunicación oportuna con Chanak.',
+  institutional_conclusion:
+    'Chanak International Academy se compromete a acompañar el proceso académico del estudiante mediante seguimiento, revisión de evidencias, validación de evaluaciones y emisión de reportes oficiales conforme al plan individualizado establecido. Este documento podrá revisarse y ajustarse cuando el progreso, las necesidades del estudiante o las circunstancias familiares lo requieran.',
+  coordinator_observations:
+    'Observaciones del coordinador: registrar aquí acuerdos específicos con la familia, condiciones particulares de seguimiento, recomendaciones académicas, necesidades de apoyo o cualquier información relevante para el acompañamiento del estudiante.',
+  materials_text:
+    'Los materiales base incluirán los recursos curriculares asignados al estudiante, evaluaciones proyectadas, documentos de apoyo, actividades de extensión local y recursos complementarios definidos por el equipo académico.',
+  operational_agreements:
+    'La familia actuará como supervisor primario del trabajo diario del estudiante, asegurando un ambiente adecuado, seguimiento de las actividades asignadas y comunicación oportuna con Chanak. Chanak validará académicamente las calificaciones, evidencias y reportes emitidos desde el SIS.',
   // Vocacional (modelo Daniel)
   vocational_interest:        '',
   strategic_objectives:       '',
@@ -88,7 +109,7 @@ const DEFAULT_FORM = {
   pace_status_notes:          '',
   vocational_plan:            '',
   // Firmas — Sección 10
-  director_signature_name:    '',
+  director_signature_name:    'Mariela Andrade',
   director_signature_date:    '',
   parent_signature_name:      '',
   parent_signature_date:      '',
@@ -99,9 +120,72 @@ const DEFAULT_FORM = {
   status:                     'draft',
 };
 
-const INTRO_DEFAULT = 'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo y las necesidades únicas de cada estudiante.';
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const ACE_DEFAULT = 'El currículo A.C.E. (Accelerated Christian Education) es un sistema de autoaprendizaje basado en PACEs (Packet of Accelerated Christian Education). Cada PACE equivale a una unidad de contenido evaluable de 12 lecciones. El estudiante avanza a su propio ritmo bajo la supervisión de un tutor certificado. El diagnóstico inicial determina el nivel real de entrada y sirve como punto de partida para la proyección académica personalizada.';
+/**
+ * Devuelve `value` si no es null, undefined ni string vacío.
+ * De lo contrario devuelve `defaultValue`.
+ * Aplica a PEIs existentes donde campos están guardados como '' en DB.
+ */
+function withDefault(value, defaultValue) {
+  if (value === null || value === undefined) return defaultValue;
+  if (typeof value === 'string' && value.trim() === '') return defaultValue;
+  return value;
+}
+
+/**
+ * Construye el texto de diagnóstico por asignatura desde los niveles de la ficha.
+ * Si un nivel está ausente, deja espacio editable.
+ */
+function buildDiagnosticText(levels) {
+  const L = levels || {};
+  return [
+    `Mathematics: Math ${L.math          || '____'}`,
+    `English: English ${L.english       || '____'}`,
+    `Word Building: WB ${L.word_building || '____'}`,
+    `Science: Science ${L.science       || '____'}`,
+    `Social Studies: Social Studies ${L.social_studies || '____'}`,
+  ].join('\n');
+}
+
+// Constantes de fallback (se mantienen por compatibilidad con placeholders existentes)
+const INTRO_DEFAULT = 'Este Programa Educativo Individualizado ha sido elaborado por el equipo académico de Chanak International Academy con el propósito de brindar una educación personalizada, basada en el ritmo y las necesidades únicas de cada estudiante.';
+const ACE_DEFAULT   = DEFAULT_FORM.ace_curriculum_description;
+
+// ── Sincronización selectiva PEI → ficha del estudiante ──────────────────────
+// Mapeo PEI field → students column.
+// Solo actualiza si el campo en students está vacío/null.
+const PEI_TO_STUDENT_MAP = [
+  { peiField: 'student_nationality', studentCol: 'nationality' },
+  { peiField: 'student_city',        studentCol: 'city' },
+  { peiField: 'student_country',     studentCol: 'country' },
+  { peiField: 'student_email',       studentCol: 'student_email' },
+  { peiField: 'parent_phone',        studentCol: 'phone' },
+  { peiField: 'parent_relation',     studentCol: 'parent1_relationship' },
+  { peiField: 'student_dob',         studentCol: 'date_of_birth' },
+  { peiField: 'grade_level',         studentCol: 'grade_level' },
+  { peiField: 'last_grade_completed',studentCol: 'last_grade_completed' },
+  { peiField: 'enrollment_date',     studentCol: 'enrollment_date' },
+  { peiField: 'modality',            studentCol: 'modality' },
+  { peiField: 'curriculum_base',     studentCol: 'curriculum_base' },
+];
+
+async function syncMasterFieldsToStudent(studentId, peiForm, snapshot) {
+  if (!studentId) return;
+  const syncPayload = {};
+  PEI_TO_STUDENT_MAP.forEach(({ peiField, studentCol }) => {
+    const peiVal     = peiForm[peiField];
+    const studentVal = snapshot?.[studentCol];
+    const peiHasData   = peiVal && typeof peiVal === 'string' && peiVal.trim() !== '';
+    const studentEmpty = !studentVal || (typeof studentVal === 'string' && studentVal.trim() === '');
+    // Solo llenar si PEI tiene dato real Y campo en students está vacío
+    if (peiHasData && studentEmpty) {
+      syncPayload[studentCol] = peiVal.trim();
+    }
+  });
+  if (Object.keys(syncPayload).length === 0) return;
+  await supabase.from('students').update(syncPayload).eq('id', studentId);
+}
 
 export default function PEIFormFull({ studentId, studentName, peiId: initialPeiId, onClose, canEdit = false }) {
   const { toast } = useToast();
@@ -114,53 +198,108 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const [form, setForm]           = useState(DEFAULT_FORM);
 
   const [fichaLevels, setFichaLevels] = useState(null);
+  // Snapshot de ficha del estudiante para comparar en handleSave (sync selectivo)
+  const [fichaSnapshot, setFichaSnapshot] = useState(null);
+
+  // Ref al área de contenido scrolleable — usada para reset al cambiar de pestaña.
+  const bodyRef = useRef(null);
+
+  // ── Bloquear scroll de página mientras el modal está abierto ─────────────
+  // Bloquea tanto <body> como <html> para cubrir Safari/iOS y Chrome/desktop.
+  useEffect(() => {
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow          = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow          = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, []);
+
+  // ── Cambio de pestaña con reset de scroll interno ─────────────────────────
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    // Scroll al inicio del área de contenido (no del window)
+    requestAnimationFrame(() => {
+      bodyRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // Always prefill from student ficha (DOB, modality, grade, vocational, etc.)
-      const { data: studentData } = await supabase
+      // ── 1. Cargar ficha del estudiante ────────────────────────────────────
+      const { data: s } = await supabase
         .from('students')
-        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies')
+        .select('date_of_birth, enrollment_date, last_grade_completed, grade_level, us_grade_level, modality, curriculum_base, vocational_interest, graduation_pathway_notes, diagnostic_notes, parent1_name, parent1_relationship, diag_math, diag_english, diag_word_building, diag_science, diag_social_studies, nationality, city, country, student_email, phone')
         .eq('id', studentId)
         .single();
 
-      if (studentData) {
-        const fichaDefaults = {};
-        if (studentData.date_of_birth)            fichaDefaults.student_dob             = studentData.date_of_birth;
-        if (studentData.enrollment_date)          fichaDefaults.enrollment_date          = studentData.enrollment_date;
-        if (studentData.last_grade_completed)     fichaDefaults.last_grade_completed     = studentData.last_grade_completed;
-        if (studentData.grade_level)              fichaDefaults.grade_level              = studentData.us_grade_level || studentData.grade_level;
-        if (studentData.modality)                 fichaDefaults.modality                 = studentData.modality;
-        if (studentData.curriculum_base)          fichaDefaults.curriculum_base          = studentData.curriculum_base;
-        if (studentData.vocational_interest)      fichaDefaults.vocational_interest      = studentData.vocational_interest;
-        if (studentData.graduation_pathway_notes) fichaDefaults.graduation_pathway_notes = studentData.graduation_pathway_notes;
-        if (studentData.diagnostic_notes)         fichaDefaults.initial_diagnosis        = studentData.diagnostic_notes;
-        if (studentData.parent1_name)             fichaDefaults.parent_signature_name    = studentData.parent1_name;
-        setForm(prev => ({ ...prev, ...fichaDefaults }));
-        setFichaLevels({
-          math:          studentData.diag_math          || null,
-          english:       studentData.diag_english       || null,
-          word_building: studentData.diag_word_building || null,
-          science:       studentData.diag_science       || null,
-          social_studies:studentData.diag_social_studies|| null,
-        });
-      }
+      // Guardar snapshot para sync selectivo en handleSave
+      setFichaSnapshot(s || null);
+
+      const levels = {
+        math:          s?.diag_math           || null,
+        english:       s?.diag_english        || null,
+        word_building: s?.diag_word_building  || null,
+        science:       s?.diag_science        || null,
+        social_studies:s?.diag_social_studies || null,
+      };
+      setFichaLevels(levels);
+
+      // ── 2. Texto de diagnóstico construido desde niveles de ficha ─────────
+      const diagText = buildDiagnosticText(levels);
+
+      // ── 3. Defaults efectivos = DEFAULT_FORM + campos calculados desde ficha
+      const effectiveDefaults = {
+        ...DEFAULT_FORM,
+        diagnostic_results: diagText,
+        pace_status_notes:  diagText,
+      };
+
+      // ── 4. Overrides provenientes de la ficha del estudiante (específicos) ─
+      const fichaOverrides = {};
+      if (s?.date_of_birth)            fichaOverrides.student_dob             = s.date_of_birth;
+      if (s?.enrollment_date)          fichaOverrides.enrollment_date          = s.enrollment_date;
+      if (s?.last_grade_completed)     fichaOverrides.last_grade_completed     = s.last_grade_completed;
+      if (s?.grade_level)              fichaOverrides.grade_level              = s.us_grade_level || s.grade_level;
+      if (s?.modality)                 fichaOverrides.modality                 = s.modality;
+      if (s?.curriculum_base)          fichaOverrides.curriculum_base          = s.curriculum_base;
+      if (s?.vocational_interest)      fichaOverrides.vocational_interest      = s.vocational_interest;
+      if (s?.graduation_pathway_notes) fichaOverrides.graduation_pathway_notes = s.graduation_pathway_notes;
+      if (s?.diagnostic_notes)         fichaOverrides.initial_diagnosis        = s.diagnostic_notes;
+      if (s?.parent1_name)             fichaOverrides.parent_signature_name    = s.parent1_name;
+      // ── Campos de contacto/perfil que faltaban ──────────────────────────────
+      if (s?.nationality)              fichaOverrides.student_nationality      = s.nationality;
+      if (s?.city)                     fichaOverrides.student_city             = s.city;
+      if (s?.country)                  fichaOverrides.student_country          = s.country;
+      if (s?.student_email)            fichaOverrides.student_email            = s.student_email;
+      if (s?.phone)                    fichaOverrides.parent_phone             = s.phone;
+      if (s?.parent1_relationship)     fichaOverrides.parent_relation          = s.parent1_relationship;
+
+      // Inicializar form con defaults + ficha (PEI nuevo o mientras carga DB)
+      setForm({ ...effectiveDefaults, ...fichaOverrides });
 
       if (!initialPeiId) { setLoading(false); return; }
 
+      // ── 5. Cargar PEI existente y mezclar con withDefault ─────────────────
       const { data, error } = await supabase
         .from('individualized_education_plans')
         .select('*')
         .eq('id', initialPeiId)
         .single();
       if (error) throw error;
-      setForm(prev => ({
-        ...prev,
-        ...Object.fromEntries(
-          Object.entries(data).filter(([k, v]) => k in DEFAULT_FORM && v !== null && v !== undefined)
-        ),
-      }));
+
+      // withDefault: si el campo en DB es null, undefined o '' → usar effectiveDefault
+      setForm(() => {
+        const merged = { ...effectiveDefaults, ...fichaOverrides };
+        Object.entries(data).forEach(([k, v]) => {
+          if (!(k in effectiveDefaults)) return;
+          merged[k] = withDefault(v, effectiveDefaults[k]);
+        });
+        return merged;
+      });
       setPeiId(data.id);
     } catch (err) {
       toast({ title: 'Error', description: 'No se pudo cargar el PEI.', variant: 'destructive' });
@@ -173,10 +312,24 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
+  // Campos DATE del PEI — deben llegar a Supabase como yyyy-mm-dd o null.
+  const PEI_DATE_FIELDS = [
+    'issue_date',
+    'student_dob',
+    'enrollment_date',
+    'director_signature_date',
+    'parent_signature_date',
+    'student_signature_date',
+    'next_review_date',
+  ];
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = { ...form, student_id: studentId, updated_at: new Date().toISOString() };
+      const payload = normalizeDateFields(
+        { ...form, student_id: studentId, updated_at: new Date().toISOString() },
+        PEI_DATE_FIELDS,
+      );
       if (peiId) {
         const { error } = await supabase.from('individualized_education_plans').update(payload).eq('id', peiId);
         if (error) throw error;
@@ -185,6 +338,10 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         if (error) throw error;
         setPeiId(data.id);
       }
+      // ── Sincronizar datos maestros de vuelta a ficha del estudiante ──────────
+      // Solo se llenan campos VACÍOS en students; nunca se pisa un dato existente.
+      await syncMasterFieldsToStudent(studentId, form, fichaSnapshot);
+
       toast({ title: 'PEI guardado', description: 'Los cambios han sido guardados.' });
     } catch (err) {
       toast({ title: 'Error', description: err.message || 'No se pudo guardar.', variant: 'destructive' });
@@ -225,6 +382,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           : Promise.resolve({ data: [] }),
         supabase.from('institutional_settings').select('*').limit(1).single(),
       ]);
+      const settingsWithImages = await preloadImages(settingsRes.data || null);
       const [parts] = (studentName || '').split(' ');
       generatePeiPDF({
         pei: { ...form, id: peiId },
@@ -233,7 +391,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           first_name: parts || studentName,
           last_name: (studentName || '').replace(parts + ' ', ''),
         },
-        settings: settingsRes.data || null,
+        settings: settingsWithImages,
         lang,
       });
     } catch (err) {
@@ -253,7 +411,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
   const isReadOnly = !canEdit || form.status === 'published';
 
   return (
-    <div className="flex flex-col h-full max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl mx-auto">
+    <div className="flex flex-col h-[90vh] bg-white rounded-2xl shadow-2xl overflow-hidden w-full max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-[#193D6D] shrink-0">
         <div>
@@ -285,7 +443,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-700 bg-white'
@@ -299,8 +457,8 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
         })}
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-6">
+      {/* Body — min-h-0 es obligatorio para que flex-1 no desborde el contenedor */}
+      <div ref={bodyRef} className="flex-1 overflow-y-auto min-h-0 overscroll-contain p-6">
 
         {/* ── PORTADA ──────────────────────────────────────────────────────── */}
         {activeTab === 'portada' && (
@@ -308,6 +466,11 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
               <p className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1">Portada Institucional</p>
               <p className="text-xs text-blue-600">Esta sección genera la carátula del PEI con datos del estudiante e información de ingreso a Chanak.</p>
+              <p className="text-xs text-blue-500 mt-1 font-medium">
+                ℹ️ Los datos de esta sección se cargan desde la ficha del estudiante como fuente oficial.
+                Al guardar, los campos nuevos que estén vacíos en la ficha se actualizarán automáticamente.
+                Nunca se sobreescriben datos ya existentes en la ficha.
+              </p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div>
@@ -436,7 +599,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
           <div className="space-y-4">
             <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
               <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">Perfil Vocacional</p>
-              <p className="text-xs text-amber-700">Basado en el modelo de PEI de Daniel Vidal. Define el interés vocacional, estado de PACEs, objetivos estratégicos y ruta de graduación del estudiante.</p>
+              <p className="text-xs text-amber-700">Esta sección permite registrar el interés vocacional del estudiante, sus objetivos estratégicos del año y una ruta de desarrollo académico y personal coherente con su nivel de entrada y proyección educativa.</p>
             </div>
             <div>
               <label className={LABEL}>Interés Principal / Área Vocacional</label>
@@ -450,7 +613,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
               />
             </div>
             <div>
-              <label className={LABEL}>Estado Académico Actual — PACE Status</label>
+              <label className={LABEL}>Estado académico actual / Nivel de entrada por asignatura</label>
               <textarea
                 rows={5}
                 value={form.pace_status_notes}
@@ -564,7 +727,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
                 placeholder="Descripción del estado académico inicial del estudiante al momento de ingreso. Contexto, historial académico, necesidades detectadas." />
             </div>
             <div>
-              <label className={LABEL}>Resultados del Diagnóstico — PACE de Entrada por Asignatura</label>
+              <label className={LABEL}>Resultados del diagnóstico — nivel de entrada por asignatura</label>
               <textarea rows={5} value={form.diagnostic_results} onChange={set('diagnostic_results')} disabled={isReadOnly} className={TEXTAREA}
                 placeholder={'Mathematics: Math PACE 1076\nEnglish: English PACE 1075\nWord Building: WB PACE 1074\nScience: Science PACE 1074\nSocial Studies: Social PACE 1073\n\nPuntuaciones y observaciones evaluativas.'} />
             </div>
@@ -582,7 +745,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             <div>
               <label className={LABEL}>Plan de Estudios</label>
               <textarea rows={5} value={form.subject_plan} onChange={set('subject_plan')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Descripción del plan por materia: asignaturas del año, PACEs de inicio proyectados, contenidos prioritarios, metas por trimestre." />
+                placeholder="Descripción del plan por materia: asignaturas del año, evaluaciones de inicio proyectadas, contenidos prioritarios, metas por trimestre." />
             </div>
             <div>
               <label className={LABEL}>Objetivos Trimestrales</label>
@@ -608,12 +771,12 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             <div>
               <label className={LABEL}>Ritmo, Carga y Metodología</label>
               <textarea rows={5} value={form.daily_rhythm_methodology} onChange={set('daily_rhythm_methodology')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Descripción del ritmo de trabajo: sesiones semanales, horario tipo, método de supervisión del tutor, uso de la plataforma digital, entrega de PACEs, evaluación y scoring." />
+                placeholder="Descripción del ritmo de trabajo: sesiones semanales, horario tipo, método de supervisión del tutor, uso de la plataforma digital, ritmo de trabajo, entrega de evaluaciones y revisión académica." />
             </div>
             <div>
               <label className={LABEL}>Tiempo Estimado y Carga Diaria</label>
               <textarea rows={3} value={form.estimated_time_daily_load} onChange={set('estimated_time_daily_load')} disabled={isReadOnly} className={TEXTAREA}
-                placeholder="Ej: 4–5 horas diarias de trabajo autónomo. 1 sesión semanal de tutoría de 60 min. PACE completado cada 2–3 semanas. Proyección: 3 PACEs/mes por materia." />
+                placeholder="Ej: 4–5 horas diarias de trabajo autónomo. 1 sesión semanal de tutoría de 60 min. Evaluación completada cada 2–3 semanas. Proyección: 3 evaluaciones/mes por materia." />
             </div>
             <div>
               <label className={LABEL}>Estrategias de Seguimiento</label>
@@ -646,7 +809,7 @@ export default function PEIFormFull({ studentId, studentName, peiId: initialPeiI
             ) : (
               <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm">
                 <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-amber-800">Guarda el PEI primero (pestaña Portada → Guardar) para registrar la proyección de PACEs.</p>
+                <p className="text-amber-800">Guarda el PEI primero (pestaña Portada → Guardar) para registrar las evaluaciones proyectadas.</p>
               </div>
             )}
           </div>

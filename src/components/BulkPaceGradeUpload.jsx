@@ -16,15 +16,22 @@ const QUARTERS = ['Q1', 'Q2', 'Q3'];
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Mapea nombre de asignatura a academic_block canónico.
- * Debe coincidir con isValidReportArea() del boletín (normalizeBlock !== 'OTHER').
+ * Devuelve el academic_block canónico a partir del nombre de la asignatura.
+ * Debe coincidir con los valores que normalizeBlock() reconoce
+ * para que isValidReportArea() del boletín lo acepte.
  */
 function getAcademicBlockFromSubjectName(subjectName) {
   const lower = (subjectName || '').toLowerCase();
-  if (['math','english','word building','science','social studies','bible'].some(k => lower.includes(k))) return 'Core A.C.E.';
-  if (['lengua','castellana','local history','local geography','spanish','extensión','extension'].some(k => lower.includes(k))) return 'Extensión Local';
-  if (['art','music','technology','physical education','life skills','p.e.','tecnología'].some(k => lower.includes(k))) return 'Life Skills';
-  return 'Core A.C.E.';
+  if (['math', 'english', 'word building', 'science', 'social studies', 'bible'].some(k => lower.includes(k))) {
+    return 'Core A.C.E.';
+  }
+  if (['lengua', 'castellana', 'local history', 'local geography', 'spanish', 'extension local', 'extensión local', 'extensión', 'extension'].some(k => lower.includes(k))) {
+    return 'Extensión Local';
+  }
+  if (['art', 'music', 'technology', 'physical education', 'life skills', 'p.e.', 'ed. física', 'tecnología'].some(k => lower.includes(k))) {
+    return 'Life Skills';
+  }
+  return 'Core A.C.E.'; // fallback seguro — siempre pasará isValidReportArea
 }
 
 function computeStatus(score) {
@@ -275,7 +282,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       setLoaded(true);
     } catch (err) {
       console.error('[BulkPaceGradeUpload] Error loading rows:', err);
-      toast({ title: 'Error', description: err.message || 'No se pudieron cargar los PACEs.', variant: 'destructive' });
+      toast({ title: 'Error', description: err.message || 'No se pudieron cargar las evaluaciones.', variant: 'destructive' });
     } finally {
       setLoadingRows(false);
     }
@@ -342,7 +349,11 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       }
 
       const assessmentName = `PACE ${r.pace_number}`;
-      const reviewComment = r.comment?.trim()
+      // Si el coordinador no escribió comentario:
+      // - en INSERT usamos texto genérico
+      // - en UPDATE NO sobrescribimos el comentario existente (se omite del payload)
+      const hasNewComment = Boolean(r.comment?.trim());
+      const reviewComment = hasNewComment
         ? r.comment.trim()
         : isApprover
           ? 'Carga administrativa validada por coordinador — sin evidencia adjunta.'
@@ -351,7 +362,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       // ── Resolver student_subject_id ──────────────────────────────────────────
       // Las proyecciones creadas por SQL pueden tener student_subject_id = null.
       // Si es null, buscar en student_subjects. Si no existe, CREAR automáticamente
-      // para que el guardado funcione sin intervención manual.
+      // con el academic_block correcto para que el boletín lo encuentre (isValidReportArea).
       let studentSubjectId = r.student_subject_id;
 
       if (!studentSubjectId) {
@@ -407,7 +418,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
       }
 
       if (!studentSubjectId) {
-        errors.push(`${r.subject_name} · PACE ${r.pace_number}: no se pudo crear la materia en student_subjects.`);
+        errors.push(`${r.subject_name} · PACE ${r.pace_number}: no se pudo crear/encontrar la materia en student_subjects.`);
         continue;
       }
 
@@ -438,10 +449,15 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
 
       try {
         if (r.existing_entry_id) {
-          // UPDATE existing entry
+          // UPDATE existing entry — sólo incluir review_comment si el coordinador
+          // escribió uno nuevo; si no, preservar el comentario ya guardado.
+          const updatePayload = { ...payload };
+          if (!hasNewComment) {
+            delete updatePayload.review_comment;
+          }
           const { error } = await supabase
             .from('student_grade_entries')
-            .update(payload)
+            .update(updatePayload)
             .eq('id', r.existing_entry_id);
           if (error) throw error;
         } else {
@@ -462,6 +478,20 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             .from('student_grade_entries')
             .insert([payload]);
           if (error) throw error;
+        }
+
+        // ── Actualizar grade_submission_status en student_subjects ────────────
+        // Si el coordinador aprueba directamente, marcar la materia como aprobada
+        // para que isValidReportArea() del boletín la encuentre.
+        if (isApprover && studentSubjectId) {
+          await supabase
+            .from('student_subjects')
+            .update({
+              grade_submission_status: 'approved',
+              grade_reviewed_by:       authUser?.id || null,
+              grade_reviewed_at:       now,
+            })
+            .eq('id', studentSubjectId);
         }
 
         // Update pei_pace_projections if linked
@@ -522,9 +552,9 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             <Upload className="w-5 h-5 text-[#193D6D]" />
           </div>
           <div>
-            <h2 className="text-lg font-black text-slate-800">Carga Masiva de PACEs</h2>
+            <h2 className="text-lg font-black text-slate-800">Carga Masiva de Evaluaciones</h2>
             <p className="text-sm text-slate-500">
-              Registra las calificaciones de los PACEs proyectados del trimestre de forma rápida.
+              Registra las calificaciones de las evaluaciones proyectadas del trimestre de forma rápida.
             </p>
           </div>
         </div>
@@ -601,7 +631,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             {loadingRows
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <BookOpen className="w-4 h-4" />}
-            Cargar PACEs proyectados
+            Cargar evaluaciones proyectadas
           </button>
           {loaded && (
             <button
@@ -626,8 +656,8 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           <Info className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
             {hasProjections
-              ? <>Fuente: <strong>PEI — pei_pace_projections</strong>. Mostrando <strong>{rows.length}</strong> PACEs proyectados para <strong>{selectedQuarter}</strong> · <strong>{schoolYear}</strong>.</>
-              : <>No hay proyección PEI para este trimestre. Fuente: <strong>student_subjects</strong>. Ingresa el número de PACE manualmente si corresponde.</>
+              ? <>Fuente: <strong>PEI — pei_pace_projections</strong>. Mostrando <strong>{rows.length}</strong> evaluaciones proyectadas para <strong>{selectedQuarter}</strong> · <strong>{schoolYear}</strong>.</>
+              : <>No hay proyección PEI para este trimestre. Fuente: <strong>student_subjects</strong>. Ingresa el número de evaluación manualmente si corresponde.</>
             }
           </span>
         </div>
@@ -673,7 +703,7 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           {/* Table header */}
           <div className="bg-[#193D6D] text-white px-4 py-3 grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-wider">
             <div className="col-span-3">Materia</div>
-            <div className="col-span-1 text-center">PACE</div>
+            <div className="col-span-1 text-center">Eval.</div>
             <div className="col-span-2 text-center">Nota actual</div>
             <div className="col-span-2 text-center">Nueva nota</div>
             <div className="col-span-2 text-center">Estado</div>
