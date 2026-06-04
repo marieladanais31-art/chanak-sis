@@ -272,31 +272,42 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
     }
   };
 
+  // Importar notas aprobadas y FUSIONAR con materias manuales existentes
   const importFromAcademico = async () => {
     try {
       const imported = await loadApprovedPeriodCourses();
       if (imported.length === 0) {
-        toast({ title: 'Sin notas aprobadas', description: `No hay notas aprobadas en student_grade_entries para ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
+        toast({
+          title: 'Sin notas en grade_entries',
+          description: `No hay notas aprobadas en student_grade_entries para ${meta.quarter} ${meta.school_year}. Puede añadir materias manualmente.`,
+        });
         return;
       }
-      setCourses(imported);
-      toast({ title: `${imported.length} materias importadas desde notas aprobadas` });
+      // Fusionar: mantener materias manuales que no estén en las importadas
+      setCourses(prev => {
+        const importedNames = new Set(imported.map(c => c.subject_name?.trim()).filter(Boolean));
+        const manualOnly = prev.filter(c => c.subject_name?.trim() && !importedNames.has(c.subject_name.trim()));
+        return [...imported, ...manualOnly];
+      });
+      toast({ title: `${imported.length} materias importadas`, description: 'Las materias manuales existentes se conservaron.' });
     } catch (error) {
       toast({ title: 'Error al importar', description: error.message, variant: 'destructive' });
     }
   };
 
   const handleSave = async () => {
+    // Guardar lo que hay en el array courses — sin exigir grade_entries.
+    // El coordinador puede tener materias importadas Y manuales (Extensión Local, Life Skills, etc.)
+    const coursesToSave = courses.filter(c => (c.subject_name || '').trim());
+    if (coursesToSave.length === 0) {
+      toast({ title: 'Sin materias', description: 'Añade al menos una materia antes de guardar.', variant: 'destructive' });
+      return;
+    }
+
     setSaving(true);
     try {
-      const approvedCourses = await loadApprovedPeriodCourses();
-      if (approvedCourses.length === 0) {
-        toast({ title: 'Sin notas aprobadas', description: `No hay notas aprobadas en student_grade_entries para ${meta.quarter} ${meta.school_year}.`, variant: 'destructive' });
-        return;
-      }
-
       let tid = transcriptId;
-      const totalCredits = approvedCourses.reduce((sum, course) => sum + (parseFloat(course.credits) || 0), 0);
+      const totalCredits = coursesToSave.reduce((sum, course) => sum + (parseFloat(course.credits) || 0), 0);
       const trPayload = {
         student_id: studentId,
         school_year: meta.school_year,
@@ -318,10 +329,9 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         setTranscriptId(tid);
       }
 
-      await saveCoursesForTranscript(tid, approvedCourses);
-      setCourses(approvedCourses);
+      await saveCoursesForTranscript(tid, coursesToSave);
 
-      toast({ title: 'Boletín guardado', description: 'Se generó exclusivamente desde notas aprobadas.' });
+      toast({ title: 'Boletín guardado', description: `${coursesToSave.length} materia(s) guardadas.` });
     } catch (err) {
       toast({ title: 'Error', description: err.message || 'No se pudo guardar.', variant: 'destructive' });
     } finally {
@@ -376,7 +386,8 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
         setCourses(approvedCourses);
       }
 
-      const tsField = { in_review: 'reviewed_at', approved: 'approved_at', published: 'published_at' }[nextStatus];
+      // transcript_records no tiene columna approved_at — solo reviewed_at y published_at
+      const tsField = { in_review: 'reviewed_at', published: 'published_at' }[nextStatus];
       const patch = { status: nextStatus, updated_at: new Date().toISOString() };
       if (nextStatus === 'published') {
         patch.total_credits = (publishedCourses || courses).reduce((sum, course) => sum + (parseFloat(course.credits) || 0), 0);
@@ -494,14 +505,22 @@ export default function TranscriptGenerator({ studentId, studentName, transcript
           <div className="flex items-center justify-between mb-2">
             <label className={LABEL}>Materias del Trimestre</label>
             {!isReadOnly && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={importFromAcademico}
                   className="flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200"
                 >
                   Importar notas aprobadas
                 </button>
-
+                <button
+                  onClick={() => setCourses(prev => [...prev, { ...EMPTY_COURSE }])}
+                  className="flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200"
+                >
+                  + Añadir materia
+                </button>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  Usa "Añadir materia" para Extensión Local, Life Skills u otras sin PACEs
+                </span>
               </div>
             )}
           </div>
