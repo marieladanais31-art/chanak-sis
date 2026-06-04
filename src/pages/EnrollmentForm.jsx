@@ -325,7 +325,7 @@ export default function EnrollmentForm() {
                     <label className={LABEL}>Género</label>
                     <select value={form.alumGenero} onChange={set('alumGenero')} className={SELECT}>
                       <option value="">Seleccionar…</option>
-                      <option>Masculino</option><option>Femenino</option><option>Prefiero no indicar</option>
+                      <option>Masculino</option><option>Femenino</option>
                     </select>
                   </div>
                 </div>

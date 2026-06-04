@@ -17,7 +17,7 @@ const QUARTERS = ['Q1', 'Q2', 'Q3'];
 
 /**
  * Devuelve el academic_block canónico a partir del nombre de la asignatura.
- * Debe coincidir exactamente con los valores que normalizeBlock() reconoce
+ * Debe coincidir con los valores que normalizeBlock() reconoce
  * para que isValidReportArea() del boletín lo acepte.
  */
 function getAcademicBlockFromSubjectName(subjectName) {
@@ -25,10 +25,10 @@ function getAcademicBlockFromSubjectName(subjectName) {
   if (['math', 'english', 'word building', 'science', 'social studies', 'bible'].some(k => lower.includes(k))) {
     return 'Core A.C.E.';
   }
-  if (['lengua', 'castellana', 'local history', 'local geography', 'spanish', 'extension local', 'extensión local'].some(k => lower.includes(k))) {
+  if (['lengua', 'castellana', 'local history', 'local geography', 'spanish', 'extension local', 'extensión local', 'extensión', 'extension'].some(k => lower.includes(k))) {
     return 'Extensión Local';
   }
-  if (['art', 'music', 'technology', 'physical education', 'life skills', 'p.e.', 'ed. física'].some(k => lower.includes(k))) {
+  if (['art', 'music', 'technology', 'physical education', 'life skills', 'p.e.', 'ed. física', 'tecnología'].some(k => lower.includes(k))) {
     return 'Life Skills';
   }
   return 'Core A.C.E.'; // fallback seguro — siempre pasará isValidReportArea
@@ -165,9 +165,9 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           dirty:              false,
         }));
       } else {
-        // 2. Fallback: student_subjects
+        // 2. Fallback: student_subjects del trimestre actual
         setHasProjections(false);
-        const { data: subjects, error: subjErr } = await supabase
+        let { data: subjects, error: subjErr } = await supabase
           .from('student_subjects')
           .select('id, subject_name, quarter, school_year, subject_order')
           .eq('student_id', selectedStudentId)
@@ -176,6 +176,55 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           .order('subject_order', { ascending: true });
 
         if (subjErr) throw subjErr;
+
+        // ── Si este trimestre no tiene student_subjects pero Q1 sí existe,
+        //    copiar las asignaturas del trimestre anterior para este trimestre.
+        if (!subjects || subjects.length === 0) {
+          const prevQuarter = selectedQuarter === 'Q2' ? 'Q1' : selectedQuarter === 'Q3' ? 'Q2' : null;
+          if (prevQuarter) {
+            const { data: prevSubjects } = await supabase
+              .from('student_subjects')
+              .select('subject_name, academic_block, subject_order')
+              .eq('student_id', selectedStudentId)
+              .eq('school_year', schoolYear)
+              .eq('quarter', prevQuarter)
+              .order('subject_order', { ascending: true });
+
+            if (prevSubjects && prevSubjects.length > 0) {
+              // Auto-crear student_subjects para este trimestre
+              const toInsert = prevSubjects.map(ps => ({
+                student_id:             selectedStudentId,
+                subject_name:           ps.subject_name,
+                academic_block:         ps.academic_block || getAcademicBlockFromSubjectName(ps.subject_name),
+                quarter:                selectedQuarter,
+                school_year:            schoolYear,
+                subject_order:          ps.subject_order,
+                grade_submission_status: 'draft',
+                submitted_at:           new Date().toISOString(),
+              }));
+
+              const { data: created, error: createErr } = await supabase
+                .from('student_subjects')
+                .insert(toInsert)
+                .select('id, subject_name, quarter, school_year, subject_order');
+
+              if (!createErr && created) {
+                subjects = created;
+                toast({ title: `Materias de ${selectedQuarter} creadas`, description: `Se copiaron ${created.length} materias desde ${prevQuarter}.` });
+              } else if (createErr) {
+                // Puede que ya existan por una inserción concurrente — reintentar la lectura
+                const { data: retry } = await supabase
+                  .from('student_subjects')
+                  .select('id, subject_name, quarter, school_year, subject_order')
+                  .eq('student_id', selectedStudentId)
+                  .eq('school_year', schoolYear)
+                  .eq('quarter', selectedQuarter)
+                  .order('subject_order', { ascending: true });
+                subjects = retry || [];
+              }
+            }
+          }
+        }
 
         baseRows = (subjects || []).map(s => ({
           key:                `${s.subject_name}__1`,
@@ -311,10 +360,11 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
           : 'Registrado por tutor — pendiente revisión coordinador.';
 
       // ── Resolver student_subject_id ──────────────────────────────────────────
-      // Si la fila de student_subjects no existe para esta materia/trimestre/año,
-      // la creamos automáticamente con el academic_block correcto para que el
-      // boletín pueda encontrarla mediante isValidReportArea().
+      // Las proyecciones creadas por SQL pueden tener student_subject_id = null.
+      // Si es null, buscar en student_subjects. Si no existe, CREAR automáticamente
+      // con el academic_block correcto para que el boletín lo encuentre (isValidReportArea).
       let studentSubjectId = r.student_subject_id;
+
       if (!studentSubjectId) {
         const { data: ss } = await supabase
           .from('student_subjects')
@@ -327,25 +377,34 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
         studentSubjectId = ss?.id || null;
       }
 
+      // Si sigue siendo null → auto-crear student_subjects con academic_block correcto
       if (!studentSubjectId) {
-        // Crear la fila de student_subjects con academic_block adecuado
         const academicBlock = getAcademicBlockFromSubjectName(r.subject_name);
-        const { data: newSS, error: ssErr } = await supabase
+        const { data: created, error: ssCreateErr } = await supabase
           .from('student_subjects')
           .insert([{
-            student_id:             selectedStudentId,
-            subject_name:           r.subject_name,
-            quarter:                selectedQuarter,
-            school_year:            schoolYear,
-            academic_block:         academicBlock,
+            student_id:              selectedStudentId,
+            subject_name:            r.subject_name,
+            quarter:                 selectedQuarter,
+            school_year:             schoolYear,
+            academic_block:          academicBlock,
             grade_submission_status: 'draft',
-            submitted_at:           now,
+            submitted_at:            now,
           }])
           .select('id')
           .single();
 
-        if (ssErr) {
-          // Puede haberse creado en una inserción paralela — reintentar búsqueda
+        if (!ssCreateErr && created?.id) {
+          studentSubjectId = created.id;
+          // Actualizar la proyección para que próximas cargas no repitan este paso
+          if (r.projection_id) {
+            await supabase
+              .from('pei_pace_projections')
+              .update({ student_subject_id: studentSubjectId })
+              .eq('id', r.projection_id);
+          }
+        } else {
+          // Último intento: puede que ya exista por inserción concurrente
           const { data: retry } = await supabase
             .from('student_subjects')
             .select('id')
@@ -355,8 +414,6 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
             .eq('school_year', schoolYear)
             .maybeSingle();
           studentSubjectId = retry?.id || null;
-        } else {
-          studentSubjectId = newSS?.id || null;
         }
       }
 
@@ -619,16 +676,22 @@ export default function BulkPaceGradeUpload({ preselectedStudentId }) {
 
       {/* ── Empty state ── */}
       {loaded && rows.length === 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
-          <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="font-bold text-slate-700">Sin evaluaciones encontradas</p>
-          <p className="text-sm mt-1">
-            No hay proyecciones PEI ni materias registradas para{' '}
-            <strong>{selectedQuarter}</strong> · <strong>{schoolYear}</strong>.
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
+          <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+          <p className="font-black text-slate-700 text-base">
+            Sin evaluaciones proyectadas para {selectedQuarter} · {schoolYear}
           </p>
-          <p className="text-xs text-slate-400 mt-2">
-            Verifica que el PEI del estudiante tenga proyecciones para este trimestre,
-            o que existan materias en student_subjects.
+          <p className="text-sm text-slate-600 mt-2 max-w-md mx-auto">
+            Este estudiante no tiene evaluaciones proyectadas ni asignaturas registradas
+            para el <strong>{selectedQuarter}</strong>. Posibles causas:
+          </p>
+          <ul className="text-xs text-slate-500 mt-3 text-left inline-block space-y-1">
+            <li>• El PEI no tiene proyecciones para este trimestre. Ve a <strong>Gestión de PEI → Evaluaciones</strong> y usa "Autoproyectar".</li>
+            <li>• Las asignaturas (student_subjects) no están configuradas para este trimestre.</li>
+            <li>• El trimestre anterior (Q1 si estás en Q2) no tiene materias registradas aún.</li>
+          </ul>
+          <p className="text-xs text-blue-600 font-bold mt-4">
+            Si ya cargaste evaluaciones en Q1, recarga Q2 — el sistema intentará copiar las materias automáticamente.
           </p>
         </div>
       )}
